@@ -105,8 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
   const mainNavLinks: NavLinkItem[] = [
     { label: 'Home', page: 'home', icon: Home },
     { label: 'Blog', page: 'blog', icon: BookOpen },
-    { label: 'Community', page: 'community', icon: Users },
-    { label: 'Social', page: 'social', icon: Sparkles },
+    { label: 'Community', page: 'social', icon: Users },
     { label: 'Saved', page: 'saved', count: savedCount, icon: Bookmark },
     { label: 'Notifications', page: 'notifications', count: unreadNotificationCount, icon: Bell },
     { label: 'Explore', page: 'explore', icon: Compass },

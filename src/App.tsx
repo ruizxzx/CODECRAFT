@@ -286,15 +286,9 @@ export default function App() {
       } else if (hash === 'explore' || hash.startsWith('explore/')) {
         setCurrentPage('explore');
         setActiveArticleSlug(hash.startsWith('explore/') ? hash.replace('explore/', '') : null);
-      } else if (hash === 'social') {
+      } else if (hash === 'social' || hash === 'community' || hash === 'community/new') {
         setCurrentPage('social');
         setActiveArticleSlug(null);
-      } else if (hash === 'community') {
-        setCurrentPage('community');
-        setActiveArticleSlug(null);
-      } else if (hash === 'community/new') {
-        setCurrentPage('community');
-        setActiveArticleSlug('new');
       } else if (hash.startsWith('community/post/')) {
         const id = hash.replace('community/post/', '');
         setActiveArticleSlug(id); // reusing activeArticleSlug state to hold param
@@ -331,10 +325,10 @@ export default function App() {
       setActiveArticleSlug(param || null);
       setCurrentPage('explore');
       window.location.hash = param ? `explore/${param.replace(/^#/, '')}` : 'explore';
-    } else if (page === 'community' && param === 'new') {
-      setActiveArticleSlug('new');
-      setCurrentPage('community');
-      window.location.hash = 'community/new';
+    } else if (page === 'community' || page === 'social') {
+      setActiveArticleSlug(null);
+      setCurrentPage('social');
+      window.location.hash = 'social';
     } else {
       setActiveArticleSlug(null);
       setCurrentPage(page);

@@ -1,27 +1,32 @@
-# Firebase deployment
+# OFFSCRPT Social / Community — Firebase Console deployment
 
-This project uses the `krishficient-portfolio` Firebase project and Firestore `(default)` database.
+This build uses the existing Firebase project `krishficient-portfolio` and Firestore `(default)`.
 
-## Firestore rules
+## 1. Firestore Rules
 
-Deploy the included rules to the production project:
+Firebase Console → Firestore Database → Rules.
 
-```bash
-firebase use krishficient-portfolio
-firebase deploy --only firestore:rules
-```
+Replace the current rules with the `firestore.rules` included in this project and click **Publish**.
 
-## Firestore indexes
+The updated rules cover:
+- unified communities
+- community owners and moderators
+- creator/admin editing and deletion
+- community members and roles
+- community posts and votes
+- questions and answers
+- topics and topic followers
+- direct messages
+- reports and admin moderation
 
-The project includes `firestore.indexes.json` with the recommended collection-group index for `comments.authorId`:
+## 2. Firestore Indexes
 
-```bash
-firebase use krishficient-portfolio
-firebase deploy --only firestore:indexes
-```
+No new composite index is required for the unified Social / Community build.
 
-The app also contains a fallback cloud scan for this query, so a missing index no longer blocks core admin configuration or article publishing. The index is still recommended for efficient profile-comment queries as the site grows.
+If the project already has the `comments / authorId / Collection group / Ascending` single-field configuration from the previous batch, keep it enabled.
 
-## Vercel
+## 3. Important for the previous "Missing or insufficient permissions" error
 
-Set the Firebase `VITE_*` variables for the production deployment. No Firebase Storage variable or Storage setup is required by this project.
+The source now makes community post creation the primary write and treats the community post counter update as secondary, so an older ruleset cannot cause the entire post creation to fail after the post itself is accepted.
+
+However, the **new `firestore.rules` must still be published** before testing owner/admin moderation and all new Social / Community operations.

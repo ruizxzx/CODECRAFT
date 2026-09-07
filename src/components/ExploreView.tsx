@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Article, CommunityPost, CommunityUser, PageView } from '../types';
 import { getPosts, getUserFollowing, extractHashtags } from '../lib/community';
+import { getCommunities, getQuestions, getTopics, SocialCommunity, SocialQuestion, SocialTopic } from '../lib/social';
 import { Search, Compass, TrendingUp, Sparkles, Hash, ArrowUp, MessageSquare, Repeat2, Loader2, BookOpen } from 'lucide-react';
 import { VerifiedBadge } from './VerifiedBadge';
 import { CommunityPostExtras } from './CommunityPostExtras';
@@ -14,13 +15,16 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
   const [followingIds, setFollowingIds] = useState<string[]>([]);
   const [query, setQuery] = useState(initialHashtag ? `#${initialHashtag.replace(/^#/, '')}` : '');
   const [loading, setLoading] = useState(true);
+  const [communities, setCommunities] = useState<SocialCommunity[]>([]);
+  const [questions, setQuestions] = useState<SocialQuestion[]>([]);
+  const [topics, setTopics] = useState<SocialTopic[]>([]);
 
   useEffect(() => { setQuery(initialHashtag ? `#${initialHashtag.replace(/^#/, '')}` : ''); }, [initialHashtag]);
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([getPosts(), userAuth ? getUserFollowing(userAuth.uid).catch(() => []) : Promise.resolve([])])
-      .then(([all, following]) => { if (!active) return; setPosts(all); setFollowingIds((following as any[]).map(x => x.uid)); })
+    Promise.all([getPosts(), userAuth ? getUserFollowing(userAuth.uid).catch(() => []) : Promise.resolve([]), getCommunities().catch(() => []), getQuestions().catch(() => []), getTopics().catch(() => [])])
+      .then(([all, following, cs, qs, ts]) => { if (!active) return; setPosts(all); setFollowingIds((following as any[]).map(x => x.uid)); setCommunities(cs as SocialCommunity[]); setQuestions(qs as SocialQuestion[]); setTopics(ts as SocialTopic[]); })
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [userAuth?.uid]);
@@ -83,6 +87,12 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
         <Search className="w-5 h-5 mr-2"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search posts, articles, @handles or #hashtags..." className="w-full bg-transparent focus:outline-none font-mono text-sm"/>
       </div>
     </div>
+
+    {(communities.length > 0 || questions.length > 0 || topics.length > 0) && <section className="grid md:grid-cols-3 gap-4">
+      <div className="bg-white border-4 border-black p-5"><div className="font-mono text-[10px] font-black uppercase text-neutral-500">COMMUNITIES</div><h3 className="font-display font-black text-xl uppercase mt-1">Find your people</h3><div className="space-y-2 mt-4">{communities.slice(0,3).map(c=><button key={c.id} onClick={()=>onNavigate('social')} className="w-full text-left border-2 border-black p-3 hover:bg-[var(--color-primary)]"><b>c/{c.slug}</b><div className="font-mono text-[9px]">{c.membersCount} members · by @{c.ownerUsername||'creator'}</div></button>)}</div><button onClick={()=>onNavigate('social')} className="mt-3 font-mono text-[10px] font-black underline">VIEW ALL →</button></div>
+      <div className="bg-[var(--color-primary)] border-4 border-black p-5"><div className="font-mono text-[10px] font-black uppercase">QUESTIONS</div><h3 className="font-display font-black text-xl uppercase mt-1">Ask / answer</h3><div className="space-y-2 mt-4">{questions.slice(0,3).map(q=><button key={q.id} onClick={()=>onNavigate('social')} className="w-full text-left border-2 border-black p-3 bg-white hover:bg-neutral-100"><b className="line-clamp-2">{q.title}</b><div className="font-mono text-[9px]">{q.answersCount} answers · @{q.authorUsername}</div></button>)}</div></div>
+      <div className="bg-white border-4 border-black p-5"><div className="font-mono text-[10px] font-black uppercase text-neutral-500">TOPICS</div><h3 className="font-display font-black text-xl uppercase mt-1">Follow ideas</h3><div className="flex flex-wrap gap-2 mt-4">{topics.slice(0,8).map(t=><button key={t.id} onClick={()=>onNavigate('social')} className="px-2 py-1 border-2 border-black font-mono text-[10px] hover:bg-[var(--color-secondary)]">#{t.slug}</button>)}</div></div>
+    </section>}
 
     <div className="grid lg:grid-cols-[1fr_280px] gap-8">
       <section className="space-y-5">

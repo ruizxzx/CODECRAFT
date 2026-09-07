@@ -47,6 +47,7 @@ import {
   setUserVerificationByUsername,
   getUserVerificationByUsername
 } from '../lib/community';
+import { SocialAdminPanel } from './SocialAdminPanel';
 
 interface AdminStudioModalProps {
   isOpen: boolean;
@@ -118,7 +119,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setCurrentUserEmail(null);
   };
 
-  const [activeTab, setActiveTab] = useState<'settings' | 'create' | 'manage' | 'links' | 'carousel'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'create' | 'manage' | 'links' | 'carousel' | 'social'>('settings');
 
   // Carousel State
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([]);
@@ -894,7 +895,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
           <div className="bg-white min-h-[600px] flex flex-col">
 
             {/* Tab Selector (5 Clean Modules) */}
-            <div className="grid grid-cols-5 border-b-4 border-black font-display font-black text-[10px] sm:text-xs uppercase bg-white overflow-x-auto whitespace-nowrap">
+            <div className="grid grid-cols-6 border-b-4 border-black font-display font-black text-[10px] sm:text-xs uppercase bg-white overflow-x-auto whitespace-nowrap">
               <button
                 onClick={() => setActiveTab('settings')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
@@ -943,6 +944,16 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               >
                 <Layout className="w-4 h-4" />
                 <span className="hidden sm:inline">CAROUSEL</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('social')}
+                className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
+                  activeTab === 'social' ? 'bg-[var(--color-primary)] text-black' : 'hover:bg-neutral-100'
+                }`}
+              >
+                <Shield className="w-4 h-4" />
+                <span className="hidden sm:inline">SOCIAL MOD</span>
               </button>
             </div>
 
@@ -1701,6 +1712,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                 </div>
               </div>
             )}
+
+            {/* TAB: SOCIAL MODERATION */}
+            {activeTab === 'social' && <SocialAdminPanel />}
 
             {/* TAB: CAROUSEL */}
             {activeTab === 'carousel' && (
