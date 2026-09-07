@@ -202,6 +202,25 @@ export default function App() {
     siteConfig.themeSuccessColor
   ]);
 
+  // Keep the browser favicon synchronized with the cloud-managed site logo.
+  useEffect(() => {
+    const logoUrl = siteConfig.logoImageUrl?.trim();
+    if (!logoUrl) return;
+
+    let favicon = document.querySelector<HTMLLinkElement>('link#site-favicon');
+    if (!favicon) {
+      favicon = document.createElement('link');
+      favicon.id = 'site-favicon';
+      favicon.rel = 'icon';
+      favicon.type = 'image/png';
+      document.head.appendChild(favicon);
+    }
+
+    // A URL-based favicon keeps the browser cache stable while still changing
+    // immediately when the CMS logo URL changes.
+    favicon.href = logoUrl;
+  }, [siteConfig.logoImageUrl]);
+
   // URL Hash Sync for standard navigation & browser back button support
   useEffect(() => {
     const handleHashChange = () => {
@@ -231,6 +250,9 @@ export default function App() {
       } else if (hash === 'community') {
         setCurrentPage('community');
         setActiveArticleSlug(null);
+      } else if (hash === 'community/new') {
+        setCurrentPage('community');
+        setActiveArticleSlug('new');
       } else if (hash.startsWith('community/post/')) {
         const id = hash.replace('community/post/', '');
         setActiveArticleSlug(id); // reusing activeArticleSlug state to hold param
@@ -263,6 +285,10 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('community_profile');
       window.location.hash = `@${param}`;
+    } else if (page === 'community' && param === 'new') {
+      setActiveArticleSlug('new');
+      setCurrentPage('community');
+      window.location.hash = 'community/new';
     } else {
       setActiveArticleSlug(null);
       setCurrentPage(page);
@@ -380,6 +406,17 @@ export default function App() {
         siteConfig={siteConfig}
         userProfile={userProfile}
         onOpenHandleModal={() => setIsHandleModalOpen(true)}
+        onCreateCommunityPost={async () => {
+          if (!userAuth) {
+            try {
+              await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle());
+            } catch (error) {
+              console.error('Community post sign-in error:', error);
+              return;
+            }
+          }
+          navigateTo('community', 'new');
+        }}
       />
 
       {/* Marquee Ticker */}
@@ -486,6 +523,7 @@ export default function App() {
                 savedCommunityPostIds={savedCommunityPostIds}
                 onToggleSaveCommunityPost={handleToggleSaveCommunity}
                 onProfileUpdated={(p) => setUserProfile(p)}
+                autoOpenComposer={activeArticleSlug === 'new'}
               />
             )}
             

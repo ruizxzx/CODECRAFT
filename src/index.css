@@ -141,3 +141,56 @@
 .animate-marquee:hover {
   animation-play-state: paused;
 }
+
+
+/* Mobile floating quick-navigation dock */
+.mobile-floating-nav {
+  padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+}
+
+.mobile-nav-action {
+  min-width: 0;
+  width: 20%;
+  min-height: 52px;
+  padding: 6px 4px;
+  border: 2px solid #000000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: #000000;
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background-color 0.1s ease;
+}
+
+.mobile-nav-action:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.mobile-nav-create {
+  box-shadow: 3px 3px 0 #000000;
+}
+
+@media (max-width: 767px) {
+  #root {
+    padding-bottom: 84px;
+  }
+}
+
+@media (max-width: 380px) {
+  .mobile-nav-action {
+    min-height: 48px;
+    font-size: 7px;
+  }
+  .mobile-floating-nav {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+}

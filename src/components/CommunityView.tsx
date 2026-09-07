@@ -31,6 +31,7 @@ interface CommunityViewProps {
   savedCommunityPostIds?: string[];
   onToggleSaveCommunityPost?: (postId: string, title?: string) => void;
   onProfileUpdated?: (profile: CommunityUser) => void;
+  autoOpenComposer?: boolean;
 }
 
 export const CommunityView: React.FC<CommunityViewProps> = ({ 
@@ -39,7 +40,8 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
   onOpenHandleModal,
   savedCommunityPostIds = [],
   onToggleSaveCommunityPost,
-  onProfileUpdated
+  onProfileUpdated,
+  autoOpenComposer = false
 }) => {
   const [activeTab, setActiveTab] = useState<'discussions' | 'blogs'>('discussions');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
@@ -79,6 +81,12 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
     });
     return () => unsub();
   }, [initialUserProfile]);
+
+  useEffect(() => {
+    if (autoOpenComposer && userAuth && profile) {
+      setIsEditorOpen(true);
+    }
+  }, [autoOpenComposer, userAuth, profile]);
 
   useEffect(() => {
     setLoadingPosts(true);

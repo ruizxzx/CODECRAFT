@@ -17,7 +17,8 @@ import {
   Home, 
   Users, 
   ShieldAlert,
-  Settings
+  Settings,
+  Plus
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -29,6 +30,7 @@ interface HeaderProps {
   siteConfig: SiteConfig;
   userProfile?: CommunityUser | null;
   onOpenHandleModal?: () => void;
+  onCreateCommunityPost?: () => void;
 }
 
 interface NavLinkItem {
@@ -47,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   siteConfig,
   userProfile,
   onOpenHandleModal,
+  onCreateCommunityPost,
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, loading] = useAuthState(auth);
@@ -156,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Search Button */}
             <button
               onClick={onOpenSearch}
-              className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-white border-2 border-black neo-shadow-sm hover:bg-[var(--color-primary)] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center space-x-1.5 text-black font-display text-xs font-black uppercase"
+              className="hidden md:flex px-2.5 py-1.5 sm:px-3 sm:py-2 bg-white border-2 border-black neo-shadow-sm hover:bg-[var(--color-primary)] active:translate-x-0.5 active:translate-y-0.5 transition-all items-center space-x-1.5 text-black font-display text-xs font-black uppercase"
               title="Search Articles (Ctrl+K)"
             >
               <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
@@ -167,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {/* User Profile / Auth Button (Desktop) */}
-            <div className="hidden sm:flex items-center">
+            <div className="hidden md:flex items-center">
               {!loading && (
                 <>
                   {!user ? (
@@ -208,24 +211,10 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
 
-            {/* Saved Count Shortcut (Mobile only) */}
-            <button
-              onClick={() => handleNavClick('saved')}
-              className="md:hidden relative p-2 bg-white border-2 border-black neo-shadow-sm hover:bg-neutral-100 transition-colors"
-              title="Saved Articles"
-            >
-              <Bookmark className="w-4 h-4 stroke-[2.5]" />
-              {savedCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-black text-[var(--color-primary)] px-1 py-0.2 text-[9px] font-mono font-bold border border-black">
-                  {savedCount}
-                </span>
-              )}
-            </button>
-
-            {/* Mobile / Full Menu Hamburger Button */}
+            {/* Desktop / tablet menu trigger. Mobile uses the floating dock below. */}
             <button
               onClick={() => setSidebarOpen(true)}
-              className="p-2 sm:px-3 sm:py-2 bg-white border-2 border-black neo-shadow-sm hover:bg-[var(--color-primary)] active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center space-x-1.5 font-display font-black text-xs uppercase"
+              className="hidden md:flex p-2 sm:px-3 sm:py-2 bg-white border-2 border-black neo-shadow-sm hover:bg-[var(--color-primary)] active:translate-x-0.5 active:translate-y-0.5 transition-all items-center space-x-1.5 font-display font-black text-xs uppercase"
               aria-label="Toggle navigation drawer"
             >
               <Menu className="w-5 h-5 sm:w-4 sm:h-4 stroke-[2.5]" />
@@ -235,6 +224,63 @@ export const Header: React.FC<HeaderProps> = ({
 
         </div>
       </header>
+
+      {/* Mobile floating navigation dock. Secondary actions remain in the hamburger drawer. */}
+      <nav
+        className="mobile-floating-nav fixed left-3 right-3 bottom-3 z-[55] md:hidden bg-white border-2 border-black neo-shadow-sm p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex items-center justify-around gap-1"
+        aria-label="Mobile quick navigation"
+      >
+        <button
+          onClick={() => handleNavClick('home')}
+          className={`mobile-nav-action ${currentPage === 'home' ? 'bg-[var(--color-primary)]' : 'bg-white'}`}
+          aria-label="Home"
+          title="Home"
+        >
+          <Home className="w-5 h-5 stroke-[2.5]" />
+          <span>HOME</span>
+        </button>
+        <button
+          onClick={() => handleNavClick('saved')}
+          className={`mobile-nav-action relative ${currentPage === 'saved' ? 'bg-[var(--color-primary)]' : 'bg-white'}`}
+          aria-label="Saved"
+          title="Saved"
+        >
+          <Bookmark className="w-5 h-5 stroke-[2.5]" />
+          {savedCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-black text-[var(--color-primary)] min-w-4 h-4 px-1 flex items-center justify-center text-[9px] font-mono font-bold border border-black">
+              {savedCount}
+            </span>
+          )}
+          <span>SAVED</span>
+        </button>
+        <button
+          onClick={onOpenSearch}
+          className="mobile-nav-action bg-white"
+          aria-label="Search"
+          title="Search"
+        >
+          <Search className="w-5 h-5 stroke-[2.5]" />
+          <span>SEARCH</span>
+        </button>
+        <button
+          onClick={() => onCreateCommunityPost?.()}
+          className="mobile-nav-action mobile-nav-create bg-[var(--color-secondary)]"
+          aria-label="Create community post"
+          title="Create community post"
+        >
+          <Plus className="w-6 h-6 stroke-[3]" />
+          <span>POST</span>
+        </button>
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="mobile-nav-action bg-white"
+          aria-label="Open menu"
+          title="Menu"
+        >
+          <Menu className="w-5 h-5 stroke-[2.5]" />
+          <span>MENU</span>
+        </button>
+      </nav>
 
       {/* Sidebar Overlay */}
       {sidebarOpen && (
