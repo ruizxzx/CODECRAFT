@@ -81,6 +81,15 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           post = snap.exists() ? { ...snap.data(), id: snap.id } : null;
         } else {
           post = await getPost(article.sourcePostId);
+          if (!post) {
+            try {
+              const { collectionGroup, getDocs, limit, query } = await import('firebase/firestore');
+              const { db } = await import('../lib/firebase');
+              const snap = await getDocs(query(collectionGroup(db, 'posts'), limit(500)));
+              const match = snap.docs.find((d:any) => d.id === article.sourcePostId);
+              if (match) post = { ...match.data(), id: match.id };
+            } catch {}
+          }
         }
         if (!post?.authorId) { if (active) setResolvedOriginalAuthor(fallback); return; }
         let profile:any = null;
@@ -266,7 +275,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Author Metadata Strip */}
         <div className="p-4 bg-white neo-border neo-shadow mb-10 flex flex-wrap items-center justify-between gap-4">
-          <button type="button" onClick={() => { const u = resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername; if (u && onOpenAuthorProfile) onOpenAuthorProfile(u); }} className="flex items-center space-x-3.5 text-left">
+          <button type="button" onClick={() => { const authorHandle = resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername; if (authorHandle && onOpenAuthorProfile) onOpenAuthorProfile(authorHandle); }} className="flex items-center space-x-3.5 text-left">
             <img
               src={resolvedOriginalAuthor?.avatar || article.author.avatar}
               alt={resolvedOriginalAuthor?.name || article.author.name}
@@ -298,7 +307,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           <div className="mb-8 border-2 border-black bg-[var(--color-primary)] p-3 font-mono text-xs flex flex-wrap items-center gap-2">
             <span>REPUBLISHED BY</span>
             {article.republishedBy.avatar && <img src={article.republishedBy.avatar} alt="" className="w-6 h-6 border-2 border-black object-cover" />}
-            <button type="button" onClick={() => { const u = article.republishedBy?.username; if (u && onOpenAuthorProfile) onOpenAuthorProfile(u); }} className="font-black underline">@{article.republishedBy.username || 'krishsarkar'}</button>
+            <button type="button" onClick={() => { const republisherHandle = article.republishedBy?.username; if (republisherHandle && onOpenAuthorProfile) onOpenAuthorProfile(republisherHandle); }} className="font-black underline">@{article.republishedBy.username || 'krishsarkar'}</button>
             <span>with credit to the original creator</span>
           </div>
         )}
@@ -561,7 +570,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Author Bio Box */}
         <div className="p-8 bg-gray-50 neo-border neo-shadow">
-          <button type="button" onClick={() => { const u = article.author.username || siteConfig.authorProfileUsername; if (u && onOpenAuthorProfile) onOpenAuthorProfile(u); }} className="w-full flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6 text-left">
+          <button type="button" onClick={() => { const authorHandle = article.author.username || siteConfig.authorProfileUsername; if (authorHandle && onOpenAuthorProfile) onOpenAuthorProfile(authorHandle); }} className="w-full flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6 text-left">
             <img
               src={siteConfig?.authorAvatarUrl || article.author.avatar}
               alt={siteConfig?.authorName || article.author.name}
