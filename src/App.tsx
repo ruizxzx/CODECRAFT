@@ -202,12 +202,14 @@ export default function App() {
     siteConfig.themeSuccessColor
   ]);
 
-  // Keep the browser favicon synchronized with the cloud-managed site logo.
+  // Keep all browser/PWA branding synchronized with the cloud-managed logo.
+  // Global Settings -> Logo Image URL is the single source of truth.
   useEffect(() => {
-    const fallbackFavicon = 'https://i.postimg.cc/kMf3D3cS/Screenshot-2026-09-07-142924.png';
-    const logoUrl = siteConfig.logoImageUrl?.trim() || fallbackFavicon;
+    const fallbackLogo = 'https://i.postimg.cc/kMf3D3cS/Screenshot-2026-09-07-142924.png';
+    const logoUrl = siteConfig.logoImageUrl?.trim() || fallbackLogo;
     const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
 
+    // Browser favicon.
     let favicon = document.querySelector<HTMLLinkElement>('link#site-favicon');
     if (!favicon) {
       favicon = document.createElement('link');
@@ -217,10 +219,57 @@ export default function App() {
       document.head.appendChild(favicon);
     }
     favicon.href = logoUrl;
-    document.title = `${brandName} — Tech Publication for Builders`;
 
+    // iOS home-screen icon.
+    let appleIcon = document.querySelector<HTMLLinkElement>('link#site-apple-touch-icon');
+    if (!appleIcon) {
+      appleIcon = document.createElement('link');
+      appleIcon.id = 'site-apple-touch-icon';
+      appleIcon.rel = 'apple-touch-icon';
+      document.head.appendChild(appleIcon);
+    }
+    appleIcon.href = logoUrl;
+
+    // Keep the static manifest as the installability fallback, but replace its
+    // icon URLs at runtime so a newly saved Global Settings logo is used for
+    // subsequent PWA installs without requiring a new deployment.
+    let manifestLink = document.querySelector<HTMLLinkElement>('link#site-manifest');
+    if (!manifestLink) {
+      manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+      if (manifestLink) manifestLink.id = 'site-manifest';
+    }
+
+    const updateManifest = async () => {
+      if (!manifestLink) return;
+      try {
+        const response = await fetch(`/manifest.webmanifest?v=${encodeURIComponent(logoUrl)}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const manifest = await response.json();
+        manifest.name = brandName;
+        manifest.short_name = brandName;
+        manifest.theme_color = siteConfig.themePrimaryColor || manifest.theme_color || '#FFD600';
+        manifest.icons = (manifest.icons || []).map((icon: Record<string, unknown>) => ({ ...icon, src: logoUrl }));
+
+        const blobUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
+        const previous = manifestLink.dataset.dynamicUrl;
+        manifestLink.href = blobUrl;
+        manifestLink.dataset.dynamicUrl = blobUrl;
+        if (previous) URL.revokeObjectURL(previous);
+      } catch (error) {
+        console.warn('Failed to synchronize PWA manifest logo:', error);
+      }
+    };
+
+    void updateManifest();
+
+    document.title = `${brandName} — Tech Publication for Builders`;
     const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (themeMeta) themeMeta.content = siteConfig.themePrimaryColor || '#FFD600';
+
+    return () => {
+      const current = manifestLink?.dataset.dynamicUrl;
+      if (current) URL.revokeObjectURL(current);
+    };
   }, [siteConfig.logoImageUrl, siteConfig.logoPart1, siteConfig.logoPart2, siteConfig.themePrimaryColor]);
 
   // URL Hash Sync for standard navigation & browser back button support

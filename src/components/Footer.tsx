@@ -63,11 +63,20 @@ export const Footer: React.FC<FooterProps> = ({
           
           {/* Col 1: Giant Logo & Brand Statement */}
           <div className="lg:col-span-5 space-y-4">
-            <div className="flex items-center space-x-2">
-              <div className="w-10 h-10 bg-[var(--color-primary)] text-black flex items-center justify-center font-display font-black text-xl neo-border-2">
-                K
-              </div>
-              <span className="font-display font-black text-3xl tracking-tighter text-white uppercase">
+            <div className="flex items-center space-x-3 min-w-0">
+              {siteConfig.logoImageUrl?.trim() ? (
+                <img
+                  src={siteConfig.logoImageUrl.trim()}
+                  alt={brandName}
+                  className="w-10 h-10 object-cover border-2 border-white bg-white shrink-0"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-10 h-10 bg-[var(--color-primary)] text-black flex items-center justify-center font-display font-black text-xl neo-border-2 shrink-0">
+                  {(siteConfig.logoPart1 || 'O').charAt(0)}
+                </div>
+              )}
+              <span className="font-display font-black text-3xl tracking-tighter text-white uppercase truncate">
                 {siteConfig.logoPart1 || 'OFF'}<span className="text-[var(--color-accent)]">{siteConfig.logoPart2 || 'SCRPT'}</span>
               </span>
             </div>
