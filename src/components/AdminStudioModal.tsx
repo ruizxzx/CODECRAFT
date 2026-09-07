@@ -58,53 +58,6 @@ interface AdminStudioModalProps {
 }
 
 
-mport React, { useState, useEffect, useRef } from 'react';
-import { Article, Category, SiteConfig, BentoLink, CarouselSlide } from '../types';
-import { 
-  X, 
-  PlusCircle, 
-  Check, 
-  Settings, 
-  Trash2, 
-  Smartphone, 
-  Link as LinkIcon, 
-  ArrowUp, 
-  ArrowDown, 
-  Edit2, 
-  Shield, 
-  Layout, 
-  RefreshCw, 
-  Database,
-  Lock,
-  ExternalLink,
-  Sparkles,
-  AlertTriangle,
-  Image as ImageIcon,
-  Type,
-  Quote,
-  List,
-  Move,
-  Minus,
-  Plus,
-  Trash
-} from 'lucide-react';
-import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
-import { 
-  saveArticle, 
-  deleteArticle, 
-  saveSiteConfig, 
-  saveBentoLinks, 
-  setArticleFeaturedStatus,
-  syncAuthorToAllCloudArticles,
-  syncAdminAuthorProfile
-} from '../lib/cms';
-import { 
-  getCarouselSlides, 
-  addCarouselSlide, 
-  updateCarouselSlide, 
-  deleteCarouselSlide 
-} from '../lib/community';
-
 interface AdminStudioModalProps {
   isOpen: boolean;
   onClose: () => void;
