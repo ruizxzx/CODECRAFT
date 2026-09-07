@@ -649,7 +649,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
           username: authorProfile.username,
           name: authorName || siteConfig.authorName || 'Krish',
           role: authorRole || siteConfig.authorRole || 'Founder & Systems Architect',
-          avatar: authorAvatarUrl || siteConfig.authorAvatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop',
+          avatar: authorAvatarUrl || siteConfig.authorAvatarUrl || '',
           bio: manifestoText || aboutMeBio || siteConfig.manifestoText || 'Writing about distributed systems, modern web runtimes, and engineering craft.'
         },
         content: (contentBlocks.length ? contentBlocks : [{ type: 'paragraph' as const, content: newExcerpt }]).map(block => ({ ...block }))
@@ -1024,7 +1024,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       <label className="font-mono text-xs font-bold uppercase text-black">Author Picture (Avatar)</label>
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         <img 
-                          src={authorAvatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop'} 
+                          src={authorAvatarUrl || ''} 
                           alt="Author Preview" 
                           className="w-16 h-16 border-2 border-black object-cover bg-white shrink-0 neo-shadow-sm"
                         />

@@ -3,7 +3,7 @@ import { CommunityUser, CommunityPost, PageView } from '../types';
 import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments } from '../lib/community';
 import { auth, checkIsAdmin } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
-import { fetchArticles } from '../lib/cms';
+import { fetchArticles, syncAuthorToAllCloudArticles } from '../lib/cms';
 import { syncUserIdentityAcrossContent } from '../lib/community';
 import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText, Camera } from 'lucide-react';
 
@@ -89,6 +89,19 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       const nextProfile = { ...profile, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, updatedAt: new Date().toISOString() };
       setProfile(nextProfile);
       await syncUserIdentityAcrossContent(activeUser.uid, { displayName: nextProfile.displayName, photoURL: nextPhotoURL, username: nextProfile.username });
+      // Main publication articles are admin-owned documents. Sync them only for
+      // the canonical admin profile so ordinary community profile saves remain
+      // fully allowed by Firestore rules.
+      if (isAdmin) {
+        await syncAuthorToAllCloudArticles({
+          name: nextProfile.displayName,
+          role: nextProfile.role || 'Founder & Systems Architect',
+          avatar: nextPhotoURL,
+          bio: nextProfile.bio || '',
+          uid: nextProfile.uid,
+          username: nextProfile.username
+        });
+      }
       setIsEditing(false);
       alert('Profile saved and synchronized across your posts and comments.');
     } catch (e: any) { alert('Failed to update profile: ' + (e?.message || 'Permission denied.')); }

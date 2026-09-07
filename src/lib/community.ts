@@ -1,6 +1,6 @@
 import { db, auth } from './firebase';
 import { 
-  collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment
+  collection, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment
 } from 'firebase/firestore';
 import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, CarouselSlide } from '../types';
 
@@ -564,12 +564,56 @@ export async function getUserRepostedPosts(userId: string): Promise<CommunityPos
   return posts.filter(Boolean) as CommunityPost[];
 }
 
+async function getCommentsAuthoredByUserWithoutCollectionGroup(userId: string): Promise<Array<{ ref: any; data: any }>> {
+  const results: Array<{ ref: any; data: any }> = [];
+
+  // Deliberately avoid collectionGroup(... where authorId == ...) here.
+  // That query requires a COLLECTION_GROUP_ASC index and breaks profile save/claim
+  // on projects where that index has not been created. We instead read the known
+  // parent collections and filter the small comment documents client-side.
+  const [postsSnap, articlesSnap] = await Promise.all([
+    getDocs(collection(db, 'posts')),
+    getDocs(collection(db, 'articles'))
+  ]);
+
+  const postCommentReads = postsSnap.docs.map(postDoc =>
+    getDocs(collection(db, 'posts', postDoc.id, 'comments'))
+  );
+  const articleCommentReads = articlesSnap.docs.map(articleDoc =>
+    getDocs(collection(db, 'articles', articleDoc.id, 'comments'))
+  );
+
+  const [postComments, articleComments] = await Promise.all([
+    Promise.all(postCommentReads),
+    Promise.all(articleCommentReads)
+  ]);
+
+  for (const snap of [...postComments, ...articleComments]) {
+    for (const commentDoc of snap.docs) {
+      if (commentDoc.data().authorId === userId) {
+        results.push({ ref: commentDoc.ref, data: commentDoc.data() });
+      }
+    }
+  }
+  return results;
+}
+
 export async function syncUserIdentityAcrossContent(userId: string, profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username'>): Promise<void> {
   const writes: Array<{ ref: any; data: any }> = [];
+  const identity = {
+    authorName: profile.displayName || '',
+    authorAvatar: profile.photoURL || '',
+    authorUsername: profile.username || '',
+    updatedAt: serverTimestamp()
+  };
+
   const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
-  postsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, updatedAt: serverTimestamp() } }));
-  const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
-  commentsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, updatedAt: serverTimestamp() } }));
+  postsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: identity }));
+
+  const comments = await getCommentsAuthoredByUserWithoutCollectionGroup(userId);
+  comments.forEach(c => writes.push({ ref: c.ref, data: identity }));
+
+
   for (let i = 0; i < writes.length; i += 450) {
     const batch = writeBatch(db);
     writes.slice(i, i + 450).forEach(w => batch.update(w.ref, w.data));
@@ -578,13 +622,19 @@ export async function syncUserIdentityAcrossContent(userId: string, profile: Pic
 }
 
 export async function getUserComments(userId: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {
-  const snap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
-  return snap.docs.map(d => {
-    const data = d.data();
-    const path = d.ref.path.split('/');
+  const comments = await getCommentsAuthoredByUserWithoutCollectionGroup(userId);
+  return comments.map(({ ref, data }) => {
+    const path = ref.path.split('/');
     const postId = path[0] === 'posts' ? path[1] : undefined;
     const articleSlug = path[0] === 'articles' ? path[1] : undefined;
-    return { id: d.id, content: data.content || '', createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()), postId, articleSlug, authorName: data.authorName || 'Architect' };
+    return {
+      id: ref.id,
+      content: data.content || '',
+      createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()),
+      postId,
+      articleSlug,
+      authorName: data.authorName || 'Architect'
+    };
   }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 

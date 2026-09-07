@@ -43,12 +43,14 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
 
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
+  const [siteConfigReady, setSiteConfigReady] = useState(false);
   const [bentoLinks, setBentoLinks] = useState<BentoLink[]>(DEFAULT_BENTO_LINKS);
 
   // Real-time Firestore Subscriptions for Cloud CMS Data
   useEffect(() => {
     const unsubConfig = subscribeSiteConfig((config) => {
       setSiteConfig(config);
+      setSiteConfigReady(true);
     });
     const unsubBento = subscribeBentoLinks((links) => {
       setBentoLinks(links);
@@ -105,6 +107,7 @@ export default function App() {
 
   // Sync auth state & cloud saved items
   useEffect(() => {
+    if (!siteConfigReady) return;
     const unsub = auth.onAuthStateChanged(async (user) => {
       setUserAuth(user);
       if (user) {
@@ -174,7 +177,7 @@ export default function App() {
       }
     });
     return () => unsub();
-  }, []);
+  }, [siteConfigReady, siteConfig.authorName, siteConfig.authorRole, siteConfig.authorAvatarUrl, siteConfig.aboutMeBio, siteConfig.manifestoText]);
 
   // Dynamic theme colors synced to global site configuration
   useEffect(() => {
