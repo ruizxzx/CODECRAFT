@@ -5,7 +5,6 @@ import { reportContent } from '../lib/social';
 import { getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { isPlatformModerator } from '../lib/social';
-import { promoteCommunityBlogToMain, fetchAllArticlesForAdmin, unpublishMainArticle } from '../lib/cms';
 import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2, Share2, Pencil, X } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { CommunityPostExtras } from './CommunityPostExtras';
@@ -40,7 +39,6 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
   const [quoteText, setQuoteText] = useState('');
-  const [mainArticleStatus, setMainArticleStatus] = useState<'published'|'unpublished'|null>(null);
   
   const [commentInput, setCommentInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -84,39 +82,6 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     });
     return () => { active = false; unsubscribe(); };
   }, [postId]);
-
-  const activeUser = auth.currentUser || userAuth;
-  const isAdmin = checkIsAdmin(activeUser?.email);
-
-  useEffect(() => {
-    let active = true;
-    if (!isAdmin || !post?.type || post.type !== 'blog') { setMainArticleStatus(null); return; }
-    (async () => {
-      try {
-        const articles = await fetchAllArticlesForAdmin();
-        const a = articles.find((x:any) => x.sourcePostId === post.id || x.slug === (post as any).promotedToArticleSlug);
-        if (active) setMainArticleStatus(a?.isPublished === false || a?.mainPublicationStatus === 'unpublished' ? 'unpublished' : a ? 'published' : null);
-      } catch { if (active) setMainArticleStatus(null); }
-    })();
-    return () => { active = false; };
-  }, [post?.id, post?.type, (post as any)?.promotedToArticleSlug, isAdmin]);
-
-  const handlePublishOnMain = async () => {
-    if (!post || !isAdmin || post.type !== 'blog') return;
-    try {
-      if (mainArticleStatus === 'published') {
-        const articles = await fetchAllArticlesForAdmin();
-        const a = articles.find((x:any) => x.sourcePostId === post.id || x.slug === (post as any).promotedToArticleSlug);
-        if (a) await unpublishMainArticle(a);
-        setMainArticleStatus('unpublished');
-        alert('Removed from the main publication. The creator blog remains intact.');
-      } else {
-        await promoteCommunityBlogToMain(post, true);
-        setMainArticleStatus('published');
-        alert('Published on the main site with the original creator credited.');
-      }
-    } catch (e:any) { alert(e?.message || 'Main publication action failed.'); }
-  };
 
   const handleVote = async (voteType: 'up' | 'down') => {
     if (!userAuth) {
@@ -210,6 +175,8 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     }
   };
 
+  const activeUser = auth.currentUser || userAuth;
+  const isAdmin = checkIsAdmin(activeUser?.email);
   const canDeletePost = !!activeUser && (!!post) && (activeUser.uid === post.authorId || isAdmin || isModerator);
 
   const handleDeletePost = async () => {
@@ -312,15 +279,10 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
       </button>
 
       <div className="w-full min-w-0 bg-white border-4 border-black neo-shadow-lg p-4 sm:p-10 overflow-hidden">
-        <div className="flex justify-between items-start mb-6 flex-wrap gap-2">
+        <div className="flex justify-between items-start mb-6">
           <div className="inline-block px-3 py-1 bg-[var(--color-secondary)] border-2 border-black font-mono text-xs font-black uppercase">
             {post.type}
           </div>
-          {isAdmin && post.type === 'blog' && (
-            <button type="button" onClick={handlePublishOnMain} className="flex items-center space-x-1.5 px-3 py-1 border-2 border-black font-mono text-xs font-black uppercase bg-[var(--color-primary)]">
-              {mainArticleStatus === 'published' ? 'UNPUBLISH FROM MAIN' : 'PUBLISH ON MAIN'}
-            </button>
-          )}
           {isAdmin && (
             <button 
               onClick={handleToggleFeature}

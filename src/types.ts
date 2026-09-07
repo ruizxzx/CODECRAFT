@@ -48,7 +48,6 @@ export interface Article {
   isPublished?: boolean;
   mainPublicationStatus?: 'published' | 'unpublished';
   promotedAt?: string;
-  editedAt?: string;
   promotedBy?: string;
   author: {
     name: string;
@@ -195,7 +194,6 @@ export interface CommunityPost {
   isPublished?: boolean;
   mainPublicationStatus?: 'published' | 'unpublished';
   promotedAt?: string;
-  editedAt?: string;
   promotedBy?: string;
   clapsCount?: number; // legacy
   upvotesCount: number;
@@ -205,6 +203,7 @@ export interface CommunityPost {
   isFeatured: boolean;
   createdAt: string;
   updatedAt: string;
+  editedAt?: string;
   quoteText?: string;
   quotedPostId?: string;
   mentionedUsernames?: string[];

@@ -653,6 +653,9 @@ export async function markPostAsMainArticleSource(postId: string, articleSlug: s
 export async function updatePost(postId: string, data: Partial<CommunityPost>) {
   const p = `posts/${postId}`;
   try {
+    // Firestore rejects `undefined` field values. PublicBlogComposer intentionally
+    // leaves optional fields unset (for example seriesOrder), so sanitize the
+    // complete update payload before calling updateDoc.
     const patch: any = stripUndefined({ ...data, updatedAt: serverTimestamp() });
     const isContentEdit = typeof data.title === 'string' || typeof data.content === 'string';
     if (isContentEdit) patch.editedAt = serverTimestamp();
@@ -664,8 +667,6 @@ export async function updatePost(postId: string, data: Partial<CommunityPost>) {
       patch.hashtags = extractHashtags(`${title} ${content}`);
     }
     await updateDoc(doc(db, 'posts', postId), patch);
-    // Public creator edits are reflected by the main article reader/listing via sourcePostId hydration.
-    // The canonical editable record remains the creator's post; public users are never granted article write access.
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, p);
     throw error;

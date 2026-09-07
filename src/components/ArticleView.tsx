@@ -267,7 +267,6 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         <h1 className="font-display font-black text-3xl sm:text-5xl md:text-6xl text-black tracking-tight leading-[1.05] mb-6">
           {article.title}
         </h1>
-        {article.editedAt && <div className="mb-4 inline-block px-2 py-1 border-2 border-black bg-neutral-100 font-mono text-[10px] font-black uppercase">EDITED</div>}
 
         {/* Excerpt */}
         <p className="font-serif text-xl sm:text-2xl text-neutral-800 leading-relaxed font-normal italic mb-8 border-l-4 border-black pl-4 py-1">
