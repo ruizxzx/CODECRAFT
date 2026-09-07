@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
-import { getCommunityProfile, getPosts, deletePost, toggleRepost, getUserRepostStatus } from '../lib/community';
+import { getCommunityProfile, getPosts, subscribeCommunityPosts, deletePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { 
   MessageSquare, 
@@ -79,20 +79,13 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
     return () => unsub();
   }, [initialUserProfile]);
 
-  const loadPosts = async () => {
-    setLoadingPosts(true);
-    try {
-      const p = await getPosts(activeTab === 'discussions' ? 'discussion' : 'blog');
-      setPosts(p);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingPosts(false);
-    }
-  };
-
   useEffect(() => {
-    loadPosts();
+    setLoadingPosts(true);
+    const unsubscribe = subscribeCommunityPosts(activeTab === 'discussions' ? 'discussion' : 'blog', (cloudPosts) => {
+      setPosts(cloudPosts);
+      setLoadingPosts(false);
+    });
+    return () => unsubscribe();
   }, [activeTab]);
 
   const handleLogin = async () => {

@@ -9,6 +9,7 @@ import {
   User 
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 // Production configuration for the KRISHFICIENT portfolio Firebase project.
 // Environment variables may override these values for a different deployment,
 // but this app must always use the default Firestore database in this project.
@@ -37,6 +38,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // separate rules and was the source of the permission-denied CMS failures.
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({

@@ -1,11 +1,32 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // User profile pictures.
+    match /profile-images/{userId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+    // Public delivery for published article/site images.
+    match /article-images/{adminUid}/{fileName} {
+      allow read: if true;
+      allow delete: if request.auth != null && request.auth.uid == adminUid && request.auth.token.email in ['ruizxzxz@gmail.com', 'krishsarkar456@gmail.com'];
+      allow write: if request.auth != null
+        && request.auth.uid == adminUid
+        && request.auth.token.email in ['ruizxzxz@gmail.com', 'krishsarkar456@gmail.com']
+        && request.resource.size < 12 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
     match /{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null && (
-        request.auth.token.email in ['ruizxzxz@gmail.com', 'krishsarkar456@gmail.com']
-      );
+      allow delete: if request.auth != null && request.auth.token.email in ['ruizxzxz@gmail.com', 'krishsarkar456@gmail.com'];
+      allow write: if request.auth != null
+        && request.auth.token.email in ['ruizxzxz@gmail.com', 'krishsarkar456@gmail.com']
+        && request.resource.size < 12 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
     }
   }
 }

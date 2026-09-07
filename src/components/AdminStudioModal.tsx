@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Cropper, { Area } from 'react-easy-crop';
 import { Article, Category, SiteConfig, BentoLink, CarouselSlide } from '../types';
 import { 
   X, 
@@ -18,9 +19,19 @@ import {
   Lock,
   ExternalLink,
   Sparkles,
-  AlertTriangle
+  AlertTriangle,
+  Image as ImageIcon,
+  Type,
+  Quote,
+  List,
+  Move,
+  Upload,
+  Minus,
+  Plus,
+  Trash
 } from 'lucide-react';
-import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
+import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS, storage } from '../lib/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   saveArticle, 
   deleteArticle, 
@@ -48,6 +59,35 @@ interface AdminStudioModalProps {
   bentoLinks: BentoLink[];
   onUpdateBentoLinks: (links: BentoLink[]) => void;
 }
+
+
+const createCroppedImageBlob = async (imageSrc: string, pixelCrop: Area): Promise<Blob> => {
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = imageSrc;
+  });
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(pixelCrop.width));
+  canvas.height = Math.max(1, Math.round(pixelCrop.height));
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Could not create image canvas.');
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Image crop failed.')), 'image/jpeg', 0.9);
+  });
+};
 
 export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   isOpen,
@@ -455,15 +495,26 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [contentBlocks, setContentBlocks] = useState<Article['content']>([
+    { type: 'paragraph', content: '' }
+  ]);
+  const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
+  const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<'cover' | 'inline' | 'avatar' | 'slide'>('cover');
+  const [cropBlockIndex, setCropBlockIndex] = useState<number | null>(null);
+  const [cropAspect, setCropAspect] = useState(16 / 9);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [isUploadingCroppedImage, setIsUploadingCroppedImage] = useState(false);
+  const cropFileInputRef = useRef<HTMLInputElement | null>(null);
+
 
   // Author avatar upload & cloud sync state
   const [isSyncingAuthor, setIsSyncingAuthor] = useState(false);
   const [syncAuthorSuccess, setSyncAuthorSuccess] = useState<string | null>(null);
   const [togglingFeaturedSlug, setTogglingFeaturedSlug] = useState<string | null>(null);
-
-  const handleAvatarUpload = async (_e: React.ChangeEvent<HTMLInputElement>) => {
-    alert('Firebase Storage is disabled. Paste a public image URL instead.');
-  };
 
   const handleSyncAuthorToArticles = async () => {
     if (!confirm(`Do you want to sync the author profile (Name: "${authorName}", Role: "${authorRole}") to ALL articles stored in Firestore cloud database?`)) return;
@@ -627,24 +678,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
           avatar: authorAvatarUrl || siteConfig.authorAvatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop',
           bio: manifestoText || aboutMeBio || siteConfig.manifestoText || 'Writing about distributed systems, modern web runtimes, and engineering craft.'
         },
-        content: [
-          {
-            type: 'paragraph',
-            content: newParagraph1 || newExcerpt
-          },
-          ...(newCodeSnippet ? [{
-            type: 'code' as const,
-            codeBlock: {
-              language: newCodeLanguage,
-              filename: `solution.${newCodeLanguage === 'typescript' ? 'ts' : newCodeLanguage === 'python' ? 'py' : 'txt'}`,
-              code: newCodeSnippet
-            }
-          }] : []),
-          ...(newTakeaway ? [{
-            type: 'takeaways' as const,
-            items: [newTakeaway]
-          }] : [])
-        ]
+        content: (contentBlocks.length ? contentBlocks : [{ type: 'paragraph' as const, content: newExcerpt }]).map(block => ({ ...block }))
       };
 
       await saveArticle(article);
@@ -676,14 +710,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setNewCoverCaption(article.coverImageCaption || '');
     setNewReadingTime(article.readingTimeMinutes);
     
-    const p1 = article.content?.find(c => c.type === 'paragraph');
-    const code = article.content?.find(c => c.type === 'code');
-    const takeaways = article.content?.find(c => c.type === 'takeaways');
-
-    setNewParagraph1(p1?.content || '');
-    setNewCodeSnippet(code?.codeBlock?.code || '');
-    setNewCodeLanguage(code?.codeBlock?.language || 'typescript');
-    setNewTakeaway(takeaways?.items?.[0] || '');
+    setContentBlocks(article.content?.length ? article.content.map(block => ({ ...block })) : [{ type: 'paragraph', content: article.excerpt }]);
+    setShowCustomCategoryInput(!['Web Development','Artificial Intelligence','Software Engineering','Computer Science','Developer Tools','System Design'].includes(article.category));
     setNewIsFeatured(!!article.featured || !!article.pinned);
     setNewIsPinned(!!article.pinned || !!article.featured);
   };
@@ -711,19 +739,128 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setNewParagraph1('');
     setNewCodeSnippet('');
     setNewTakeaway('');
+    setContentBlocks([{ type: 'paragraph', content: '' }]);
+    setShowCustomCategoryInput(false);
     setNewIsFeatured(false);
     setNewIsPinned(false);
     setNewCoverImage('https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1200&auto=format&fit=crop');
     setPublishError(null);
   };
 
-  // Image Upload Handlers
-  const handleCoverUpload = async (_e: React.ChangeEvent<HTMLInputElement>) => {
-    alert('Firebase Storage is disabled. Paste a public image URL instead.');
+  // Cloud image pipeline: local file -> crop modal -> Firebase Storage -> public URL.
+  const openImageCropper = (file: File, target: 'cover' | 'inline' | 'avatar' | 'slide', blockIndex: number | null = null) => {
+    if (!file.type.startsWith('image/')) {
+      setPublishError('Please select an image file.');
+      return;
+    }
+    if (file.size > 12 * 1024 * 1024) {
+      setPublishError('Image is too large. Please choose an image under 12 MB.');
+      return;
+    }
+    setPublishError(null);
+    setCropTarget(target);
+    setCropBlockIndex(blockIndex);
+    setCropAspect(target === 'avatar' ? 1 : target === 'slide' ? 16 / 6 : target === 'inline' ? 16 / 9 : 16 / 9);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setCropImageSrc(URL.createObjectURL(file));
   };
 
-  const handleSlideUpload = async (_e: React.ChangeEvent<HTMLInputElement>) => {
-    alert('Firebase Storage is disabled. Paste a public image URL instead.');
+  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) openImageCropper(file, 'cover');
+    e.currentTarget.value = '';
+  };
+
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) openImageCropper(file, 'avatar');
+    e.currentTarget.value = '';
+  };
+
+  const handleSlideUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) openImageCropper(file, 'slide');
+    e.currentTarget.value = '';
+  };
+
+  const handleInlineImageUpload = (e: React.ChangeEvent<HTMLInputElement>, blockIndex: number) => {
+    const file = e.target.files?.[0];
+    if (file) openImageCropper(file, 'inline', blockIndex);
+    e.currentTarget.value = '';
+  };
+
+  const uploadCroppedImage = async () => {
+    if (!cropImageSrc || !croppedAreaPixels || !auth.currentUser) return;
+    setIsUploadingCroppedImage(true);
+    try {
+      const blob = await createCroppedImageBlob(cropImageSrc, croppedAreaPixels);
+      const safeName = `${cropTarget}-${Date.now()}.jpg`;
+      const fileRef = storageRef(storage, `article-images/${auth.currentUser.uid}/${safeName}`);
+      const snapshot = await uploadBytes(fileRef, blob, { contentType: 'image/jpeg', cacheControl: 'public,max-age=31536000,immutable' });
+      const url = await getDownloadURL(snapshot.ref);
+      if (cropTarget === 'cover') {
+        setNewCoverImage(url);
+      } else if (cropTarget === 'avatar') {
+        setAuthorAvatarUrl(url);
+      } else if (cropTarget === 'slide') {
+        setNewSlideImageUrl(url);
+      } else if (cropTarget === 'inline' && cropBlockIndex !== null) {
+        setContentBlocks(prev => prev.map((block, i) => i === cropBlockIndex ? { ...block, type: 'image', imageUrl: url, imageAlt: block.imageAlt || 'Article image' } : block));
+      }
+      setCropImageSrc(null);
+      setCropBlockIndex(null);
+    } catch (error: any) {
+      console.error('Failed to upload cropped image:', error);
+      setPublishError(`Image upload failed: ${error.message || 'Check Firebase Storage rules.'}`);
+    } finally {
+      setIsUploadingCroppedImage(false);
+    }
+  };
+
+  const addContentBlock = (type: Article['content'][number]['type']) => {
+    const block: Article['content'][number] = type === 'code'
+      ? { type, codeBlock: { language: 'typescript', code: '' } }
+      : type === 'image'
+        ? { type, imageUrl: '', imageAlt: 'Article image', imageCaption: '' }
+        : type === 'list' || type === 'takeaways'
+          ? { type, items: [''] }
+          : type === 'quote'
+            ? { type, content: '', quoteAuthor: '' }
+            : type === 'callout'
+              ? { type, content: '', calloutType: 'info', calloutTitle: 'KEY INSIGHT' }
+              : { type, content: '' };
+    setContentBlocks(prev => [...prev, block]);
+  };
+
+  const updateContentBlock = (index: number, patch: Partial<Article['content'][number]>) => {
+    setContentBlocks(prev => prev.map((block, i) => i === index ? { ...block, ...patch } : block));
+  };
+
+  const moveContentBlock = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= contentBlocks.length) return;
+    setContentBlocks(prev => {
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
+  const removeContentBlock = (index: number) => {
+    setContentBlocks(prev => prev.length === 1 ? [{ type: 'paragraph', content: '' }] : prev.filter((_, i) => i !== index));
+  };
+
+  const handleBlockDrop = (targetIndex: number) => {
+    if (draggedBlockIndex === null || draggedBlockIndex === targetIndex) return;
+    setContentBlocks(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(draggedBlockIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+    setDraggedBlockIndex(null);
   };
 
   if (!isOpen) return null;
@@ -984,6 +1121,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                             placeholder="https://images.unsplash.com/..."
                           />
                           <div className="flex items-center gap-2">
+                            <label className="px-3 py-1.5 bg-[var(--color-primary)] border-2 border-black font-mono text-[10px] font-bold cursor-pointer uppercase flex items-center gap-1.5">
+                              <Upload className="w-3 h-3" /> UPLOAD & CROP
+                              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                            </label>
                             <span className="font-mono text-[10px] text-neutral-500">JPG, PNG, WebP</span>
                           </div>
                         </div>
@@ -1151,7 +1292,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         </label>
                         <select
                           value={newCategory}
-                          onChange={(e) => setNewCategory(e.target.value as Category)}
+                          onChange={(e) => { const value = e.target.value; if (value === '__custom__') { setShowCustomCategoryInput(true); } else { setShowCustomCategoryInput(false); setNewCategory(value as Category); } }}
                           className="w-full px-3.5 py-2.5 border-2 border-black font-sans font-bold text-sm bg-white"
                         >
                           <option value="Web Development">Web Development</option>
@@ -1160,8 +1301,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           <option value="Computer Science">Computer Science</option>
                           <option value="Developer Tools">Developer Tools</option>
                           <option value="System Design">System Design</option>
+                          {customCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                          <option value="__custom__">+ ADD CUSTOM CATEGORY...</option>
                         </select>
-                        <div className="mt-2 flex gap-2">
+                        {showCustomCategoryInput && <div className="mt-2 flex gap-2">
                           <input
                             value={customCategoryInput}
                             onChange={(e) => setCustomCategoryInput(e.target.value)}
@@ -1186,7 +1329,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                             }}
                             className="px-3 py-2 bg-[var(--color-primary)] border-2 border-black font-display font-black text-xs uppercase"
                           >ADD</button>
-                        </div>
+                        </div>}
                         {customCategories.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             {customCategories.map(category => (
@@ -1238,83 +1381,91 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       />
                     </div>
 
-                    {/* Cover Image URL */}
+                    {/* Cover Image */}
                     <div className="space-y-2 border-2 border-black p-3 bg-neutral-50">
-                      <label className="font-mono text-xs font-bold uppercase text-black block">
-                        Cover Image
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="url"
-                          value={newCoverImage}
-                          onChange={(e) => setNewCoverImage(e.target.value)}
-                          placeholder="https://images.unsplash.com/..."
-                          className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs bg-white"
-                        />
-                      </div>
-
-                      {newCoverImage && (
-                        <div className="mt-2">
-                          <img 
-                            src={newCoverImage} 
-                            alt="Cover preview" 
-                            className="w-full h-36 object-cover border-2 border-black" 
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="font-mono text-xs font-bold uppercase text-black">
-                        Article Body (Paragraph 1)
-                      </label>
-                      <textarea
-                        rows={6}
-                        value={newParagraph1}
-                        onChange={(e) => setNewParagraph1(e.target.value)}
-                        placeholder="Detailed technical essay content..."
-                        className="w-full px-3.5 py-2.5 border-2 border-black font-serif text-sm bg-white"
-                      />
-                    </div>
-
-                    <div className="space-y-2 border-2 border-black p-3 bg-neutral-50">
-                      <div className="flex items-center justify-between">
-                        <label className="font-mono text-xs font-bold uppercase text-black">
-                          Optional Code Snippet Block
+                      <div className="flex items-center justify-between gap-3">
+                        <label className="font-mono text-xs font-bold uppercase text-black block">Cover Image</label>
+                        <label className="px-3 py-2 bg-[var(--color-primary)] border-2 border-black font-display font-black text-xs uppercase cursor-pointer hover:bg-[var(--color-secondary)] flex items-center gap-1.5">
+                          <Upload className="w-3.5 h-3.5" /> UPLOAD & CROP
+                          <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
                         </label>
-                        <select
-                          value={newCodeLanguage}
-                          onChange={(e) => setNewCodeLanguage(e.target.value)}
-                          className="px-2 py-1 border border-black font-mono text-xs bg-white"
-                        >
-                          <option value="typescript">TypeScript</option>
-                          <option value="javascript">JavaScript</option>
-                          <option value="rust">Rust</option>
-                          <option value="go">Go</option>
-                          <option value="python">Python</option>
-                          <option value="json">JSON</option>
-                        </select>
                       </div>
-                      <textarea
-                        rows={4}
-                        value={newCodeSnippet}
-                        onChange={(e) => setNewCodeSnippet(e.target.value)}
-                        placeholder="// Enter code here..."
+                      <input
+                        type="url"
+                        value={newCoverImage}
+                        onChange={(e) => setNewCoverImage(e.target.value)}
+                        placeholder="Or paste a public image URL..."
                         className="w-full px-3 py-2 border-2 border-black font-mono text-xs bg-white"
                       />
+                      {newCoverImage && <img src={newCoverImage} alt="Cover preview" className="w-full h-40 object-cover border-2 border-black" />}
+                      <p className="font-mono text-[10px] text-neutral-500 uppercase">Uploaded images are cropped and stored in Firebase Storage.</p>
                     </div>
 
-                    <div className="space-y-1">
-                      <label className="font-mono text-xs font-bold uppercase text-black">
-                        Key Engineering Takeaway
-                      </label>
-                      <input
-                        type="text"
-                        value={newTakeaway}
-                        onChange={(e) => setNewTakeaway(e.target.value)}
-                        placeholder="e.g. Decouple bundle generation from runtime execution to achieve zero cold starts."
-                        className="w-full px-3.5 py-2.5 border-2 border-black font-sans text-sm bg-white"
-                      />
+                    {/* Advanced Block Editor */}
+                    <div className="border-4 border-black bg-neutral-50 p-4 space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-black pb-3">
+                        <div>
+                          <h4 className="font-display font-black text-lg uppercase">Article Block Editor</h4>
+                          <p className="font-mono text-[10px] uppercase text-neutral-500">Drag blocks to reorder. Images are uploaded, cropped and cloud-persisted.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {([
+                            ['paragraph','TEXT'],['heading2','H2'],['heading3','H3'],['image','IMAGE'],['code','CODE'],['quote','QUOTE'],['callout','CALLOUT'],['list','LIST'],['takeaways','TAKEAWAYS']
+                          ] as const).map(([type,label]) => (
+                            <button key={type} type="button" onClick={() => addContentBlock(type)} className="px-2.5 py-1.5 border-2 border-black bg-white font-mono text-[10px] font-bold uppercase hover:bg-[var(--color-primary)]">+ {label}</button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        {contentBlocks.map((block, index) => (
+                          <div
+                            key={index}
+                            draggable
+                            onDragStart={() => setDraggedBlockIndex(index)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => handleBlockDrop(index)}
+                            className="border-2 border-black bg-white p-3 neo-shadow-sm"
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-3 border-b border-black pb-2">
+                              <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase"><Move className="w-3.5 h-3.5" /> {index + 1}. {block.type}</div>
+                              <div className="flex items-center gap-1">
+                                <button type="button" onClick={() => moveContentBlock(index,-1)} disabled={index===0} className="p-1.5 border border-black disabled:opacity-30"><ArrowUp className="w-3 h-3" /></button>
+                                <button type="button" onClick={() => moveContentBlock(index,1)} disabled={index===contentBlocks.length-1} className="p-1.5 border border-black disabled:opacity-30"><ArrowDown className="w-3 h-3" /></button>
+                                <button type="button" onClick={() => removeContentBlock(index)} className="p-1.5 border border-black hover:bg-red-500 hover:text-white"><Trash2 className="w-3 h-3" /></button>
+                              </div>
+                            </div>
+
+                            {block.type === 'image' ? (
+                              <div className="space-y-2">
+                                {block.imageUrl ? <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-64 object-cover border-2 border-black" /> : <div className="h-32 border-2 border-dashed border-black flex items-center justify-center font-mono text-xs">NO IMAGE SELECTED</div>}
+                                <div className="flex flex-wrap gap-2">
+                                  <label className="px-3 py-2 bg-black text-white font-mono text-xs font-bold cursor-pointer flex items-center gap-1.5"> <Upload className="w-3.5 h-3.5" /> UPLOAD & CROP <input type="file" accept="image/*" className="hidden" onChange={(e) => handleInlineImageUpload(e,index)} /> </label>
+                                  <input type="url" value={block.imageUrl || ''} onChange={(e) => updateContentBlock(index,{imageUrl:e.target.value})} placeholder="Or paste image URL" className="flex-1 min-w-[220px] px-3 py-2 border-2 border-black font-mono text-xs" />
+                                </div>
+                                <input value={block.imageAlt || ''} onChange={(e)=>updateContentBlock(index,{imageAlt:e.target.value})} placeholder="Alt text" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
+                                <input value={block.imageCaption || ''} onChange={(e)=>updateContentBlock(index,{imageCaption:e.target.value})} placeholder="Caption (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
+                              </div>
+                            ) : block.type === 'code' ? (
+                              <div className="space-y-2"><div className="flex gap-2"><select value={block.codeBlock?.language || 'typescript'} onChange={(e)=>updateContentBlock(index,{codeBlock:{...(block.codeBlock || {code:''}),language:e.target.value}})} className="px-2 py-2 border-2 border-black font-mono text-xs"><option>typescript</option><option>javascript</option><option>python</option><option>rust</option><option>go</option><option>json</option><option>bash</option></select><input value={block.codeBlock?.filename || ''} onChange={(e)=>updateContentBlock(index,{codeBlock:{...(block.codeBlock || {language:'typescript',code:''}),filename:e.target.value}})} placeholder="Filename" className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs" /></div><textarea rows={7} value={block.codeBlock?.code || ''} onChange={(e)=>updateContentBlock(index,{codeBlock:{...(block.codeBlock || {language:'typescript',filename:''}),code:e.target.value}})} placeholder="Paste code..." className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /></div>
+                            ) : block.type === 'quote' ? (
+                              <div className="space-y-2"><textarea rows={3} value={block.content || ''} onChange={(e)=>updateContentBlock(index,{content:e.target.value})} placeholder="Quote..." className="w-full px-3 py-2 border-2 border-black font-serif text-sm" /><input value={block.quoteAuthor || ''} onChange={(e)=>updateContentBlock(index,{quoteAuthor:e.target.value})} placeholder="Quote author" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /></div>
+                            ) : block.type === 'callout' ? (
+                              <div className="space-y-2"><div className="flex gap-2"><select value={block.calloutType || 'info'} onChange={(e)=>updateContentBlock(index,{calloutType:e.target.value as any})} className="px-2 py-2 border-2 border-black font-mono text-xs"><option value="info">Info</option><option value="tip">Tip</option><option value="warning">Warning</option><option value="insight">Insight</option></select><input value={block.calloutTitle || ''} onChange={(e)=>updateContentBlock(index,{calloutTitle:e.target.value})} placeholder="Callout title" className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs" /></div><textarea rows={4} value={block.content || ''} onChange={(e)=>updateContentBlock(index,{content:e.target.value})} placeholder="Callout content..." className="w-full px-3 py-2 border-2 border-black text-sm" /></div>
+                            ) : block.type === 'list' || block.type === 'takeaways' ? (
+                              <div className="space-y-2">{(block.items || ['']).map((item,itemIndex)=><div key={itemIndex} className="flex gap-2"><input value={item} onChange={(e)=>{const items=[...(block.items||[])];items[itemIndex]=e.target.value;updateContentBlock(index,{items})}} placeholder={`${block.type === 'list' ? 'List' : 'Takeaway'} item ${itemIndex+1}`} className="flex-1 px-3 py-2 border-2 border-black text-sm" /><button type="button" onClick={()=>updateContentBlock(index,{items:(block.items||[]).filter((_,i)=>i!==itemIndex)})} className="px-2 border-2 border-black"><Minus className="w-3 h-3" /></button></div>)}<button type="button" onClick={()=>updateContentBlock(index,{items:[...(block.items||[]),'']})} className="px-3 py-1.5 border-2 border-black font-mono text-[10px] font-bold uppercase">+ ITEM</button></div>
+                            ) : (
+                              <div className="space-y-2"><textarea rows={block.type === 'paragraph' ? 6 : 3} value={block.content || ''} onChange={(e)=>updateContentBlock(index,{content:e.target.value})} placeholder={block.type === 'heading2' ? 'Section heading...' : block.type === 'heading3' ? 'Subheading...' : 'Write this block...'} className={`w-full px-3 py-2 border-2 border-black bg-white ${block.type === 'paragraph' ? 'font-serif text-sm' : 'font-display font-bold'}`} /></div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 border-2 border-black p-3 bg-neutral-50">
+                      <label className="font-mono text-xs font-bold uppercase text-black">Cover Metadata</label>
+                      <input type="text" value={newCoverAlt} onChange={(e)=>setNewCoverAlt(e.target.value)} placeholder="Cover alt text" className="w-full px-3 py-2 border-2 border-black font-mono text-xs bg-white" />
+                      <input type="text" value={newCoverCaption} onChange={(e)=>setNewCoverCaption(e.target.value)} placeholder="Cover caption (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-xs bg-white" />
                     </div>
 
                     {/* Homepage Feature / Pin Controls */}
@@ -1935,6 +2086,26 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               </div>
             )}
 
+          </div>
+        )}
+
+        {/* Integrated image crop modal */}
+        {cropImageSrc && (
+          <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
+            <div className="w-full max-w-3xl bg-white border-4 border-black neo-shadow-lg overflow-hidden">
+              <div className="px-4 py-3 bg-[var(--color-primary)] border-b-4 border-black flex items-center justify-between">
+                <div><h3 className="font-display font-black text-lg uppercase">Crop Image</h3><p className="font-mono text-[10px] uppercase">{cropTarget === 'avatar' ? '1:1 PROFILE' : cropTarget === 'slide' ? 'WIDE CAROUSEL' : '16:9 EDITORIAL'}</p></div>
+                <button type="button" onClick={()=>setCropImageSrc(null)} className="p-2 border-2 border-black bg-white"><X className="w-5 h-5" /></button>
+              </div>
+              <div className="relative h-[55vh] min-h-[320px] bg-neutral-900">
+                <Cropper image={cropImageSrc} crop={crop} zoom={zoom} aspect={cropAspect} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={(_,pixels)=>setCroppedAreaPixels(pixels)} objectFit="contain" />
+              </div>
+              <div className="p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center border-t-4 border-black bg-neutral-100">
+                <label className="font-mono text-xs font-bold uppercase flex items-center gap-2 flex-1">ZOOM <input type="range" min={1} max={3} step={0.05} value={zoom} onChange={(e)=>setZoom(Number(e.target.value))} className="w-full" /></label>
+                <button type="button" onClick={()=>setCropImageSrc(null)} className="px-4 py-2 border-2 border-black bg-white font-display font-black text-xs uppercase">CANCEL</button>
+                <button type="button" disabled={isUploadingCroppedImage} onClick={uploadCroppedImage} className="px-5 py-2 border-2 border-black bg-[var(--color-primary)] font-display font-black text-xs uppercase disabled:opacity-50">{isUploadingCroppedImage ? 'UPLOADING...' : 'CROP & SAVE TO CLOUD'}</button>
+              </div>
+            </div>
           </div>
         )}
 

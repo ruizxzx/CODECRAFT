@@ -156,6 +156,7 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && (
           (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'updatedAt']))
+          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['repostsCount', 'updatedAt']))
@@ -191,7 +192,7 @@ service cloud.firestore {
           && incoming().postId == existing().postId
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
-          && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']);
+          && (incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']) || incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'updatedAt']));
         allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
       }
 
@@ -264,7 +265,8 @@ service cloud.firestore {
           && incoming().content.size() <= 2000;
         allow update: if isSignedIn()
           && request.auth.uid == existing().authorId
-          && incoming().authorId == existing().authorId;
+          && incoming().authorId == existing().authorId
+          && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'updatedAt', 'content']);
         allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
       }
     }

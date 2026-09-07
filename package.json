@@ -20,7 +20,8 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-firebase-hooks": "^5.1.1",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "react-easy-crop": "^6.2.3"
   },
   "devDependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",

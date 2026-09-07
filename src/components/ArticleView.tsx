@@ -327,6 +327,23 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               );
             }
 
+            if (block.type === 'image' && block.imageUrl) {
+              return (
+                <figure key={index} className="my-10 neo-border neo-shadow overflow-hidden bg-neutral-900">
+                  <img src={block.imageUrl} alt={block.imageAlt || article.title} className="w-full h-auto max-h-[680px] object-cover" loading="lazy" />
+                  {block.imageCaption && <figcaption className="p-3 bg-neutral-100 border-t-2 border-black font-mono text-xs text-neutral-700 italic">{block.imageCaption}</figcaption>}
+                </figure>
+              );
+            }
+
+            if (block.type === 'list' && block.items) {
+              return (
+                <ul key={index} className="my-8 list-disc pl-7 space-y-3 font-sans text-base text-neutral-800">
+                  {block.items.filter(Boolean).map((item, idx) => <li key={idx}>{item}</li>)}
+                </ul>
+              );
+            }
+
             if (block.type === 'code' && block.codeBlock) {
               const isCopied = copiedCodeIdx === index;
               return (

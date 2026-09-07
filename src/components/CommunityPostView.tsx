@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CommunityPost, CommunityComment, PageView, CommunityUser } from '../types';
-import { getPost, getComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
+import { getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2 } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
@@ -56,17 +56,19 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   }, [postId]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      const p = await getPost(postId);
-      setPost(p);
-      if (p) {
-        const c = await getComments(postId);
-        setComments(c);
-      }
-      setLoading(false);
-    };
-    fetchData();
+    let active = true;
+    setLoading(true);
+    getPost(postId).then(p => {
+      if (active) setPost(p);
+      if (active) setLoading(false);
+    }).catch(error => {
+      console.error(error);
+      if (active) setLoading(false);
+    });
+    const unsubscribe = subscribeCommunityComments(postId, (cloudComments) => {
+      if (active) setComments(cloudComments);
+    });
+    return () => { active = false; unsubscribe(); };
   }, [postId]);
 
   const handleVote = async (voteType: 'up' | 'down') => {

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
 import { getProfileByUsername, getPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments } from '../lib/community';
-import { auth, checkIsAdmin } from '../lib/firebase';
+import { auth, checkIsAdmin, storage } from '../lib/firebase';
+import { updateProfile } from 'firebase/auth';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { fetchArticles } from '../lib/cms';
-import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText } from 'lucide-react';
+import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText, Camera } from 'lucide-react';
 
 interface CommunityProfileViewProps {
   username: string;
@@ -23,6 +25,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [bioInput, setBioInput] = useState('');
   const [themeInput, setThemeInput] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
@@ -70,6 +73,31 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     fetchData();
     return () => { cancelled = true; };
   }, [username]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile || !activeUser || activeUser.uid !== profile.uid) return;
+    if (!file.type.startsWith('image/')) { alert('Please choose an image file.'); return; }
+    if (file.size > 8 * 1024 * 1024) { alert('Profile image must be smaller than 8 MB.'); return; }
+    setIsUploadingAvatar(true);
+    try {
+      const avatarRef = storageRef(storage, `profile-images/${activeUser.uid}/avatar-${Date.now()}.jpg`);
+      const snapshot = await uploadBytes(avatarRef, file, { contentType: file.type, cacheControl: 'public,max-age=31536000' });
+      const url = await getDownloadURL(snapshot.ref);
+      await updateCommunityProfile(activeUser.uid, { photoURL: url });
+      try { await updateProfile(activeUser, { photoURL: url }); } catch (authError) { console.warn('Firebase Auth avatar update skipped:', authError); }
+      const nextProfile = { ...profile, photoURL: url, updatedAt: new Date().toISOString() };
+      setProfile(nextProfile);
+      await syncUserIdentityAcrossContent(activeUser.uid, { displayName: nextProfile.displayName, photoURL: url, username: nextProfile.username });
+      alert('Profile picture updated and synchronized across your posts and comments.');
+    } catch (error: any) {
+      console.error('Profile image upload failed:', error);
+      alert('Failed to update profile picture: ' + (error?.message || 'Check Firebase Storage rules.'));
+    } finally {
+      setIsUploadingAvatar(false);
+      e.target.value = '';
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,7 +174,15 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         <div className="h-32 sm:h-48 w-full border-b-4 border-black" style={{ backgroundColor: profile.themeColor || '#000' }} />
         <div className="px-6 sm:px-10 pb-8 relative">
           <div className="flex justify-between items-end -mt-16 mb-6">
-            {profile.photoURL ? <img src={profile.photoURL} alt={profile.displayName} className="w-32 h-32 rounded-full border-4 border-black bg-white object-cover" /> : <div className="w-32 h-32 rounded-full bg-neutral-200 border-4 border-black flex items-center justify-center"><User className="w-12 h-12" /></div>}
+            <div className="relative group">
+              {profile.photoURL ? <img src={profile.photoURL} alt={profile.displayName} className="w-32 h-32 rounded-full border-4 border-black bg-white object-cover" /> : <div className="w-32 h-32 rounded-full bg-neutral-200 border-4 border-black flex items-center justify-center"><User className="w-12 h-12" /></div>}
+              {isOwner && (
+                <label className="absolute bottom-0 right-0 px-2.5 py-2 bg-[var(--color-primary)] border-2 border-black cursor-pointer font-mono text-[10px] font-black uppercase flex items-center gap-1 hover:bg-[var(--color-secondary)]">
+                  <Camera className="w-3.5 h-3.5" /> {isUploadingAvatar ? 'Uploading' : 'Change DP'}
+                  <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} disabled={isUploadingAvatar} />
+                </label>
+              )}
+            </div>
             <div className="flex items-center gap-3">
               {isOwner && !isEditing && <button onClick={() => setIsEditing(true)} className="px-4 py-2 bg-neutral-100 border-2 border-black font-mono text-xs font-bold uppercase flex items-center gap-2"><Settings className="w-4 h-4" />Edit Profile</button>}
               {!isOwner && currentUserProfile && <button onClick={handleToggleFollow} disabled={isFollowLoading} className={`px-6 py-2 border-2 border-black font-mono text-xs font-bold uppercase flex items-center gap-2 ${isFollowing ? 'bg-neutral-200' : 'bg-[var(--color-primary)]'}`}>{isFollowLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <><UserMinus className="w-4 h-4" />Unfollow</> : <><UserPlus className="w-4 h-4" />Follow</>}</button>}

@@ -292,18 +292,28 @@ export async function deleteCarouselSlide(id: string) {
   }
 }
 
+export function subscribeCommunityPosts(type: 'discussion' | 'blog' | undefined, callback: (posts: CommunityPost[]) => void): () => void {
+  const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
+    if (type) results = results.filter(r => r.type === type);
+    callback(results);
+  }, (error) => {
+    console.error('Community post realtime subscription failed:', error);
+    callback([]);
+  });
+}
+
 export async function getPosts(type?: 'discussion' | 'blog', username?: string): Promise<CommunityPost[]> {
   const p = `posts`;
   try {
-    let q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
-    if (type) {
-      q = query(collection(db, 'posts'), where('type', '==', type), orderBy('createdAt', 'desc'));
-    }
-    const snap = await getDocs(q);
+    // Deliberately avoid the type+createdAt composite query here. Community blog
+    // posts must work immediately in a fresh Firebase project without requiring
+    // a manually-created composite index. Sort/filter the cloud result client-side.
+    const snap = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
-    if (username) {
-      results = results.filter(r => r.authorUsername === username);
-    }
+    if (type) results = results.filter(r => r.type === type);
+    if (username) results = results.filter(r => r.authorUsername === username || r.authorId === username);
     return results;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, p);
@@ -333,6 +343,16 @@ export async function updatePost(postId: string, data: Partial<CommunityPost>) {
     handleFirestoreError(error, OperationType.UPDATE, p);
     throw error;
   }
+}
+
+export function subscribeCommunityComments(postId: string, callback: (comments: CommunityComment[]) => void): () => void {
+  const q = query(collection(db, 'posts', postId, 'comments'), orderBy('createdAt', 'asc'));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityComment)));
+  }, (error) => {
+    console.error('Community comment realtime subscription failed:', error);
+    callback([]);
+  });
 }
 
 export async function getComments(postId: string): Promise<CommunityComment[]> {
@@ -529,6 +549,19 @@ export async function getUserRepostedPosts(userId: string): Promise<CommunityPos
   const snap = await getDocs(query(collection(db, 'users', userId, 'reposts'), orderBy('createdAt', 'desc')));
   const posts = await Promise.all(snap.docs.map(d => getPost(d.id)));
   return posts.filter(Boolean) as CommunityPost[];
+}
+
+export async function syncUserIdentityAcrossContent(userId: string, profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username'>): Promise<void> {
+  const writes: Array<{ ref: any; data: any }> = [];
+  const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
+  postsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, updatedAt: serverTimestamp() } }));
+  const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
+  commentsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, updatedAt: serverTimestamp() } }));
+  for (let i = 0; i < writes.length; i += 450) {
+    const batch = writeBatch(db);
+    writes.slice(i, i + 450).forEach(w => batch.update(w.ref, w.data));
+    await batch.commit();
+  }
 }
 
 export async function getUserComments(userId: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {
