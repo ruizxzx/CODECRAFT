@@ -103,7 +103,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'notifications' | 'explore';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'notifications' | 'explore' | 'social';
 
 export interface CommunityUser {
   uid: string;
@@ -164,6 +164,7 @@ export interface CommunityComment {
   authorName: string;
   authorAvatar: string;
   content: string;
+  parentId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -198,13 +199,13 @@ export interface BookmarkCollection {
 
 export interface Notification {
   id: string;
-  type: 'follow' | 'upvote' | 'comment' | 'reply' | 'mention' | 'repost' | 'verification' | 'article_published';
+  type: 'follow' | 'upvote' | 'comment' | 'reply' | 'mention' | 'repost' | 'verification' | 'article_published' | 'message';
   actorId: string;
   actorUsername: string;
   actorName: string;
   actorAvatar?: string;
   message: string;
-  targetType?: 'post' | 'comment' | 'profile' | 'article';
+  targetType?: 'post' | 'comment' | 'profile' | 'article' | 'question';
   targetId?: string;
   read: boolean;
   createdAt: string;

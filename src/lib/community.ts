@@ -362,6 +362,10 @@ export async function followUser(currentUserId: string, targetUserId: string, ta
 
   try {
     await batch.commit();
+    try {
+      const actor = await getCommunityProfile(currentUserId);
+      if (actor) await createNotification(targetUserId, { type: 'follow', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'followed you', targetType: 'profile', targetId: actor.username });
+    } catch (notificationError) { console.warn('Follow notification failed:', notificationError); }
     return true;
   } catch (error) {
     console.error("Error following user:", error);
@@ -644,7 +648,10 @@ export async function addComment(postId: string, currentCommentsCount: number | 
     if (actor) {
       try {
         const target = await getPost(postId);
-        if (target?.authorId) await createNotification(target.authorId, { type: 'comment', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'commented on your post', targetType: 'post', targetId: postId });
+        if (target?.authorId) await createNotification(target.authorId, { type: commentData.parentId ? 'reply' : 'comment', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: commentData.parentId ? 'replied to your comment' : 'commented on your post', targetType: 'post', targetId: postId });
+        if (commentData.parentId) {
+          try { const parent = await getDoc(doc(db, 'posts', postId, 'comments', commentData.parentId)); if (parent.exists()) await createNotification(parent.data().authorId, { type:'reply', actorId:actor.uid, actorUsername:actor.username, actorName:actor.displayName, actorAvatar:actor.photoURL || '', message:'replied to your comment', targetType:'comment', targetId:commentData.parentId }); } catch {}
+        }
         await notifyMentions(commentData.content, actor, 'comment', commentId);
       } catch (e) { console.warn('Comment notifications failed:', e); }
     }
@@ -824,6 +831,13 @@ export async function toggleVote(postId: string, userId: string, currentUpvotes:
       }
     }
     await batch.commit();
+    if (voteType === 'up' && currentVote !== 'up') {
+      try {
+        const post = await getPost(postId);
+        const actor = await getCommunityProfile(userId);
+        if (post && actor) await createNotification(post.authorId, { type: 'upvote', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'upvoted your post', targetType: 'post', targetId: postId });
+      } catch (notificationError) { console.warn('Upvote notification failed:', notificationError); }
+    }
     return {
       upvotesCount: Math.max(0, currentUpvotes + (currentVote === 'up' ? -1 : voteType === 'up' ? 1 : 0)),
       downvotesCount: Math.max(0, currentDownvotes + (currentVote === 'down' ? -1 : voteType === 'down' ? 1 : 0)),

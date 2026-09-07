@@ -117,6 +117,80 @@ service cloud.firestore {
     }
 
 
+    // SOCIAL 2.0: communities, questions, topics, messaging and moderation.
+    function validText(v, max) { return v is string && v.size() <= max; }
+
+    match /communities/{communityId} {
+      allow read: if true;
+      allow create: if isSignedIn() && incoming().ownerId == request.auth.uid && incoming().membersCount == 1;
+      allow update: if isSignedIn() && (incoming().ownerId == existing().ownerId || incoming().diff(existing()).affectedKeys().hasOnly(['membersCount','postsCount']));
+      allow delete: if isSignedIn() && existing().ownerId == request.auth.uid || isAdmin();
+      match /members/{memberId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.auth.uid == memberId;
+        allow delete: if isSignedIn() && request.auth.uid == memberId || isAdmin();
+        allow update: if isSignedIn() && (request.auth.uid == memberId || isAdmin());
+      }
+      match /posts/{postId} {
+        allow read: if true;
+        allow create: if isSignedIn() && incoming().authorId == request.auth.uid
+          && exists(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid))
+          && validText(incoming().title, 256) && validText(incoming().content, 100000)
+          && incoming().score == 0 && incoming().commentsCount == 0;
+        allow update: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
+        allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
+      }
+    }
+
+    match /questions/{questionId} {
+      allow read: if true;
+      allow create: if isSignedIn() && incoming().authorId == request.auth.uid && validText(incoming().title,256) && validText(incoming().details,100000) && incoming().answersCount == 0;
+      allow update: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
+      allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
+      match /answers/{answerId} {
+        allow read: if true;
+        allow create: if isSignedIn() && incoming().authorId == request.auth.uid && validText(incoming().content,100000);
+        allow update: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin() || (request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId && incoming().diff(existing()).affectedKeys().hasOnly(['isBest'])));
+        allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
+      }
+      match /votes/{userId} {
+        allow read: if true;
+        allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().type in ['up','down'];
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    match /topics/{topicId} {
+      allow read: if true;
+      allow create: if isSignedIn() && validText(incoming().name,80) && validText(incoming().slug,80);
+      allow update: if isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount']);
+      allow delete: if isAdmin();
+      match /followers/{userId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.auth.uid == userId;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    match /messages/{messageId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participants && incoming().recipientId in incoming().participants && validText(incoming().content,5000);
+      allow update: if isSignedIn() && request.auth.uid == existing().recipientId && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow delete: if isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId);
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && incoming().reporterId == request.auth.uid && validText(incoming().reason,500);
+      allow update, delete: if isAdmin();
+    }
+
+    match /users/{userId}/mutes/{targetUid} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
     match /users/{userId}/collections/{collectionId} {
       allow read: if isSignedIn() && request.auth.uid == userId;
       allow create: if isSignedIn() && request.auth.uid == userId

@@ -28,6 +28,7 @@ import { CommunityProfileView } from './components/CommunityProfileView';
 import { SavedView } from './components/SavedView';
 import { NotificationsView } from './components/NotificationsView';
 import { ExploreView } from './components/ExploreView';
+import { SocialHubView } from './components/SocialHubView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
@@ -285,6 +286,9 @@ export default function App() {
       } else if (hash === 'explore' || hash.startsWith('explore/')) {
         setCurrentPage('explore');
         setActiveArticleSlug(hash.startsWith('explore/') ? hash.replace('explore/', '') : null);
+      } else if (hash === 'social') {
+        setCurrentPage('social');
+        setActiveArticleSlug(null);
       } else if (hash === 'community') {
         setCurrentPage('community');
         setActiveArticleSlug(null);
@@ -561,6 +565,9 @@ export default function App() {
               <NotificationsView userProfile={userProfile} onNavigate={navigateTo} />
             )}
 
+            {currentPage === 'social' && (
+              <SocialHubView userProfile={userProfile} onNavigate={navigateTo} />
+            )}
             {currentPage === 'explore' && (
               <ExploreView articles={articles} userAuth={userAuth} userProfile={userProfile} onNavigate={navigateTo} initialHashtag={activeArticleSlug || ''} />
             )}
