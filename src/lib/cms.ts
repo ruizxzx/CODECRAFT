@@ -367,6 +367,38 @@ async function hydrateArticleAuthors(articles: Article[]): Promise<Article[]> {
   return articles.map(a => bySlug.get(a.slug) || a);
 }
 
+async function hydratePublishedSourcePosts(articles: Article[]): Promise<Article[]> {
+  const candidates = articles.filter(a => !!a.sourcePostId && a.origin === 'community_blog' && a.mainPublicationStatus !== 'unpublished');
+  if (!candidates.length) return articles;
+  const hydrated = await Promise.all(candidates.map(async article => {
+    try {
+      const post = await getPost(article.sourcePostId!);
+      if (!post || post.mainPublicationStatus === 'unpublished') return article;
+      const contentBlocks = Array.isArray(post.contentBlocks) && post.contentBlocks.length ? post.contentBlocks : article.content;
+      return {
+        ...article,
+        title: post.title || article.title,
+        excerpt: post.excerpt || article.excerpt,
+        coverImage: post.coverImage || article.coverImage,
+        coverImageAlt: post.coverImageAlt || article.coverImageAlt,
+        coverImageCaption: post.coverImageCaption || article.coverImageCaption,
+        category: post.category || article.category,
+        tags: Array.isArray(post.tags) ? post.tags : article.tags,
+        readingTimeMinutes: post.readingTimeMinutes || article.readingTimeMinutes,
+        seriesId: post.seriesId || article.seriesId,
+        seriesName: post.seriesName || article.seriesName,
+        seriesOrder: post.seriesOrder || article.seriesOrder,
+        content: contentBlocks,
+        editedAt: post.editedAt || article.editedAt,
+        originalAuthor: article.originalAuthor,
+        author: article.author,
+      } as Article;
+    } catch { return article; }
+  }));
+  const bySlug = new Map(hydrated.map(a => [a.slug, a]));
+  return articles.map(a => bySlug.get(a.slug) || a);
+}
+
 export function subscribeArticles(callback: (articles: Article[]) => void): () => void {
   const articlesRef = collection(db, 'articles');
   return onSnapshot(articlesRef, async (snap) => {
@@ -382,7 +414,7 @@ export function subscribeArticles(callback: (articles: Article[]) => void): () =
       }).filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
       // Sort by publishedAt desc
       cloudArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-      hydrateArticleAuthors(cloudArticles).then(hydrated => callback(mergeArticlesWithInitial(hydrated, deletedSlugs))).catch(() => callback(mergeArticlesWithInitial(cloudArticles, deletedSlugs)));
+      hydrateArticleAuthors(cloudArticles).then(hydrated => hydratePublishedSourcePosts(hydrated)).then(hydrated => callback(mergeArticlesWithInitial(hydrated, deletedSlugs))).catch(() => callback(mergeArticlesWithInitial(cloudArticles, deletedSlugs)));
     } else {
       const fallback = INITIAL_ARTICLES.filter(a => !deletedSlugs.has(a.slug));
       callback(fallback);
@@ -415,7 +447,7 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
         } as Article;
       }).filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
       cloudArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-      const hydrated = await hydrateArticleAuthors(cloudArticles);
+      const hydrated = await hydratePublishedSourcePosts(await hydrateArticleAuthors(cloudArticles));
       return {
         articles: mergeArticlesWithInitial(hydrated, deletedSlugs),
         source: 'firestore'
@@ -578,6 +610,7 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
     seriesId: (post as any).seriesId || undefined,
     seriesName: (post as any).seriesName || undefined,
     seriesOrder: (post as any).seriesOrder || undefined,
+    editedAt: (post as any).editedAt || undefined,
     author: originalAuthor,
     content: blocks
   } as Article;

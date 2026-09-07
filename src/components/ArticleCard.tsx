@@ -106,6 +106,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
             >
               {article.title}
             </h2>
+            {article.editedAt && <span className="inline-block mb-3 px-2 py-0.5 border-2 border-black bg-neutral-100 font-mono text-[9px] font-black uppercase">EDITED</span>}
 
             <p className="text-neutral-800 font-serif text-base sm:text-lg leading-relaxed line-clamp-4 mb-6">
               {article.excerpt}
