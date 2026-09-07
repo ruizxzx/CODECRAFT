@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Article } from '../types';
+import { Article, SiteConfig } from '../types';
 import { Search, X, ArrowUpRight, Sparkles, Hash } from 'lucide-react';
 
 interface SearchModalProps {
@@ -7,6 +7,7 @@ interface SearchModalProps {
   onClose: () => void;
   articles: Article[];
   onSelectArticle: (slug: string) => void;
+  siteConfig: SiteConfig;
 }
 
 export const SearchModal: React.FC<SearchModalProps> = ({
@@ -14,7 +15,9 @@ export const SearchModal: React.FC<SearchModalProps> = ({
   onClose,
   articles,
   onSelectArticle,
+  siteConfig,
 }) => {
+  const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -141,7 +144,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
             <span>Navigate: Click or Tab</span>
             <span>Close: [Esc]</span>
           </div>
-          <span className="font-bold text-black">KRISHFICIENT DISPATCHES</span>
+          <span className="font-bold text-black">{brandName} DISPATCHES</span>
         </div>
       </div>
     </div>

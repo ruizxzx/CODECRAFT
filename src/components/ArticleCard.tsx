@@ -136,7 +136,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
                     <span className="inline-flex items-center gap-1">{siteConfig?.authorName || article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
                   </div>
                   <div className="font-mono text-[10px] text-neutral-500">
-                    {siteConfig?.authorRole || "KRISHFICIENT Lead"}
+                    {siteConfig?.authorRole || "Lead Developer"}
                   </div>
                 </div>
               </div>

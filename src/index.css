@@ -194,3 +194,25 @@
     bottom: 8px;
   }
 }
+
+
+/* Prevent wide community post controls/content from forcing horizontal mobile overflow. */
+html, body, #root {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.community-post-page button,
+.community-post-page textarea,
+.community-post-page input {
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  .community-post-page .neo-shadow-lg {
+    box-shadow: 7px 7px 0 #000000;
+  }
+  .mobile-floating-nav {
+    max-width: calc(100vw - 16px);
+  }
+}

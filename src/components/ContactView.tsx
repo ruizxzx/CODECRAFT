@@ -28,40 +28,40 @@ export const ContactView: React.FC<{siteConfig: SiteConfig}> = ({ siteConfig }) 
     {
       id: 'email',
       name: 'Email (Direct)',
-      handle: siteConfig.contactEmail || 'hello@krishficient.dev',
+      handle: siteConfig.contactEmail || '',
       description: 'Primary inbox for serious architectural inquiries and essays.',
       actionText: 'Copy Email',
-      copyValue: siteConfig.contactEmail || 'hello@krishficient.dev',
+      copyValue: siteConfig.contactEmail || '',
       color: 'bg-[var(--color-primary)]',
       icon: Mail,
     },
     {
       id: 'telegram',
       name: 'Telegram',
-      handle: siteConfig.contactTelegram || '@krishficient',
+      handle: siteConfig.contactTelegram || '',
       description: 'Encrypted direct messaging for asynchronous developer sync.',
       actionText: 'Copy Handle',
-      copyValue: siteConfig.contactTelegram || '@krishficient',
+      copyValue: siteConfig.contactTelegram || '',
       color: 'bg-[var(--color-secondary)]',
       icon: Send,
     },
     {
       id: 'twitter',
       name: 'X (Twitter)',
-      handle: siteConfig.contactTwitter || '@krishficient',
+      handle: siteConfig.contactTwitter || '',
       description: 'Public thoughts, micro-essays, and shitposting about tech.',
       actionText: 'Copy Handle',
-      copyValue: siteConfig.contactTwitter || '@krishficient',
+      copyValue: siteConfig.contactTwitter || '',
       color: 'bg-[var(--color-accent)]',
       icon: MessageSquare,
     },
     {
       id: 'github',
       name: 'GitHub',
-      handle: siteConfig.contactGithub || 'github.com/krishficient',
+      handle: siteConfig.contactGithub || '',
       description: 'Open source system architectures and tooling.',
       actionText: 'Copy Link',
-      copyValue: siteConfig.contactGithub || 'https://github.com/krishficient',
+      copyValue: siteConfig.contactGithub || '',
       color: 'bg-[var(--color-success)]',
       icon: Terminal,
     }
@@ -289,7 +289,7 @@ export const ContactView: React.FC<{siteConfig: SiteConfig}> = ({ siteConfig }) 
               
               <div className="space-y-3 font-sans text-sm text-neutral-700 leading-relaxed">
                 <p>
-                  <strong>No Sponsored Reviews:</strong> KRISHFICIENT does not accept paid promotional articles, backlink placements, or unreviewed product endorsements.
+                  <strong>No Sponsored Reviews:</strong> {`${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT'} does not accept paid promotional articles, backlink placements, or unreviewed product endorsements.
                 </p>
                 <p>
                   <strong>Open Source Inquiries:</strong> If you find an issue in any published code snippet or architectural diagram, feel free to submit an email with reproducing steps.
@@ -300,7 +300,7 @@ export const ContactView: React.FC<{siteConfig: SiteConfig}> = ({ siteConfig }) 
               </div>
 
               <div className="p-3 bg-[var(--color-primary)] neo-border-2 font-mono text-xs text-neutral-900 font-bold">
-                ⚡ KRISHFICIENT // RADICAL CLARITY IN SOFTWARE
+                ⚡ {`${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT'} // RADICAL CLARITY IN SOFTWARE
               </div>
             </div>
           </div>

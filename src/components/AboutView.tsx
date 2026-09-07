@@ -148,7 +148,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onNavigate, siteConfig }) 
 
               <div className="space-y-3 pt-2">
                 <div className="font-display font-black text-2xl text-black uppercase">
-                  KRISH
+                  {siteConfig.logoPart1 || 'OFF'}{siteConfig.logoPart2 || 'SCRPT'}
                 </div>
                 <div className="font-mono text-xs font-bold text-neutral-800 space-y-1">
                   <div>ROLE: Founder &amp; System Architect</div>
@@ -169,7 +169,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onNavigate, siteConfig }) 
           </div>
         </div>
 
-        {/* The 4 Principles of KRISHFICIENT */}
+        {/* The Core Principles */}
         <div className="space-y-6">
           <div className="flex items-center space-x-3">
             <div className="w-4 h-4 bg-black" />

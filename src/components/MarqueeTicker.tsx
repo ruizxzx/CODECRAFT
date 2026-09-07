@@ -1,14 +1,16 @@
 import React from 'react';
 import { Terminal, Zap, Code2, Sparkles, Cpu } from 'lucide-react';
+import { SiteConfig } from '../types';
 
-export const MarqueeTicker: React.FC = () => {
+export const MarqueeTicker: React.FC<{ siteConfig: SiteConfig }> = ({ siteConfig }) => {
+  const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
   const items = [
     { text: 'BUILD. LEARN. CREATE.', icon: Zap, color: 'text-[var(--color-primary)]' },
     { text: 'NEW DISPATCHES EVERY TUESDAY', icon: Terminal, color: 'text-[var(--color-secondary)]' },
     { text: 'NO FLUFF • REAL PRODUCTION CODE', icon: Code2, color: 'text-[var(--color-success)]' },
     { text: 'DISTRIBUTED SYSTEMS & LOCAL AI', icon: Cpu, color: 'text-[var(--color-accent)]' },
     { text: 'BUILDING ON THE OPEN INTERNET', icon: Sparkles, color: 'text-[var(--color-primary)]' },
-    { text: 'KRISHFICIENT TECH PRESS', icon: Zap, color: 'text-white' },
+    { text: `${brandName} TECH PRESS`, icon: Zap, color: 'text-white' },
   ];
 
   return (

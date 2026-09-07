@@ -73,6 +73,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   bentoLinks,
   onUpdateBentoLinks
 }) => {
+  const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -308,8 +309,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
   // Site Config Form state
   const [logoImageUrl, setLogoImageUrl] = useState(siteConfig.logoImageUrl || '');
-  const [logoPart1, setLogoPart1] = useState(siteConfig.logoPart1 || 'KRISH');
-  const [logoPart2, setLogoPart2] = useState(siteConfig.logoPart2 || 'FICIENT');
+  const [logoPart1, setLogoPart1] = useState(siteConfig.logoPart1 || 'OFF');
+  const [logoPart2, setLogoPart2] = useState(siteConfig.logoPart2 || 'SCRPT');
   const [tagline, setTagline] = useState(siteConfig.tagline || '');
   const [heroHeadline, setHeroHeadline] = useState(siteConfig.heroHeadline || '');
   const [heroSubheadline, setHeroSubheadline] = useState(siteConfig.heroSubheadline || '');
@@ -835,7 +836,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
             <Database className="w-6 h-6 text-black stroke-[2.5]" />
             <div>
               <h2 className="font-display font-black text-xl text-black uppercase tracking-tight">
-                KRISHFICIENT CMS STUDIO
+                {brandName} CMS STUDIO
               </h2>
               <div className="font-mono text-[11px] text-black/90 font-bold">
                 PERSISTENT FIRESTORE CMS &bull; GLOBAL CLOUD SYNCHRONIZATION
@@ -871,7 +872,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               ADMINISTRATOR VERIFICATION REQUIRED
             </h3>
             <p className="font-sans text-sm text-neutral-600 max-w-md">
-              Sign in with an authorized administrator Google account to access the KRISHFICIENT Editorial Studio and persist global content.
+              Sign in with an authorized administrator Google account to access the {brandName} Editorial Studio and persist global content.
             </p>
             
             {loginError && (
@@ -2067,7 +2068,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
         {/* Modal Footer */}
         <div className="px-6 py-3 bg-neutral-100 border-t-4 border-black flex items-center justify-between text-xs font-mono text-neutral-600">
-          <span>KRISHFICIENT CLOUD CMS &bull; FIRESTORE ENGINE</span>
+          <span>{brandName} CLOUD CMS &bull; FIRESTORE ENGINE</span>
           <button
             onClick={onClose}
             className="font-bold text-black hover:underline uppercase"

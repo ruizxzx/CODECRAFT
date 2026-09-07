@@ -204,8 +204,9 @@ export default function App() {
 
   // Keep the browser favicon synchronized with the cloud-managed site logo.
   useEffect(() => {
-    const logoUrl = siteConfig.logoImageUrl?.trim();
-    if (!logoUrl) return;
+    const fallbackFavicon = 'https://i.postimg.cc/kMf3D3cS/Screenshot-2026-09-07-142924.png';
+    const logoUrl = siteConfig.logoImageUrl?.trim() || fallbackFavicon;
+    const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
 
     let favicon = document.querySelector<HTMLLinkElement>('link#site-favicon');
     if (!favicon) {
@@ -215,11 +216,12 @@ export default function App() {
       favicon.type = 'image/png';
       document.head.appendChild(favicon);
     }
-
-    // A URL-based favicon keeps the browser cache stable while still changing
-    // immediately when the CMS logo URL changes.
     favicon.href = logoUrl;
-  }, [siteConfig.logoImageUrl]);
+    document.title = `${brandName} — Tech Publication for Builders`;
+
+    const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    if (themeMeta) themeMeta.content = siteConfig.themePrimaryColor || '#FFD600';
+  }, [siteConfig.logoImageUrl, siteConfig.logoPart1, siteConfig.logoPart2, siteConfig.themePrimaryColor]);
 
   // URL Hash Sync for standard navigation & browser back button support
   useEffect(() => {
@@ -420,7 +422,7 @@ export default function App() {
       />
 
       {/* Marquee Ticker */}
-      <MarqueeTicker />
+      <MarqueeTicker siteConfig={siteConfig} />
 
       {/* Main Content Area */}
       <main className="flex-1 w-full">
@@ -561,6 +563,7 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         articles={articles}
         onSelectArticle={(slug) => navigateTo('article', slug)}
+        siteConfig={siteConfig}
       />
 
       <AdminStudioModal
@@ -584,6 +587,7 @@ export default function App() {
         isOpen={isRssOpen}
         onClose={() => setIsRssOpen(false)}
         articles={articles}
+        siteConfig={siteConfig}
       />
 
       <UniqueHandleModal

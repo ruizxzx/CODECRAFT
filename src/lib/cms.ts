@@ -21,8 +21,8 @@ import { INITIAL_ARTICLES } from '../data/articles';
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
   logoImageUrl: "",
-  logoPart1: "KRISH",
-  logoPart2: "FICIENT",
+  logoPart1: "OFF",
+  logoPart2: "SCRPT",
   tagline: "ARCHITECTURAL TECH PRESS // DISTRIBUTED SYSTEMS & LOCAL AI",
   heroHeadline: "BUILDING THE FUTURE OF THE WEB.",
   heroSubheadline: "Deep architectural breakdowns, systems design essays, and uncensored engineering dispatches from the front lines of distributed software.",
@@ -531,7 +531,7 @@ export async function subscribeNewsletter(email: string): Promise<{ status: 'suc
 
     return {
       status: 'success',
-      message: 'You are successfully subscribed to KRISHFICIENT architectural dispatches.'
+      message: 'You are successfully subscribed to the architectural dispatches.'
     };
   } catch (error: any) {
     // Subscriber documents are intentionally not publicly readable. A write to
@@ -540,7 +540,7 @@ export async function subscribeNewsletter(email: string): Promise<{ status: 'suc
     if (error?.code === 'permission-denied') {
       return {
         status: 'already_subscribed',
-        message: 'This email address is already subscribed to KRISHFICIENT dispatches.'
+        message: 'This email address is already subscribed to the dispatches.'
       };
     }
     console.error("Failed to persist newsletter subscriber:", error);

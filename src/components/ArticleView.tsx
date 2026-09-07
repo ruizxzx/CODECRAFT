@@ -508,7 +508,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           <div className="pt-10 border-t-4 border-black mt-16 space-y-6">
             <div className="flex items-center justify-between">
               <h3 className="font-display font-black text-2xl sm:text-3xl text-black uppercase tracking-tight">
-                MORE FROM KRISHFICIENT
+                MORE FROM {siteConfig.logoPart1 || 'OFF'}{siteConfig.logoPart2 || 'SCRPT'}
               </h3>
               <button
                 onClick={onBack}

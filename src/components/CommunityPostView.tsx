@@ -202,7 +202,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    <div className="community-post-page w-full max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 py-8 sm:py-12 min-w-0 overflow-x-hidden">
       <button 
         onClick={() => onNavigate('community')}
         className="flex items-center space-x-2 font-mono text-xs font-bold uppercase mb-8 hover:text-[var(--color-primary)] transition-colors"
@@ -211,7 +211,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
         <span>Back to Community</span>
       </button>
 
-      <div className="bg-white border-4 border-black neo-shadow-lg p-6 sm:p-10">
+      <div className="w-full min-w-0 bg-white border-4 border-black neo-shadow-lg p-4 sm:p-10 overflow-hidden">
         <div className="flex justify-between items-start mb-6">
           <div className="inline-block px-3 py-1 bg-[var(--color-secondary)] border-2 border-black font-mono text-xs font-black uppercase">
             {post.type}
@@ -227,11 +227,11 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           )}
         </div>
         
-        <h1 className="font-display font-black text-4xl sm:text-5xl leading-tight mb-8">
+        <h1 className="font-display font-black text-3xl sm:text-5xl leading-tight mb-8 break-words [overflow-wrap:anywhere]">
           {post.title}
         </h1>
 
-        <div className="flex items-center space-x-4 mb-10 pb-8 border-b-4 border-black">
+        <div className="flex items-center min-w-0 gap-3 sm:gap-4 mb-10 pb-8 border-b-4 border-black">
           <button onClick={() => onNavigate('community_profile', post.authorUsername)}>
             {post.authorAvatar ? (
               <img src={post.authorAvatar} alt="" className="w-12 h-12 rounded-full border-2 border-black" />
@@ -254,12 +254,12 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           </div>
         </div>
 
-        <div className="font-sans text-lg leading-relaxed whitespace-pre-wrap text-neutral-800 mb-12">
+        <div className="font-sans text-lg leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-neutral-800 mb-12 min-w-0">
           {post.content}
         </div>
 
-        <div className="flex items-center space-x-6 pt-6 border-t-2 border-neutral-200">
-          <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 pt-6 border-t-2 border-neutral-200 min-w-0">
+          <div className="flex items-center space-x-2 shrink-0">
             <button 
               onClick={() => handleVote('up')}
               className={`flex items-center space-x-1 font-mono text-sm font-bold uppercase px-3 py-2 border-2 border-black transition-colors ${vote === 'up' ? 'bg-[var(--color-primary)]' : 'hover:bg-neutral-100'}`}
@@ -275,10 +275,10 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
               <span>{post.downvotesCount}</span>
             </button>
           </div>
-          <button onClick={handleToggleRepost} disabled={isReposting} className={`px-3 py-2 border-2 border-black font-mono text-xs font-black uppercase flex items-center gap-2 ${isReposted ? 'bg-[var(--color-primary)]' : 'bg-white'}`}><Repeat2 className="w-4 h-4" />{isReposted ? 'REPOSTED' : 'REPOST'} ({post.repostsCount || 0})</button>
+          <button onClick={handleToggleRepost} disabled={isReposting} className={`px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 sm:gap-2 shrink-0 ${isReposted ? 'bg-[var(--color-primary)]' : 'bg-white'}`}><Repeat2 className="w-4 h-4" />{isReposted ? 'REPOSTED' : 'REPOST'} ({post.repostsCount || 0})</button>
           <button 
             onClick={handleToggleSave}
-            className={`flex items-center space-x-2 font-mono text-sm font-bold uppercase px-4 py-2 border-2 border-black transition-colors ${effectiveIsSaved ? 'bg-[var(--color-secondary)]' : 'hover:bg-neutral-100'}`}
+            className={`flex items-center space-x-2 font-mono text-xs sm:text-sm font-bold uppercase px-3 sm:px-4 py-2 border-2 border-black shrink-0 transition-colors ${effectiveIsSaved ? 'bg-[var(--color-secondary)]' : 'hover:bg-neutral-100'}`}
           >
             <Bookmark className={`w-4 h-4 ${effectiveIsSaved ? 'fill-black' : ''}`} />
             <span>{effectiveIsSaved ? 'Saved' : 'Save'}</span>
@@ -286,13 +286,13 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           {canDeletePost && (
             <button 
               onClick={handleDeletePost}
-              className="ml-auto flex items-center space-x-1 font-mono text-sm font-bold uppercase px-4 py-2 border-2 border-red-500 text-red-500 hover:bg-red-50 transition-colors"
+              className="flex items-center space-x-1 font-mono text-xs sm:text-sm font-bold uppercase px-3 sm:px-4 py-2 border-2 border-red-500 shrink-0 text-red-500 hover:bg-red-50 transition-colors"
             >
               <Trash className="w-4 h-4" />
               <span>Delete</span>
             </button>
           )}
-          <div className="flex items-center space-x-2 font-mono text-sm font-bold uppercase px-4 py-2 text-neutral-600">
+          <div className="flex items-center space-x-2 font-mono text-xs sm:text-sm font-bold uppercase px-2 sm:px-4 py-2 text-neutral-600 shrink-0">
             <MessageSquare className="w-4 h-4" />
             <span>{post.commentsCount} Comments</span>
           </div>

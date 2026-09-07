@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { X, Copy, Check, Rss, Code2, Globe } from 'lucide-react';
-import { Article } from '../types';
+import { Article, SiteConfig } from '../types';
 
 interface RssModalProps {
   isOpen: boolean;
   onClose: () => void;
   articles: Article[];
+  siteConfig: SiteConfig;
 }
 
-export const RssModal: React.FC<RssModalProps> = ({ isOpen, onClose, articles }) => {
+export const RssModal: React.FC<RssModalProps> = ({ isOpen, onClose, articles, siteConfig }) => {
+  const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
+  const siteOrigin = window.location.origin;
   const [copied, setCopied] = useState(false);
   const [tab, setTab] = useState<'rss' | 'sitemap' | 'robots'>('rss');
 
@@ -17,19 +20,19 @@ export const RssModal: React.FC<RssModalProps> = ({ isOpen, onClose, articles })
   const rssFeedXml = `<?xml version="1.0" encoding="UTF-8" ?>
 <rss version="2.0">
 <channel>
-  <title>KRISHFICIENT</title>
-  <link>https://krishficient.dev</link>
+  <title>${brandName}</title>
+  <link>${siteOrigin}</link>
   <description>An independent personal technology publication by Krish.</description>
   <language>en-us</language>
   <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
   ${articles.map(art => `
   <item>
     <title><![CDATA[${art.title}]]></title>
-    <link>https://krishficient.dev/blog/${art.slug}</link>
+    <link>${siteOrigin}/blog/${art.slug}</link>
     <description><![CDATA[${art.excerpt}]]></description>
     <category>${art.category}</category>
     <pubDate>${new Date(art.publishedAt).toUTCString()}</pubDate>
-    <guid>https://krishficient.dev/blog/${art.slug}</guid>
+    <guid>${siteOrigin}/blog/${art.slug}</guid>
   </item>`).join('')}
 </channel>
 </rss>`;
@@ -37,28 +40,28 @@ export const RssModal: React.FC<RssModalProps> = ({ isOpen, onClose, articles })
   const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://krishficient.dev/</loc>
+    <loc>${siteOrigin}/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://krishficient.dev/blog</loc>
+    <loc>${siteOrigin}/blog</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://krishficient.dev/about</loc>
+    <loc>${siteOrigin}/about</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://krishficient.dev/contact</loc>
+    <loc>${siteOrigin}/contact</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   ${articles.map(art => `
   <url>
-    <loc>https://krishficient.dev/blog/${art.slug}</loc>
+    <loc>${siteOrigin}/blog/${art.slug}</loc>
     <lastmod>${art.publishedAt}</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
@@ -67,7 +70,7 @@ export const RssModal: React.FC<RssModalProps> = ({ isOpen, onClose, articles })
 
   const robotsTxt = `User-agent: *
 Allow: /
-Sitemap: https://krishficient.dev/sitemap.xml`;
+Sitemap: ${siteOrigin}/sitemap.xml`;
 
   const activeContent = tab === 'rss' ? rssFeedXml : tab === 'sitemap' ? sitemapXml : robotsTxt;
 

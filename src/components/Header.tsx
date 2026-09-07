@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PageView, SiteConfig, CommunityUser } from '../types';
 import { auth, loginWithGoogle, logout, ADMIN_EMAILS } from '../lib/firebase';
 import { useAuthState } from 'react-firebase-hooks/auth';
@@ -18,7 +18,8 @@ import {
   Users, 
   ShieldAlert,
   Settings,
-  Plus
+  Plus,
+  Smartphone
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -40,6 +41,11 @@ interface NavLinkItem {
   count?: number;
 }
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
 export const Header: React.FC<HeaderProps> = ({
   currentPage,
   onNavigate,
@@ -53,6 +59,34 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, loading] = useAuthState(auth);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    setIsStandalone(standalone);
+    const handleBeforeInstall = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    const handleInstalled = () => { setInstallPrompt(null); setIsStandalone(true); };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+    window.addEventListener('appinstalled', handleInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+      window.removeEventListener('appinstalled', handleInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (installPrompt) {
+      await installPrompt.prompt();
+      await installPrompt.userChoice;
+      setInstallPrompt(null);
+      return;
+    }
+    alert('To install OFFSCRPT, use your browser menu and choose “Install app” or “Add to Home Screen”.');
+  };
 
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
@@ -394,6 +428,22 @@ export const Header: React.FC<HeaderProps> = ({
                   <span>OPEN ADMIN STUDIO</span>
                 </div>
                 <span className="font-mono text-[10px] bg-neutral-800 text-white px-2 py-0.5 border border-black">CMS</span>
+              </button>
+            </div>
+          )}
+
+          {!isStandalone && (
+            <div>
+              <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">Application</h3>
+              <button
+                onClick={() => { handleInstallApp(); }}
+                className="w-full py-3 px-4 bg-[var(--color-secondary)] text-black font-display font-black text-sm uppercase border-2 border-black neo-shadow-sm flex items-center justify-between hover:bg-[var(--color-primary)] active:translate-x-0.5 active:translate-y-0.5 transition-all"
+              >
+                <div className="flex items-center space-x-2">
+                  <Smartphone className="w-4 h-4" />
+                  <span>INSTALL APP</span>
+                </div>
+                <span className="font-mono text-[10px] bg-white px-2 py-0.5 border border-black">PWA</span>
               </button>
             </div>
           )}

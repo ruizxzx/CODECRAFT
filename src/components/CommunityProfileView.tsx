@@ -6,6 +6,7 @@ import { auth, checkIsAdmin } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
 import { syncUserIdentityAcrossContent } from '../lib/community';
+import { formatDisplayDate } from '../lib/dateUtils';
 import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText, Camera } from 'lucide-react';
 
 interface CommunityProfileViewProps {
@@ -196,7 +197,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       <h3 className="font-display font-black text-xl group-hover:text-[var(--color-primary)] transition-colors">{post.title}</h3>
       <p className="mt-2 text-sm text-neutral-600 line-clamp-2">{post.content}</p>
       <div className="mt-4 pt-4 border-t-2 border-neutral-100 flex justify-between font-mono text-xs text-neutral-500">
-        <span>{new Date(post.createdAt).toLocaleDateString()}</span>
+        <span>{formatDisplayDate(post.createdAt)}</span>
         <div className="flex gap-4"><span>{post.upvotesCount || 0} Upvotes</span><span>{post.commentsCount || 0} Comments</span><span>{post.repostsCount || 0} Reposts</span></div>
       </div>
     </div>
@@ -247,7 +248,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       {activeTab === 'comments' ? <div className="space-y-4">{comments.length === 0 ? <p className="font-mono text-sm text-neutral-500">No comments yet.</p> : comments.map(c => <div key={`${c.articleSlug || c.postId}-${c.id}`} onClick={() => c.postId ? onNavigate('community_post', c.postId) : c.articleSlug ? onNavigate('article', c.articleSlug) : undefined} className="bg-white border-4 border-black p-5 cursor-pointer"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">{c.articleSlug ? `ARTICLE: ${c.articleSlug}` : 'COMMUNITY POST'}</div><div className="flex items-center gap-2 mb-2 font-mono text-[10px] font-bold uppercase">
               {profile.photoURL ? <img src={profile.photoURL} alt="" className="w-5 h-5 rounded-full border border-black object-cover" /> : null}
               <span>@{profile.username}</span><VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-3.5 h-3.5" />
-            </div><p className="font-sans text-sm">{c.content}</p><div className="mt-3 font-mono text-[10px] text-neutral-500">{new Date(c.createdAt).toLocaleString()}</div></div>)}</div> : <div className="space-y-6">{activeTab === 'articles' ? (articles.length ? articles.map(article => <div key={article.slug} onClick={() => onNavigate('article', article.slug)} className="bg-white border-4 border-black p-5 cursor-pointer neo-shadow-sm hover:-translate-y-1 transition-all"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">MAIN ARTICLE • {article.category}</div><h3 className="font-display font-black text-xl uppercase">{article.title}</h3><p className="mt-2 text-sm text-neutral-600">{article.excerpt}</p></div>) : <p className="font-mono text-sm text-neutral-500">No main articles yet.</p>) : activeTab === 'posts' ? (posts.length ? posts.map(p => renderPost(p)) : <p className="font-mono text-sm text-neutral-500">No community posts yet.</p>) : activeTab === 'upvotes' ? (upvotedPosts.length ? upvotedPosts.map(p => renderPost(p, 'UPVOTED')) : <p className="font-mono text-sm text-neutral-500">No upvoted posts yet.</p>) : (repostedPosts.length ? repostedPosts.map(p => renderPost(p, 'REPOST')) : <p className="font-mono text-sm text-neutral-500">No reposts yet.</p>)}</div>}
+            </div><p className="font-sans text-sm">{c.content}</p><div className="mt-3 font-mono text-[10px] text-neutral-500">{formatDisplayDate(c.createdAt)}</div></div>)}</div> : <div className="space-y-6">{activeTab === 'articles' ? (articles.length ? articles.map(article => <div key={article.slug} onClick={() => onNavigate('article', article.slug)} className="bg-white border-4 border-black p-5 cursor-pointer neo-shadow-sm hover:-translate-y-1 transition-all"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">MAIN ARTICLE • {article.category}</div><h3 className="font-display font-black text-xl uppercase">{article.title}</h3><p className="mt-2 text-sm text-neutral-600">{article.excerpt}</p></div>) : <p className="font-mono text-sm text-neutral-500">No main articles yet.</p>) : activeTab === 'posts' ? (posts.length ? posts.map(p => renderPost(p)) : <p className="font-mono text-sm text-neutral-500">No community posts yet.</p>) : activeTab === 'upvotes' ? (upvotedPosts.length ? upvotedPosts.map(p => renderPost(p, 'UPVOTED')) : <p className="font-mono text-sm text-neutral-500">No upvoted posts yet.</p>) : (repostedPosts.length ? repostedPosts.map(p => renderPost(p, 'REPOST')) : <p className="font-mono text-sm text-neutral-500">No reposts yet.</p>)}</div>}
 
       {relationModal && (
         <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={relationModal === 'followers' ? 'Followers' : 'Following'} onClick={() => setRelationModal(null)}>

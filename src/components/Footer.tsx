@@ -29,6 +29,7 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenRssModal,
   siteConfig
 }) => {
+  const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
 
   return (
     <footer className="w-full bg-[#0A0A0A] text-white border-t-4 border-black selection:bg-[var(--color-primary)] selection:text-black">
@@ -39,7 +40,7 @@ export const Footer: React.FC<FooterProps> = ({
             <div className="lg:col-span-7 space-y-2">
               <div className="inline-flex items-center space-x-2 bg-[var(--color-primary)] text-black px-2.5 py-1 font-mono text-xs font-black uppercase neo-border-2 mb-1">
                 <Sparkles className="w-3.5 h-3.5 fill-black" />
-                <span>KRISHFICIENT DISPATCHES</span>
+                <span>{brandName} DISPATCHES</span>
               </div>
               <h3 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tight text-white">
                 {siteConfig.footerNewsletterTitle || "RECEIVE DEEP TECHNICAL ESSAYS IN YOUR INBOX"}
@@ -67,7 +68,7 @@ export const Footer: React.FC<FooterProps> = ({
                 K
               </div>
               <span className="font-display font-black text-3xl tracking-tighter text-white uppercase">
-                KRISH<span className="text-[var(--color-accent)]">FICIENT</span>
+                {siteConfig.logoPart1 || 'OFF'}<span className="text-[var(--color-accent)]">{siteConfig.logoPart2 || 'SCRPT'}</span>
               </span>
             </div>
 
@@ -166,7 +167,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={() => onNavigate('contact')}
                   className="text-neutral-300 hover:text-[var(--color-success)]"
                 >
-                  Telegram: {siteConfig.contactTelegram || '@krishficient'}
+                  Telegram: {siteConfig.contactTelegram || ''}
                 </button>
               </li>
               <li>
@@ -174,7 +175,7 @@ export const Footer: React.FC<FooterProps> = ({
                   onClick={() => onNavigate('contact')}
                   className="text-neutral-300 hover:text-[var(--color-accent)]"
                 >
-                  Email: {siteConfig.contactEmail || 'hello@krishficient.dev'}
+                  Email: {siteConfig.contactEmail || ''}
                 </button>
               </li>
             </ul>
@@ -185,7 +186,7 @@ export const Footer: React.FC<FooterProps> = ({
         {/* Bottom ASCII / Legal Bar */}
         <div className="mt-12 pt-8 border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs text-neutral-500">
           <div className="flex items-center space-x-2">
-            <span>&copy; {new Date().getFullYear()} KRISHFICIENT.</span>
+            <span>&copy; {new Date().getFullYear()} {brandName}.</span>
             <span>All rights reserved.</span>
           </div>
 
