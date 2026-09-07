@@ -27,8 +27,9 @@ import { CommunityPostView } from './components/CommunityPostView';
 import { CommunityProfileView } from './components/CommunityProfileView';
 import { SavedView } from './components/SavedView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
-import { auth } from './lib/firebase';
-import { getCommunityProfile, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress } from './lib/community';
+import { auth, checkIsAdmin } from './lib/firebase';
+import { getCommunityProfile, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
+import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles } from './lib/cms';
 import { Loader2 } from 'lucide-react';
 
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
@@ -109,10 +110,33 @@ export default function App() {
       if (user) {
         // Load profile
         try {
-          const prof = await getCommunityProfile(user.uid);
+          let prof = await getCommunityProfile(user.uid);
+          if (checkIsAdmin(user.email)) {
+            const synced = await syncAdminAuthorProfile({
+              name: siteConfig.authorName || user.displayName || 'Krish Sarkar',
+              role: siteConfig.authorRole || 'Founder & Systems Architect',
+              avatar: siteConfig.authorAvatarUrl || user.photoURL || '',
+              bio: siteConfig.aboutMeBio || siteConfig.manifestoText || ''
+            });
+            try {
+              await syncAuthorToAllCloudArticles({
+                name: siteConfig.authorName || user.displayName || 'Krish Sarkar',
+                role: siteConfig.authorRole || 'Founder & Systems Architect',
+                avatar: siteConfig.authorAvatarUrl || user.photoURL || '',
+                bio: siteConfig.aboutMeBio || siteConfig.manifestoText || '',
+                uid: synced.uid,
+                username: synced.username
+              });
+            } catch (articleSyncError) { console.warn('Author article sync skipped:', articleSyncError); }
+            prof = await getCommunityProfile(synced.uid);
+          } else if (prof) {
+            await ensureFollowingAuthor(user.uid, prof.username);
+          }
           setUserProfile(prof);
+          if (!prof && !checkIsAdmin(user.email)) setIsHandleModalOpen(true);
         } catch (e) {
-          console.error("Error loading user profile:", e);
+          console.error('Error loading/syncing user profile:', e);
+          if (!checkIsAdmin(user.email)) setIsHandleModalOpen(true);
         }
 
         // Load cloud saves
@@ -398,6 +422,7 @@ export default function App() {
                   allArticles={articles}
                   onBack={() => navigateTo('blog')}
                   onSelectArticle={(slug) => navigateTo('article', slug)}
+                  onOpenAuthorProfile={(username) => navigateTo('community_profile', username)}
                   isSaved={savedSlugs.includes(activeArticle.slug)}
                   onToggleSave={handleToggleSave}
                   siteConfig={siteConfig}

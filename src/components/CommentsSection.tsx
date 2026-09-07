@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MessageSquare, Send, Clock, Trash2, LogIn } from 'lucide-react';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { subscribeArticleComments, addArticleComment, deleteArticleComment } from '../lib/cms';
+import { getCommunityProfile } from '../lib/community';
 import { ArticleComment } from '../types';
 import { formatDisplayDate } from '../lib/dateUtils';
 
@@ -60,11 +61,12 @@ export const CommentsSection: React.FC<CommentsSectionProps> = ({ articleSlug })
     setError(null);
 
     try {
+      const profile = await getCommunityProfile(currentUser.uid);
       await addArticleComment(articleSlug, {
         authorId: currentUser.uid,
-        authorName: currentUser.displayName || currentUser.email?.split('@')[0] || 'Architect',
-        authorAvatar: currentUser.photoURL || '',
-        authorUsername: currentUser.email?.split('@')[0] || '',
+        authorName: profile?.displayName || currentUser.displayName || currentUser.email?.split('@')[0] || 'Architect',
+        authorAvatar: profile?.photoURL || currentUser.photoURL || '',
+        authorUsername: profile?.username || currentUser.email?.split('@')[0] || '',
         content: newComment.trim()
       });
       setNewComment('');

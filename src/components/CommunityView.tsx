@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
-import { getCommunityProfile, getPosts, deletePost } from '../lib/community';
+import { getCommunityProfile, getPosts, deletePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { 
   MessageSquare, 
@@ -16,7 +16,8 @@ import {
   Bookmark, 
   AtSign,
   Plus,
-  Trash
+  Trash,
+  Repeat2
 } from 'lucide-react';
 import { CommunityEditor } from './CommunityEditor';
 import { formatDisplayDate } from '../lib/dateUtils';
@@ -50,6 +51,8 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
 
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
+  const [repostedIds, setRepostedIds] = useState<string[]>([]);
+  const [repostingId, setRepostingId] = useState<string | null>(null);
 
   // Sync profile when initialUserProfile changes
   useEffect(() => {
@@ -127,6 +130,25 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       return;
     }
     setIsEditorOpen(true);
+  };
+
+  useEffect(() => {
+    if (!userAuth || posts.length === 0) { setRepostedIds([]); return; }
+    Promise.all(posts.map(p => getUserRepostStatus(p.id, userAuth.uid).then(v => [p.id, v] as const).catch(() => [p.id, false] as const)))
+      .then(values => setRepostedIds(values.filter(([, v]) => v).map(([id]) => id)));
+  }, [posts, userAuth]);
+
+  const handleToggleRepost = async (post: CommunityPost, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!userAuth) { await loginWithGoogle(); return; }
+    setRepostingId(post.id);
+    const active = repostedIds.includes(post.id);
+    try {
+      const next = await toggleRepost(post.id, userAuth.uid, active);
+      setRepostedIds(prev => next ? [...prev, post.id] : prev.filter(id => id !== post.id));
+      setPosts(prev => prev.map(p => p.id === post.id ? { ...p, repostsCount: Math.max(0, (p.repostsCount || 0) + (next ? 1 : -1)) } : p));
+    } catch (err: any) { alert('Failed to update repost: ' + (err?.message || 'Permission denied')); }
+    finally { setRepostingId(null); }
   };
 
   const handleProfileCreated = (newProfile: CommunityUser) => {
@@ -362,6 +384,14 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                           <Trash className="w-3.5 h-3.5" />
                         </button>
                       )}
+                      <button
+                        onClick={(e) => handleToggleRepost(post, e)}
+                        disabled={repostingId === post.id}
+                        className={`p-1.5 border-2 border-black transition-colors ${repostedIds.includes(post.id) ? 'bg-[var(--color-primary)] text-black' : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'}`}
+                        title={repostedIds.includes(post.id) ? 'Remove repost' : 'Repost'}
+                      >
+                        <Repeat2 className="w-3.5 h-3.5" />
+                      </button>
                       {onToggleSaveCommunityPost && (
                         <button
                           onClick={(e) => {
@@ -416,6 +446,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                         <MessageSquare className="w-3.5 h-3.5" />
                         <span>{post.commentsCount || 0}</span>
                       </div>
+                      <div className="flex items-center space-x-1 font-bold"><Repeat2 className="w-3.5 h-3.5" /><span>{post.repostsCount || 0}</span></div>
                     </div>
                   </div>
                 </div>

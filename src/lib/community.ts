@@ -1,6 +1,6 @@
 import { db, auth } from './firebase';
 import { 
-  collection, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment
+  collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment
 } from 'firebase/firestore';
 import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, CarouselSlide } from '../types';
 
@@ -75,27 +75,16 @@ export async function createCommunityProfile(data: Omit<CommunityUser, 'createdA
   batch.set(usernameRef, { uid });
 
   const userRef = doc(db, 'users', uid);
-  const userData = { ...data, username, followersCount: 0, followingCount: 0, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+  const userData = { ...data, username, role: data.role || '', isAuthor: !!data.isAuthor, followersCount: 0, followingCount: 0, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
   batch.set(userRef, userData);
 
   try {
     await batch.commit();
     
-    // Auto-follow krishsarkar logic for new accounts
+    // Every new account automatically follows the canonical author profile.
     if (username !== 'krishsarkar') {
-      try {
-        const krishProfile = await getProfileByUsername('krishsarkar');
-        if (krishProfile) {
-           await followUser(
-             uid, 
-             krishProfile.uid, 
-             krishProfile.username, 
-             username
-           );
-        }
-      } catch (err) {
-        console.warn("Failed to auto-follow krishsarkar:", err);
-      }
+      try { await ensureFollowingAuthor(uid, username); }
+      catch (err) { console.warn('Failed to auto-follow @krishsarkar:', err); }
     }
 
     return { ...data, username, followersCount: 0, followingCount: 0, createdAt: now, updatedAt: now } as CommunityUser;
@@ -116,6 +105,16 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, p);
   }
+}
+
+export async function ensureFollowingAuthor(currentUserId: string, currentUsername?: string): Promise<boolean> {
+  const author = await getProfileByUsername('krishsarkar');
+  if (!author || author.uid === currentUserId) return false;
+  const followingRef = doc(db, 'users', currentUserId, 'following', author.uid);
+  const existing = await getDoc(followingRef);
+  if (existing.exists()) return false;
+  await followUser(currentUserId, author.uid, author.username, currentUsername || '');
+  return true;
 }
 
 export async function followUser(currentUserId: string, targetUserId: string, targetUsername?: string, currentUsername?: string, _old1?: any, _old2?: any) {
@@ -224,6 +223,7 @@ export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 
       upvotesCount: 0,
       downvotesCount: 0,
       commentsCount: 0,
+      repostsCount: 0,
       isFeatured: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
@@ -467,44 +467,30 @@ export async function toggleVote(postId: string, userId: string, currentUpvotes:
   const p = `posts/${postId}/votes/${userId}`;
   try {
     const batch = writeBatch(db);
-    
-    let newUp = currentUpvotes;
-    let newDown = currentDownvotes;
-
+    const voteRef = doc(db, 'posts', postId, 'votes', userId);
+    const upvoteRef = doc(db, 'users', userId, 'upvotes', postId);
     if (currentVote === voteType) {
-      // Remove vote
-      batch.delete(doc(db, 'posts', postId, 'votes', userId));
-      if (voteType === 'up') newUp = Math.max(0, currentUpvotes - 1);
-      if (voteType === 'down') newDown = Math.max(0, currentDownvotes - 1);
+      batch.delete(voteRef);
+      if (voteType === 'up') batch.update(doc(db, 'posts', postId), { upvotesCount: increment(-1), updatedAt: serverTimestamp() });
+      else batch.update(doc(db, 'posts', postId), { downvotesCount: increment(-1), updatedAt: serverTimestamp() });
+      if (voteType === 'up') batch.delete(upvoteRef);
     } else {
-      // Add or change vote
-      batch.set(doc(db, 'posts', postId, 'votes', userId), {
-        postId,
-        userId,
-        type: voteType,
-        createdAt: serverTimestamp()
-      });
+      batch.set(voteRef, { postId, userId, type: voteType, createdAt: serverTimestamp() });
       if (voteType === 'up') {
-        newUp = currentUpvotes + 1;
-        if (currentVote === 'down') newDown = Math.max(0, currentDownvotes - 1);
+        batch.set(upvoteRef, { postId, createdAt: serverTimestamp() });
+        batch.update(doc(db, 'posts', postId), { upvotesCount: increment(1), ...(currentVote === 'down' ? { downvotesCount: increment(-1) } : {}), updatedAt: serverTimestamp() });
       } else {
-        newDown = currentDownvotes + 1;
-        if (currentVote === 'up') newUp = Math.max(0, currentUpvotes - 1);
+        if (currentVote === 'up') batch.delete(upvoteRef);
+        batch.update(doc(db, 'posts', postId), { downvotesCount: increment(1), ...(currentVote === 'up' ? { upvotesCount: increment(-1) } : {}), updatedAt: serverTimestamp() });
       }
     }
-    
-    batch.update(doc(db, 'posts', postId), {
-      upvotesCount: newUp,
-      downvotesCount: newDown,
-      updatedAt: serverTimestamp()
-    });
-    
     await batch.commit();
-    return { upvotesCount: newUp, downvotesCount: newDown, vote: currentVote === voteType ? null : voteType };
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, p);
-    throw error;
-  }
+    return {
+      upvotesCount: Math.max(0, currentUpvotes + (currentVote === 'up' ? -1 : voteType === 'up' ? 1 : 0)),
+      downvotesCount: Math.max(0, currentDownvotes + (currentVote === 'down' ? -1 : voteType === 'down' ? 1 : 0)),
+      vote: currentVote === voteType ? null : voteType
+    };
+  } catch (error) { handleFirestoreError(error, OperationType.WRITE, p); throw error; }
 }
 
 export async function getUserVote(postId: string, userId: string): Promise<'up' | 'down' | null> {
@@ -531,6 +517,52 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
     console.error("Error checking username availability:", error);
     return false;
   }
+}
+
+export async function getUserUpvotedPosts(userId: string): Promise<CommunityPost[]> {
+  const snap = await getDocs(query(collection(db, 'users', userId, 'upvotes'), orderBy('createdAt', 'desc')));
+  const posts = await Promise.all(snap.docs.map(d => getPost(d.id)));
+  return posts.filter(Boolean) as CommunityPost[];
+}
+
+export async function getUserRepostedPosts(userId: string): Promise<CommunityPost[]> {
+  const snap = await getDocs(query(collection(db, 'users', userId, 'reposts'), orderBy('createdAt', 'desc')));
+  const posts = await Promise.all(snap.docs.map(d => getPost(d.id)));
+  return posts.filter(Boolean) as CommunityPost[];
+}
+
+export async function getUserComments(userId: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {
+  const snap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
+  return snap.docs.map(d => {
+    const data = d.data();
+    const path = d.ref.path.split('/');
+    const postId = path[0] === 'posts' ? path[1] : undefined;
+    const articleSlug = path[0] === 'articles' ? path[1] : undefined;
+    return { id: d.id, content: data.content || '', createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()), postId, articleSlug, authorName: data.authorName || 'Architect' };
+  }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function toggleRepost(postId: string, userId: string, isReposted: boolean): Promise<boolean> {
+  const batch = writeBatch(db);
+  const repostRef = doc(db, 'users', userId, 'reposts', postId);
+  const reverseRef = doc(db, 'posts', postId, 'reposts', userId);
+  if (isReposted) {
+    batch.delete(repostRef); batch.delete(reverseRef);
+    batch.update(doc(db, 'posts', postId), { repostsCount: increment(-1), updatedAt: serverTimestamp() });
+  } else {
+    const post = await getPost(postId);
+    if (!post) throw new Error('Post no longer exists.');
+    batch.set(repostRef, { postId, title: post.title, authorId: post.authorId, authorUsername: post.authorUsername, createdAt: serverTimestamp() });
+    batch.set(reverseRef, { userId, createdAt: serverTimestamp() });
+    batch.update(doc(db, 'posts', postId), { repostsCount: increment(1), updatedAt: serverTimestamp() });
+  }
+  await batch.commit();
+  return !isReposted;
+}
+
+export async function getUserRepostStatus(postId: string, userId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'users', userId, 'reposts', postId));
+  return snap.exists();
 }
 
 export async function getUserSaves(userId: string): Promise<UserSavedItem[]> {

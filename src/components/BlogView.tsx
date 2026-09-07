@@ -27,6 +27,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'reading-time' | 'popular'>('newest');
+  const categories = useMemo(() => Array.from(new Set([...CATEGORIES, ...(siteConfig.customCategories || []), ...articles.map(a => a.category)])), [siteConfig.customCategories, articles]);
 
   // Extract all unique tags
   const allTags = useMemo(() => {
@@ -180,7 +181,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
               <span>CATEGORIES:</span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {CATEGORIES.map((cat) => {
+              {categories.map((cat) => {
                 const isSelected = selectedCategory === cat;
                 return (
                   <button

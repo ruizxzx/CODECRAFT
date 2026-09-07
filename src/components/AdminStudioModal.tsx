@@ -14,7 +14,6 @@ import {
   Shield, 
   Layout, 
   RefreshCw, 
-  Upload, 
   Database,
   Lock,
   ExternalLink,
@@ -27,9 +26,9 @@ import {
   deleteArticle, 
   saveSiteConfig, 
   saveBentoLinks, 
-  uploadImageToStorage,
   setArticleFeaturedStatus,
-  syncAuthorToAllCloudArticles
+  syncAuthorToAllCloudArticles,
+  syncAdminAuthorProfile
 } from '../lib/cms';
 import { 
   getCarouselSlides, 
@@ -113,14 +112,12 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [newSlideTitle, setNewSlideTitle] = useState('');
   const [newSlideImageUrl, setNewSlideImageUrl] = useState('');
   const [newSlideLinkUrl, setNewSlideLinkUrl] = useState('');
-  const [isUploadingSlideImage, setIsUploadingSlideImage] = useState(false);
 
   // Carousel Editing State
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
   const [editSlideTitle, setEditSlideTitle] = useState('');
   const [editSlideImageUrl, setEditSlideImageUrl] = useState('');
   const [editSlideLinkUrl, setEditSlideLinkUrl] = useState('');
-  const [isUploadingEditSlideImage, setIsUploadingEditSlideImage] = useState(false);
   const [isSavingSlide, setIsSavingSlide] = useState(false);
 
   // Deletion & Message States (No window.alert or window.confirm which fail in iframes)
@@ -253,20 +250,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     }
   };
 
-  const handleEditSlideUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploadingEditSlideImage(true);
-    setCarouselErrorMessage(null);
-    try {
-      const url = await uploadImageToStorage(file, 'carousel');
-      setEditSlideImageUrl(url);
-    } catch (err: any) {
-      console.error("Slide edit upload failed:", err);
-      setCarouselErrorMessage("Failed to upload slide image: " + (err.message || "Upload error"));
-    } finally {
-      setIsUploadingEditSlideImage(false);
-    }
+  const handleEditSlideUpload = async (_e: React.ChangeEvent<HTMLInputElement>) => {
+    alert('Firebase Storage is disabled. Paste a public image URL instead.');
   };
 
   const executeDeleteSlide = async (id: string) => {
@@ -372,12 +357,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setContactTwitter(siteConfig.contactTwitter || '');
     setContactGithub(siteConfig.contactGithub || '');
     setContactTelegram(siteConfig.contactTelegram || '');
+    setCustomCategories(siteConfig.customCategories || []);
   }, [siteConfig]);
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingConfig(true);
     try {
+      const authorProfile = await syncAdminAuthorProfile({
+        name: authorName,
+        role: authorRole,
+        avatar: authorAvatarUrl,
+        bio: aboutMeBio || manifestoText
+      });
       const updated: SiteConfig = {
         logoImageUrl,
         logoPart1,
@@ -405,7 +397,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         contactEmail,
         contactTwitter,
         contactGithub,
-        contactTelegram
+        contactTelegram,
+        customCategories,
+        authorProfileUid: authorProfile.uid,
+        authorProfileUsername: authorProfile.username
       };
       await saveSiteConfig(updated);
       onUpdateSiteConfig(updated);
@@ -417,7 +412,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
             name: authorName,
             role: authorRole,
             avatar: authorAvatarUrl,
-            bio: manifestoText || aboutMeBio
+            bio: manifestoText || aboutMeBio,
+            uid: authorProfile.uid,
+            username: authorProfile.username
           });
         } catch (syncErr) {
           console.warn("Auto-sync author to articles encountered an issue:", syncErr);
@@ -441,6 +438,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<Category>('Web Development');
+  const [customCategories, setCustomCategories] = useState<string[]>(siteConfig.customCategories || []);
+  const [customCategoryInput, setCustomCategoryInput] = useState('');
   const [newTags, setNewTags] = useState('React, Architecture, Frontend');
   const [newExcerpt, setNewExcerpt] = useState('');
   const [newCoverImage, setNewCoverImage] = useState('https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1200&auto=format&fit=crop');
@@ -456,27 +455,14 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
-  const [isUploadingCover, setIsUploadingCover] = useState(false);
 
   // Author avatar upload & cloud sync state
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isSyncingAuthor, setIsSyncingAuthor] = useState(false);
   const [syncAuthorSuccess, setSyncAuthorSuccess] = useState<string | null>(null);
   const [togglingFeaturedSlug, setTogglingFeaturedSlug] = useState<string | null>(null);
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploadingAvatar(true);
-    try {
-      const url = await uploadImageToStorage(file, 'avatars');
-      setAuthorAvatarUrl(url);
-    } catch (err: any) {
-      console.error("Failed to upload avatar image:", err);
-      alert("Avatar upload failed: " + (err.message || 'Permission denied'));
-    } finally {
-      setIsUploadingAvatar(false);
-    }
+  const handleAvatarUpload = async (_e: React.ChangeEvent<HTMLInputElement>) => {
+    alert('Firebase Storage is disabled. Paste a public image URL instead.');
   };
 
   const handleSyncAuthorToArticles = async () => {
@@ -488,7 +474,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         name: authorName,
         role: authorRole,
         avatar: authorAvatarUrl,
-        bio: manifestoText || aboutMeBio
+        bio: manifestoText || aboutMeBio,
+        uid: auth.currentUser?.uid,
+        username: 'krishsarkar'
       });
       setSyncAuthorSuccess(`Synced author details to ${count} articles in Firestore!`);
       setTimeout(() => setSyncAuthorSuccess(null), 4000);
@@ -601,6 +589,12 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setPublishError(null);
 
     try {
+      const authorProfile = await syncAdminAuthorProfile({
+        name: authorName || siteConfig.authorName || 'Krish Sarkar',
+        role: authorRole || siteConfig.authorRole || 'Founder & Systems Architect',
+        avatar: authorAvatarUrl || siteConfig.authorAvatarUrl || '',
+        bio: manifestoText || aboutMeBio || siteConfig.aboutMeBio || ''
+      });
       const slug = editingArticleSlug || newTitle
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -626,6 +620,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         viewsCount: 1,
         clapsCount: 0,
         author: {
+          uid: authorProfile.uid,
+          username: authorProfile.username,
           name: authorName || siteConfig.authorName || 'Krish',
           role: authorRole || siteConfig.authorRole || 'Founder & Systems Architect',
           avatar: authorAvatarUrl || siteConfig.authorAvatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop',
@@ -709,6 +705,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setEditingPublishedAt(null);
     setNewTitle('');
     setNewCategory('Web Development');
+    setCustomCategoryInput('');
     setNewTags('');
     setNewExcerpt('');
     setNewParagraph1('');
@@ -721,34 +718,12 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   };
 
   // Image Upload Handlers
-  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploadingCover(true);
-    try {
-      const url = await uploadImageToStorage(file, 'covers');
-      setNewCoverImage(url);
-    } catch (err: any) {
-      console.error("Cover upload failed:", err);
-      alert("Failed to upload image to Firebase Storage: " + (err.message || "Error"));
-    } finally {
-      setIsUploadingCover(false);
-    }
+  const handleCoverUpload = async (_e: React.ChangeEvent<HTMLInputElement>) => {
+    alert('Firebase Storage is disabled. Paste a public image URL instead.');
   };
 
-  const handleSlideUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setIsUploadingSlideImage(true);
-    try {
-      const url = await uploadImageToStorage(file, 'carousel');
-      setNewSlideImageUrl(url);
-    } catch (err: any) {
-      console.error("Slide upload failed:", err);
-      alert("Failed to upload slide image: " + (err.message || "Error"));
-    } finally {
-      setIsUploadingSlideImage(false);
-    }
+  const handleSlideUpload = async (_e: React.ChangeEvent<HTMLInputElement>) => {
+    alert('Firebase Storage is disabled. Paste a public image URL instead.');
   };
 
   if (!isOpen) return null;
@@ -991,7 +966,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Avatar Preview and URL / Upload */}
+                    {/* Avatar Preview and URL */}
                     <div className="space-y-2">
                       <label className="font-mono text-xs font-bold uppercase text-black">Author Picture (Avatar)</label>
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -1009,17 +984,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                             placeholder="https://images.unsplash.com/..."
                           />
                           <div className="flex items-center gap-2">
-                            <label className="cursor-pointer inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white border-2 border-black font-display font-black text-xs uppercase hover:bg-neutral-100 active:translate-x-0.5 active:translate-y-0.5 transition-all">
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>{isUploadingAvatar ? 'UPLOADING...' : 'UPLOAD PICTURE'}</span>
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                onChange={handleAvatarUpload} 
-                                disabled={isUploadingAvatar}
-                                className="hidden" 
-                              />
-                            </label>
                             <span className="font-mono text-[10px] text-neutral-500">JPG, PNG, WebP</span>
                           </div>
                         </div>
@@ -1197,6 +1161,39 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           <option value="Developer Tools">Developer Tools</option>
                           <option value="System Design">System Design</option>
                         </select>
+                        <div className="mt-2 flex gap-2">
+                          <input
+                            value={customCategoryInput}
+                            onChange={(e) => setCustomCategoryInput(e.target.value)}
+                            placeholder="ADD CUSTOM CATEGORY"
+                            className="min-w-0 flex-1 px-3 py-2 border-2 border-black font-mono text-xs uppercase bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const value = customCategoryInput.trim().replace(/\s+/g, ' ');
+                              if (!value) return;
+                              if (customCategories.some(c => c.toLowerCase() === value.toLowerCase())) { setNewCategory(value); setCustomCategoryInput(''); return; }
+                              const next = [...customCategories, value];
+                              setCustomCategories(next);
+                              setNewCategory(value);
+                              setCustomCategoryInput('');
+                              try {
+                                const nextConfig = { ...siteConfig, customCategories: next };
+                                await saveSiteConfig(nextConfig);
+                                onUpdateSiteConfig(nextConfig);
+                              } catch (err: any) { alert('Failed to save custom category: ' + (err.message || 'Permission denied')); }
+                            }}
+                            className="px-3 py-2 bg-[var(--color-primary)] border-2 border-black font-display font-black text-xs uppercase"
+                          >ADD</button>
+                        </div>
+                        {customCategories.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {customCategories.map(category => (
+                              <button key={category} type="button" onClick={() => setNewCategory(category)} className="px-2 py-1 border border-black bg-neutral-100 font-mono text-[10px] uppercase hover:bg-[var(--color-secondary)]">{category}</button>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       <div className="space-y-1">
@@ -1241,7 +1238,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       />
                     </div>
 
-                    {/* Cover Image Input with Storage Upload Option */}
+                    {/* Cover Image URL */}
                     <div className="space-y-2 border-2 border-black p-3 bg-neutral-50">
                       <label className="font-mono text-xs font-bold uppercase text-black block">
                         Cover Image
@@ -1254,17 +1251,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           placeholder="https://images.unsplash.com/..."
                           className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs bg-white"
                         />
-                        <label className="cursor-pointer px-4 py-2 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-[var(--color-primary)] hover:text-black transition-colors flex items-center space-x-1">
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>{isUploadingCover ? 'UPLOADING...' : 'UPLOAD'}</span>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            onChange={handleCoverUpload} 
-                            className="hidden" 
-                            disabled={isUploadingCover}
-                          />
-                        </label>
                       </div>
 
                       {newCoverImage && (
@@ -1658,7 +1644,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         </div>
 
                         <div>
-                          <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Image (Upload or Direct URL)</label>
+                          <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Image URL</label>
                           <div className="flex gap-2">
                             <input 
                               type="url" 
@@ -1667,17 +1653,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                               placeholder="https://images.unsplash.com/... or upload"
                               className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm"
                             />
-                            <label className="cursor-pointer px-4 py-2 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-[var(--color-primary)] hover:text-black transition-colors flex items-center space-x-1.5 shrink-0">
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>{isUploadingSlideImage ? 'UPLOADING...' : 'UPLOAD FILE'}</span>
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                onChange={handleSlideUpload} 
-                                className="hidden" 
-                                disabled={isUploadingSlideImage}
-                              />
-                            </label>
                           </div>
                         </div>
 
@@ -1789,7 +1764,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                     </div>
 
                                     <div>
-                                      <label className="font-mono text-xs font-bold uppercase block mb-1">Image URL / Upload</label>
+                                      <label className="font-mono text-xs font-bold uppercase block mb-1">Image URL</label>
                                       <div className="flex gap-2">
                                         <input 
                                           type="url" 
@@ -1798,17 +1773,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                           placeholder="https://..."
                                           className="flex-1 px-3 py-2 border-2 border-black font-sans text-sm"
                                         />
-                                        <label className="cursor-pointer px-3 py-2 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-[var(--color-primary)] hover:text-black transition-colors flex items-center space-x-1 shrink-0">
-                                          <Upload className="w-3.5 h-3.5" />
-                                          <span>{isUploadingEditSlideImage ? 'UPLOADING...' : 'REPLACE FILE'}</span>
-                                          <input 
-                                            type="file" 
-                                            accept="image/*" 
-                                            onChange={handleEditSlideUpload} 
-                                            className="hidden" 
-                                            disabled={isUploadingEditSlideImage}
-                                          />
-                                        </label>
                                       </div>
                                     </div>
 

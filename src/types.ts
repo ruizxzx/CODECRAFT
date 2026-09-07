@@ -1,10 +1,4 @@
-export type Category = 
-  | 'Web Development'
-  | 'Artificial Intelligence'
-  | 'Software Engineering'
-  | 'Computer Science'
-  | 'Developer Tools'
-  | 'System Design';
+export type Category = string;
 
 export interface CodeSnippet {
   language: string;
@@ -45,6 +39,8 @@ export interface Article {
     role: string;
     avatar: string;
     bio: string;
+    uid?: string;
+    username?: string;
   };
   content: ArticleContentBlock[];
   viewsCount?: number;
@@ -89,6 +85,9 @@ export interface SiteConfig {
   
   // Extra Info
   aboutMeImageUrl?: string;
+  customCategories?: string[];
+  authorProfileUid?: string;
+  authorProfileUsername?: string;
 }
 
 export interface BentoLink {
@@ -113,6 +112,8 @@ export interface CommunityUser {
   isBlocked?: boolean;
   followersCount?: number;
   followingCount?: number;
+  role?: string;
+  isAuthor?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -130,6 +131,7 @@ export interface CommunityPost {
   upvotesCount: number;
   downvotesCount: number;
   commentsCount: number;
+  repostsCount?: number;
   isFeatured: boolean;
   createdAt: string;
   updatedAt: string;

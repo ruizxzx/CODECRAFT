@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { CommunityPost, CommunityComment, PageView, CommunityUser } from '../types';
-import { getPost, getComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost } from '../lib/community';
+import { getPost, getComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
-import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2 } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
 
 interface CommunityPostViewProps {
@@ -26,6 +26,8 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   const [profile, setProfile] = useState<CommunityUser | null>(null);
   const [vote, setVote] = useState<'up' | 'down' | null>(null);
   const [localSaved, setLocalSaved] = useState(false);
+  const [isReposted, setIsReposted] = useState(false);
+  const [isReposting, setIsReposting] = useState(false);
   
   const [commentInput, setCommentInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,6 +44,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
         setVote(v);
         const savedIds = JSON.parse(localStorage.getItem('krishficient_saved_community_v1') || '[]');
         setLocalSaved(savedIds.includes(postId));
+        setIsReposted(await getUserRepostStatus(postId, user.uid));
       } else {
         setProfile(null);
         setVote(null);
@@ -79,6 +82,17 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleToggleRepost = async () => {
+    if (!userAuth) { await loginWithGoogle(); return; }
+    setIsReposting(true);
+    try {
+      const next = await toggleRepost(postId, userAuth.uid, isReposted);
+      setIsReposted(next);
+      if (post) setPost({ ...post, repostsCount: Math.max(0, (post.repostsCount || 0) + (next ? 1 : -1)) });
+    } catch (e: any) { alert('Failed to update repost: ' + (e?.message || 'Permission denied')); }
+    finally { setIsReposting(false); }
   };
 
   const handleToggleSave = () => {
@@ -258,6 +272,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
               <span>{post.downvotesCount}</span>
             </button>
           </div>
+          <button onClick={handleToggleRepost} disabled={isReposting} className={`px-3 py-2 border-2 border-black font-mono text-xs font-black uppercase flex items-center gap-2 ${isReposted ? 'bg-[var(--color-primary)]' : 'bg-white'}`}><Repeat2 className="w-4 h-4" />{isReposted ? 'REPOSTED' : 'REPOST'} ({post.repostsCount || 0})</button>
           <button 
             onClick={handleToggleSave}
             className={`flex items-center space-x-2 font-mono text-sm font-bold uppercase px-4 py-2 border-2 border-black transition-colors ${effectiveIsSaved ? 'bg-[var(--color-secondary)]' : 'hover:bg-neutral-100'}`}

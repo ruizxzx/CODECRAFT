@@ -9,10 +9,10 @@ import {
   query, 
   orderBy, 
   serverTimestamp,
-  Timestamp 
+  Timestamp,
+  writeBatch 
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage, auth, checkIsAdmin } from './firebase';
+import { db, auth, checkIsAdmin } from './firebase';
 import { deletePost } from './community';
 import { Article, SiteConfig, BentoLink, ArticleComment } from '../types';
 import { INITIAL_ARTICLES } from '../data/articles';
@@ -44,7 +44,10 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   contactEmail: "hello@krishficient.dev",
   contactTwitter: "@krishficient",
   contactGithub: "krishficient",
-  contactTelegram: "@krishficient"
+  contactTelegram: "@krishficient",
+  customCategories: [],
+  authorProfileUid: '',
+  authorProfileUsername: 'krishsarkar'
 };
 
 export const DEFAULT_BENTO_LINKS: BentoLink[] = [
@@ -131,6 +134,46 @@ export async function saveSiteConfig(config: SiteConfig): Promise<void> {
     ...config,
     updatedAt: serverTimestamp()
   }, { merge: true });
+}
+
+
+export async function syncAdminAuthorProfile(author: {
+  name: string;
+  role: string;
+  avatar: string;
+  bio: string;
+}): Promise<{ uid: string; username: string }> {
+  const user = auth.currentUser;
+  if (!user || !checkIsAdmin(user.email)) throw new Error('Unauthorized: admin account required.');
+  const uid = user.uid;
+  const username = 'krishsarkar';
+  const userRef = doc(db, 'users', uid);
+  const usernameRef = doc(db, 'usernames', username);
+  const existingUser = await getDoc(userRef);
+  const existingUsername = await getDoc(usernameRef);
+  if (existingUsername.exists() && existingUsername.data()?.uid !== uid) {
+    throw new Error('@krishsarkar is reserved by another account.');
+  }
+  const now = new Date().toISOString();
+  const batch = writeBatch(db);
+  batch.set(usernameRef, { uid });
+  const profileData = {
+    uid, username,
+    displayName: author.name || 'Krish Sarkar',
+    photoURL: author.avatar || user.photoURL || '',
+    bio: author.bio || '',
+    themeColor: '#FFD600',
+    role: author.role || 'Founder & Systems Architect',
+    isAuthor: true,
+    followersCount: existingUser.exists() ? (existingUser.data()?.followersCount || 0) : 0,
+    followingCount: existingUser.exists() ? (existingUser.data()?.followingCount || 0) : 0,
+    createdAt: existingUser.exists() ? existingUser.data()?.createdAt : serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+  if (existingUser.exists()) batch.update(userRef, profileData);
+  else batch.set(userRef, profileData);
+  await batch.commit();
+  return { uid, username };
 }
 
 // ==========================================
@@ -281,6 +324,8 @@ export async function syncAuthorToAllCloudArticles(author: {
   role: string;
   avatar: string;
   bio?: string;
+  uid?: string;
+  username?: string;
 }): Promise<number> {
   const articlesRef = collection(db, 'articles');
   const snap = await getDocs(articlesRef);
@@ -292,6 +337,8 @@ export async function syncAuthorToAllCloudArticles(author: {
     await setDoc(docSnap.ref, {
       ...existing,
       author: {
+        uid: author.uid,
+        username: author.username,
         name: author.name || 'Krish',
         role: author.role || 'Founder & Systems Architect',
         avatar: author.avatar || '',
@@ -310,6 +357,8 @@ export async function syncAuthorToAllCloudArticles(author: {
       await setDoc(docRef, {
         ...initArt,
         author: {
+          uid: author.uid,
+          username: author.username,
           name: author.name || 'Krish',
           role: author.role || 'Founder & Systems Architect',
           avatar: author.avatar || '',
@@ -498,11 +547,3 @@ export async function getNewsletterSubscribers(): Promise<NewsletterSubscriber[]
   }
 }
 
-// Firebase Storage is optional. The CMS also accepts direct image URLs.
-export async function uploadImageToStorage(file: File, folder = 'editorial'): Promise<string> {
-  const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const path = `${folder}/${Date.now()}_${cleanName}`;
-  const storageRef = ref(storage, path);
-  const uploadResult = await uploadBytes(storageRef, file);
-  return getDownloadURL(uploadResult.ref);
-}

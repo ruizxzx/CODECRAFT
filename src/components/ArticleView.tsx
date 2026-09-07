@@ -30,6 +30,7 @@ interface ArticleViewProps {
   allArticles: Article[];
   onBack: () => void;
   onSelectArticle: (slug: string) => void;
+  onOpenAuthorProfile?: (username: string) => void;
   isSaved: boolean;
   onToggleSave: (slug: string) => void;
   siteConfig: SiteConfig;
@@ -40,6 +41,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   allArticles,
   onBack,
   onSelectArticle,
+  onOpenAuthorProfile,
   isSaved,
   onToggleSave,
   siteConfig,
@@ -212,7 +214,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Author Metadata Strip */}
         <div className="p-4 bg-white neo-border neo-shadow mb-10 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center space-x-3.5">
+          <button type="button" onClick={() => { const u = article.author.username || siteConfig.authorProfileUsername; if (u && onOpenAuthorProfile) onOpenAuthorProfile(u); }} className="flex items-center space-x-3.5 text-left">
             <img
               src={siteConfig.authorAvatarUrl || article.author.avatar}
               alt={siteConfig.authorName || article.author.name}
@@ -229,7 +231,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                 {siteConfig.authorRole || article.author.role}
               </div>
             </div>
-          </div>
+          </button>
 
           <div className="flex items-center space-x-4 text-xs font-mono font-bold text-neutral-700">
             <div className="flex items-center space-x-1.5">
@@ -458,7 +460,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Author Bio Box */}
         <div className="p-8 bg-gray-50 neo-border neo-shadow">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6">
+          <button type="button" onClick={() => { const u = article.author.username || siteConfig.authorProfileUsername; if (u && onOpenAuthorProfile) onOpenAuthorProfile(u); }} className="w-full flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6 text-left">
             <img
               src={siteConfig?.authorAvatarUrl || article.author.avatar}
               alt={siteConfig?.authorName || article.author.name}
@@ -477,7 +479,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                 {siteConfig?.aboutMeBio || article.author.bio || "Dedicated to demystifying high-scale software engineering, cutting through hype, and sharing reproducible architectural blueprints."}
               </p>
             </div>
-          </div>
+          </button>
         </div>
 
         {/* Comments Section */}
