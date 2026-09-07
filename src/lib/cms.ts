@@ -145,24 +145,21 @@ export async function syncAdminAuthorProfile(author: {
   avatar: string;
   bio: string;
 }): Promise<{ uid: string; username: string }> {
-  const user = auth.currentUser;
-  if (!user || !checkIsAdmin(user.email)) throw new Error('Unauthorized: admin account required.');
-  const uid = user.uid;
+  const admin = auth.currentUser;
+  if (!admin || !checkIsAdmin(admin.email)) throw new Error('Unauthorized: admin account required.');
+
   const username = 'krishsarkar';
-  const userRef = doc(db, 'users', uid);
   const usernameRef = doc(db, 'usernames', username);
+  const usernameSnap = await getDoc(usernameRef);
+  // The canonical author belongs to the existing @krishsarkar reservation.
+  // Multiple trusted admin Google accounts may manage the same author profile.
+  const uid = usernameSnap.exists() && usernameSnap.data()?.uid ? usernameSnap.data().uid : admin.uid;
+  const userRef = doc(db, 'users', uid);
   const existingUser = await getDoc(userRef);
-  const existingUsername = await getDoc(usernameRef);
-  if (existingUsername.exists() && existingUsername.data()?.uid !== uid) {
-    throw new Error('@krishsarkar is reserved by another account.');
-  }
-  const now = new Date().toISOString();
-  const batch = writeBatch(db);
-  batch.set(usernameRef, { uid });
-  const profileData = {
+  const profileData: any = {
     uid, username,
     displayName: author.name || 'Krish Sarkar',
-    photoURL: author.avatar || user.photoURL || '',
+    photoURL: author.avatar || admin.photoURL || '',
     bio: author.bio || '',
     themeColor: '#FFD600',
     role: author.role || 'Founder & Systems Architect',
@@ -174,16 +171,31 @@ export async function syncAdminAuthorProfile(author: {
     createdAt: existingUser.exists() ? existingUser.data()?.createdAt : serverTimestamp(),
     updatedAt: serverTimestamp()
   };
+
+  const batch = writeBatch(db);
+  if (usernameSnap.exists()) {
+    if (usernameSnap.data()?.uid !== uid) throw new Error('@krishsarkar reservation is inconsistent.');
+    batch.update(usernameRef, { uid });
+  } else {
+    batch.set(usernameRef, { uid });
+  }
   if (existingUser.exists()) batch.update(userRef, profileData);
   else batch.set(userRef, profileData);
   await batch.commit();
 
-  // Keep the canonical admin identity synchronized across community content.
   const contentWrites: Array<{ ref: any; data: any }> = [];
   const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', uid)));
-  postsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: { authorName: profileData.displayName, authorAvatar: profileData.photoURL, authorUsername: username, isVerified: true, verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
+  postsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: {
+    authorName: profileData.displayName, authorAvatar: profileData.photoURL,
+    authorUsername: username, isVerified: true,
+    verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp()
+  }}));
   const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', uid)));
-  commentsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: { authorName: profileData.displayName, authorAvatar: profileData.photoURL, authorUsername: username, isVerified: true, verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
+  commentsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: {
+    authorName: profileData.displayName, authorAvatar: profileData.photoURL,
+    authorUsername: username, isVerified: true,
+    verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp()
+  }}));
   for (let i = 0; i < contentWrites.length; i += 450) {
     const contentBatch = writeBatch(db);
     contentWrites.slice(i, i + 450).forEach(w => contentBatch.update(w.ref, w.data));

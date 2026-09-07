@@ -1,6 +1,6 @@
 import { db, auth } from './firebase';
 import { 
-  collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment
+  collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment, runTransaction
 } from 'firebase/firestore';
 import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, CarouselSlide } from '../types';
 
@@ -59,35 +59,121 @@ export async function getProfileByUsername(username: string): Promise<CommunityU
   }
 }
 
+function normalizeUsername(value: string): string {
+  return value.toLowerCase().trim().replace(/[^a-z0-9_]/g, '').slice(0, 30);
+}
+
+async function chooseAvailableUsername(base: string): Promise<string> {
+  const cleanBase = normalizeUsername(base) || 'user';
+  const root = cleanBase.slice(0, 24) || 'user';
+  for (let i = 0; i < 1000; i++) {
+    const candidate = i === 0 ? root : `${root}${i}`.slice(0, 30);
+    const snap = await getDoc(doc(db, 'usernames', candidate));
+    if (!snap.exists()) return candidate;
+  }
+  return `${root.slice(0, 26)}_${Date.now().toString().slice(-3)}`;
+}
+
+/**
+ * Returns the cloud profile for a signed-in Google account, creating one
+ * automatically when this is the account's first visit. A deterministic
+ * available handle is selected from the Google display name/email, so users
+ * never have to manually claim a handle just to enter the site.
+ */
+export async function ensureCommunityProfileForUser(user: import('firebase/auth').User): Promise<CommunityUser> {
+  if (!auth.currentUser || auth.currentUser.uid !== user.uid) throw new Error('Must be logged in');
+
+  const existing = await getCommunityProfile(user.uid);
+  if (existing) return existing;
+
+  const emailBase = (user.email || '').split('@')[0] || '';
+  const displayBase = user.displayName || emailBase || 'user';
+  let username = await chooseAvailableUsername(displayBase);
+  const candidates = [username];
+  if (emailBase) candidates.push(normalizeUsername(emailBase));
+  candidates.push('user');
+
+  for (const base of candidates) {
+    if (base) {
+      const candidate = await chooseAvailableUsername(base);
+      if (candidate) { username = candidate; break; }
+    }
+  }
+
+  const profile: any = {
+    uid: user.uid,
+    username,
+    displayName: user.displayName || username,
+    photoURL: user.photoURL || '',
+    bio: 'Software builder & writer',
+    themeColor: '#000000',
+    role: '',
+    isAuthor: false,
+    isVerified: false,
+    verificationColor: '#2196F3',
+    followersCount: 0,
+    followingCount: 0,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  // Claim the handle and create the profile atomically. If another client
+  // races for the same username, retry with another generated suffix.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      const usernameRef = doc(db, 'usernames', username);
+      const userRef = doc(db, 'users', user.uid);
+      const created = await runTransaction(db, async (tx) => {
+        const [userSnap, usernameSnap] = await Promise.all([tx.get(userRef), tx.get(usernameRef)]);
+        if (userSnap.exists()) return userSnap.data() as CommunityUser;
+        if (usernameSnap.exists() && usernameSnap.data()?.uid !== user.uid) return null;
+        tx.set(usernameRef, { uid: user.uid }, { merge: false });
+        tx.set(userRef, profile);
+        return null;
+      });
+      const resolved = created || await getCommunityProfile(user.uid);
+      if (resolved) {
+        try { await ensureFollowingAuthor(user.uid, resolved.username); } catch (err) { console.warn('Auto-follow author failed:', err); }
+        return resolved;
+      }
+    } catch (error) {
+      console.warn('Automatic handle claim retry:', error);
+    }
+    username = await chooseAvailableUsername(`${normalizeUsername(displayBase).slice(0, 24) || 'user'}${attempt + 1}`);
+    profile.username = username;
+  }
+
+  throw new Error('Unable to automatically create a unique handle.');
+}
+
 export async function createCommunityProfile(data: Omit<CommunityUser, 'createdAt' | 'updatedAt' | 'followersCount' | 'followingCount'>) {
   if (!auth.currentUser) throw new Error("Must be logged in");
   const uid = auth.currentUser.uid;
-  const username = data.username.toLowerCase().trim();
-  const now = new Date().toISOString(); 
-  
+  const username = normalizeUsername(data.username);
+  if (username.length < 3) throw new Error('Username must be at least 3 characters.');
+
   const usernameRef = doc(db, 'usernames', username);
-  const usernameSnap = await getDoc(usernameRef);
-  if (usernameSnap.exists()) {
-    throw new Error("Username is already taken. Please choose another.");
-  }
-
-  const batch = writeBatch(db);
-  batch.set(usernameRef, { uid });
-
   const userRef = doc(db, 'users', uid);
-  const userData = { ...data, username, role: data.role || '', isAuthor: !!data.isAuthor, isVerified: !!data.isVerified, verificationColor: data.verificationColor || '#2196F3', followersCount: 0, followingCount: 0, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
-  batch.set(userRef, userData);
-
   try {
-    await batch.commit();
-    
-    // Every new account automatically follows the canonical author profile.
+    const profile = await runTransaction(db, async (tx) => {
+      const [userSnap, usernameSnap] = await Promise.all([tx.get(userRef), tx.get(usernameRef)]);
+      if (userSnap.exists()) return userSnap.data() as CommunityUser;
+      if (usernameSnap.exists() && usernameSnap.data()?.uid !== uid) throw new Error('Username is already taken. Please choose another.');
+      const userData: any = {
+        ...data, uid, username,
+        role: data.role || '', isAuthor: !!data.isAuthor, isVerified: !!data.isVerified,
+        verificationColor: data.verificationColor || '#2196F3', followersCount: 0, followingCount: 0,
+        createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+      };
+      tx.set(usernameRef, { uid });
+      tx.set(userRef, userData);
+      return userData as CommunityUser;
+    });
+    const resolved = await getCommunityProfile(uid) || profile;
     if (username !== 'krishsarkar') {
-      try { await ensureFollowingAuthor(uid, username); }
-      catch (err) { console.warn('Failed to auto-follow @krishsarkar:', err); }
+      try { await ensureFollowingAuthor(uid, username); } catch (err) { console.warn('Failed to auto-follow @krishsarkar:', err); }
     }
-
-    return { ...data, username, followersCount: 0, followingCount: 0, createdAt: now, updatedAt: now } as CommunityUser;
+    return resolved as CommunityUser;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, `users/${uid}`);
     throw error;

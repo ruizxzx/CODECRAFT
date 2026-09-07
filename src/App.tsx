@@ -28,7 +28,7 @@ import { CommunityProfileView } from './components/CommunityProfileView';
 import { SavedView } from './components/SavedView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
-import { getCommunityProfile, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
+import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
 
@@ -108,39 +108,47 @@ export default function App() {
     const unsub = auth.onAuthStateChanged(async (user) => {
       setUserAuth(user);
       if (user) {
-        // Load profile
+        // Load or automatically create the persistent cloud profile.
+        // Existing handles are restored from Firestore; first-time accounts
+        // receive a generated unique handle without showing the claim modal.
         try {
           let prof = await getCommunityProfile(user.uid);
+          if (!prof) {
+            prof = await ensureCommunityProfileForUser(user);
+          }
+
           if (checkIsAdmin(user.email)) {
-            // Read the current cloud config here instead of using the stale value
-            // captured by this auth listener. This prevents an old default from
-            // overwriting a freshly edited author name/avatar on sign-in.
             const cloudConfig = await getSiteConfig();
-            const synced = await syncAdminAuthorProfile({
-              name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
-              role: cloudConfig.authorRole || 'Founder & Systems Architect',
-              avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
-              bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || ''
-            });
             try {
+              const synced = await syncAdminAuthorProfile({
+                name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
+                role: cloudConfig.authorRole || 'Founder & Systems Architect',
+                avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
+                bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || ''
+              });
               await syncAuthorToAllCloudArticles({
                 name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
                 role: cloudConfig.authorRole || 'Founder & Systems Architect',
                 avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
                 bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || '',
-                uid: synced.uid,
-                username: synced.username
+                uid: synced.uid, username: synced.username
               });
-            } catch (articleSyncError) { console.warn('Author article sync skipped:', articleSyncError); }
-            prof = await getCommunityProfile(synced.uid);
-          } else if (prof) {
+              prof = await getCommunityProfile(synced.uid) || prof;
+            } catch (adminSyncError) {
+              console.warn('Admin author sync skipped:', adminSyncError);
+            }
+          }
+
+          if (prof) {
             await ensureFollowingAuthor(user.uid, prof.username);
           }
           setUserProfile(prof);
-          if (!prof && !checkIsAdmin(user.email)) setIsHandleModalOpen(true);
+          setIsHandleModalOpen(false);
         } catch (e) {
-          console.error('Error loading/syncing user profile:', e);
-          if (!checkIsAdmin(user.email)) setIsHandleModalOpen(true);
+          console.error('Error loading/creating user profile:', e);
+          // Do not repeatedly force users into the manual claim modal. It is
+          // now a recovery UI only; normal accounts are auto-provisioned.
+          setUserProfile(null);
         }
 
         // Load cloud saves
