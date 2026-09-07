@@ -1,5 +1,5 @@
 import { db, auth, checkIsAdmin } from './firebase';
-import { collection, collectionGroup, doc, getDoc, getDocs, query, orderBy, where, limit, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, onSnapshot, increment } from 'firebase/firestore';
+import { collection, collectionGroup, doc, getDoc, getDocs, query, orderBy, where, limit, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, onSnapshot, increment, runTransaction } from 'firebase/firestore';
 import { CommunityUser } from '../types';
 
 const id = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
@@ -10,7 +10,7 @@ async function profile(uid:string){ const s=await getDoc(doc(db,'users',uid)); r
 async function notify(uid:string, data:any){ if(!uid || uid===data.actorId) return; await setDoc(doc(db,'users',uid,'notifications',id()),{...data,read:false,createdAt:serverTimestamp()}); }
 
 export interface SocialCommunity { id:string; name:string; slug:string; description:string; iconUrl?:string; bannerUrl?:string; rules?:string[]; membersCount:number; postsCount:number; ownerId:string; ownerUsername?:string; ownerName?:string; ownerAvatar?:string; createdAt:string; updatedAt?:string; isPrivate?:boolean; isArchived?:boolean; isLocked?:boolean; allowLinks?:boolean; allowMedia?:boolean; defaultPostType?:'discussion'|'question'|'link'|'poll'; }
-export interface CommunityFeedPost { id:string; communityId?:string; parentPostId?:string; postType?:'discussion'|'question'|'link'|'poll'|'announcement'; title:string; content:string; authorId:string; authorUsername:string; authorName:string; authorAvatar:string; authorPlatformRole?:'member'|'moderator'|'master_admin'; score:number; commentsCount:number; isFeatured?:boolean; isPinned?:boolean; isLocked?:boolean; isArchived?:boolean; flair?:string; dedupeKey?:string; linkUrl?:string; mediaUrls?:string[]; poll?:{question:string;options:string[];votes?:Record<string,number>}; createdAt:string; updatedAt?:string; editedAt?:string; }
+export interface CommunityFeedPost { id:string; communityId?:string; parentPostId?:string; postType?:'blog'|'discussion'|'question'|'link'|'poll'|'announcement'; title:string; content:string; authorId:string; authorUsername:string; authorName:string; authorAvatar:string; authorPlatformRole?:'member'|'moderator'|'master_admin'; score:number; commentsCount:number; isFeatured?:boolean; isPinned?:boolean; isLocked?:boolean; isArchived?:boolean; flair?:string; dedupeKey?:string; linkUrl?:string; mediaUrls?:string[]; poll?:{question:string;options:string[];votes?:Record<string,number>}; createdAt:string; updatedAt?:string; editedAt?:string; }
 export interface SocialQuestion { id:string; title:string; details:string; authorId:string; authorUsername:string; authorName:string; authorAvatar:string; topics:string[]; followersCount:number; answersCount:number; upvotesCount:number; bestAnswerId?:string; createdAt:string; updatedAt?:string; }
 export interface SocialAnswer { id:string; questionId:string; content:string; authorId:string; authorUsername:string; authorName:string; authorAvatar:string; upvotesCount:number; downvotesCount:number; isBest:boolean; createdAt:string; updatedAt:string; }
 export interface SocialTopic { id:string; name:string; slug:string; description:string; followersCount:number; createdAt:string; updatedAt?:string; createdBy?:string; creatorUsername?:string; }
@@ -141,8 +141,8 @@ export async function recomputeCommunityCounters(cid:string){
 
 
 export async function getCommunityPosts(cid:string,sort:'new'|'hot'|'top'='new'){ const s=await getDocs(query(collection(db,'communities',cid,'posts'),limit(200))); const items=dedupePosts((s.docs.map(map) as CommunityFeedPost[]).filter(p=>!p.isArchived)); const rank=(a:CommunityFeedPost,b:CommunityFeedPost)=>{ if(!!b.isPinned!==!!a.isPinned) return b.isPinned?1:-1; if(sort==='top') return (b.score||0)-(a.score||0); if(sort==='hot') return ((b.score||0)*3 + new Date(b.createdAt||0).getTime()/86400000)-((a.score||0)*3 + new Date(a.createdAt||0).getTime()/86400000); return new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime(); }; return items.sort(rank); }
-export function subscribeCommunityFeed(cid:string,cb:(x:CommunityFeedPost[])=>void){ return onSnapshot(query(collection(db,'communities',cid,'posts'),limit(200)),s=>cb(dedupePosts((s.docs.map(map) as CommunityFeedPost[]).filter(p=>!p.isArchived)).sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime())),()=>cb([])); }
-export async function createCommunityPost(cid:string,user:CommunityUser,title:string,content:string,options:{parentPostId?:string;postType?:'discussion'|'question'|'link'|'poll'|'announcement';flair?:string;linkUrl?:string;mediaUrls?:string[];poll?:{question:string;options:string[]}}={} ){
+export function subscribeCommunityFeed(cid:string,cb:(x:CommunityFeedPost[])=>void){ return onSnapshot(query(collection(db,'communities',cid,'posts'),orderBy('createdAt','desc'),limit(200)),s=>cb(dedupePosts((s.docs.map(map) as CommunityFeedPost[]).filter(p=>!p.isArchived))),err=>{console.warn('Community feed realtime subscription failed:',err);cb([]);}); }
+export async function createCommunityPost(cid:string,user:CommunityUser,title:string,content:string,options:{parentPostId?:string;postType?:'blog'|'discussion'|'question'|'link'|'poll'|'announcement';flair?:string;linkUrl?:string;mediaUrls?:string[];poll?:{question:string;options:string[]}}={} ){
   const c=await getCommunity(cid); if(!c) throw new Error('Community not found.');
   if(c.isArchived || c.isLocked) throw new Error('This community is not accepting new posts.');
   if(!(await isCommunityMember(cid,user.uid))){ if(c.ownerId===user.uid){ await setDoc(doc(db,'communities',cid,'members',user.uid),{uid:user.uid,username:user.username,role:'owner',createdAt:serverTimestamp(),updatedAt:serverTimestamp()}); } else throw new Error('Join the community first.'); }
@@ -151,12 +151,25 @@ export async function createCommunityPost(cid:string,user:CommunityUser,title:st
   const existingSnap=await getDocs(query(collection(db,'communities',cid,'posts'),where('dedupeKey','==',dedupeKey),limit(5)));
   const existing=existingSnap.docs.find(d=>d.data()?.authorId===user.uid && !d.data()?.isArchived);
   if(existing) return map(existing) as CommunityFeedPost;
-  const pid=id(); const data={communityId:cid,parentPostId:options.parentPostId||'',postType,flair:options.flair?.trim().slice(0,30)||'',linkUrl:options.linkUrl?.trim().slice(0,2000)||'',mediaUrls:Array.isArray(options.mediaUrls)?options.mediaUrls.slice(0,6):[],poll:options.poll,dedupeKey, title:title.trim().slice(0,256),content:content.trim().slice(0,100000),authorId:user.uid,authorUsername:user.username,authorName:user.displayName,authorAvatar:user.photoURL||'',authorPlatformRole:staffRole(user),score:0,commentsCount:0,isFeatured:false,isPinned:false,isLocked:false,isArchived:false,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+  const pid=id();
+  const cleanTitle=title.trim().slice(0,256); const cleanContent=content.trim().slice(0,100000);
+  if(!cleanTitle || !cleanContent) throw new Error('Title and content are required.');
   if(options.parentPostId){ const parent=await getDoc(doc(db,'communities',cid,'posts',options.parentPostId)); if(!parent.exists()) throw new Error('Parent thread not found.'); if(parent.data()?.isLocked) throw new Error('This thread is locked.'); }
-  await setDoc(doc(db,'communities',cid,'posts',pid),data);
-  if(options.parentPostId){ try{ await updateDoc(doc(db,'communities',cid,'posts',options.parentPostId),{commentsCount:increment(1),updatedAt:serverTimestamp()}); }catch{} }
-  try { await updateDoc(doc(db,'communities',cid),{postsCount:increment(1),updatedAt:serverTimestamp()}); } catch { /* post creation remains successful even if an older ruleset blocks the counter update */ }
-  return {...data,id:pid,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as CommunityFeedPost;
+  const data:any={communityId:cid,parentPostId:options.parentPostId||'',postType,flair:options.flair?.trim().slice(0,30)||'',linkUrl:options.linkUrl?.trim().slice(0,2000)||'',mediaUrls:Array.isArray(options.mediaUrls)?options.mediaUrls.slice(0,6):[],dedupeKey,title:cleanTitle,content:cleanContent,authorId:user.uid,authorUsername:user.username,authorName:user.displayName,authorAvatar:user.photoURL||'',authorPlatformRole:staffRole(user),score:0,commentsCount:0,isFeatured:false,isPinned:false,isLocked:false,isArchived:false,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+  if(options.poll && postType==='poll') data.poll={question:String(options.poll.question||cleanTitle).slice(0,256),options:options.poll.options.map(x=>String(x).trim()).filter(Boolean).slice(0,8),votes:{}};
+  await runTransaction(db,async tx=>{
+    const communityRef=doc(db,'communities',cid); const memberRef=doc(db,'communities',cid,'members',user.uid); const postRef=doc(db,'communities',cid,'posts',pid);
+    const [communitySnap,memberSnap]=await Promise.all([tx.get(communityRef),tx.get(memberRef)]);
+    if(!communitySnap.exists()) throw new Error('Community not found.');
+    const cd:any=communitySnap.data();
+    if(cd.isArchived || cd.isLocked) throw new Error('This community is not accepting new posts.');
+    if(!memberSnap.exists()) throw new Error('Join the community first.');
+    tx.set(postRef,data); tx.update(communityRef,{postsCount:increment(1),updatedAt:serverTimestamp()});
+    if(options.parentPostId) tx.update(doc(db,'communities',cid,'posts',options.parentPostId),{commentsCount:increment(1),updatedAt:serverTimestamp()});
+  });
+  const createdSnap=await getDoc(doc(db,'communities',cid,'posts',pid));
+  if(!createdSnap.exists()) throw new Error('Post was not confirmed in the cloud. Please refresh before retrying.');
+  return map(createdSnap) as CommunityFeedPost;
 }
 async function canModerateCommunity(cid:string,uid:string){ if(isSocialAdmin()) return true; const c=await getCommunity(cid); if(c?.ownerId===uid) return true; const m=await getDoc(doc(db,'communities',cid,'members',uid)); return m.exists() && ['owner','moderator'].includes(m.data().role||'member'); }
 export async function updateCommunityPost(cid:string,pid:string,uid:string,data:Pick<CommunityFeedPost,'title'|'content'>){ const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) throw new Error('Post not found.'); if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot edit this post.'); await updateDoc(p.ref,{title:data.title.trim().slice(0,256),content:data.content.trim().slice(0,100000),editedAt:serverTimestamp(),updatedAt:serverTimestamp()}); }

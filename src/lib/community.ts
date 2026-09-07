@@ -471,7 +471,7 @@ export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 
     const postData = {
       ...data,
       dedupeKey,
-      platformRole: data.platformRole || (auth.currentUser?.email && checkIsAdmin(auth.currentUser.email) ? 'master_admin' : undefined),
+      ...(data.platformRole || (auth.currentUser?.email && checkIsAdmin(auth.currentUser.email) ? 'master_admin' : null) ? { platformRole: data.platformRole || (checkIsAdmin(auth.currentUser?.email) ? 'master_admin' : undefined) } : {}),
       mentionedUsernames: extractMentions(`${data.title} ${data.content}`),
       hashtags: extractHashtags(`${data.title} ${data.content}`),
       upvotesCount: 0,
@@ -483,9 +483,11 @@ export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 
       updatedAt: serverTimestamp()
     };
     await setDoc(doc(db, 'posts', postId), postData);
+    const confirmed = await getDoc(doc(db, 'posts', postId));
+    if (!confirmed.exists()) throw new Error('Post was not confirmed in the cloud. Please refresh before retrying.');
     const actor = await getCommunityProfile(auth.currentUser?.uid || data.authorId);
     if (actor) { try { await notifyMentions(data.title + ' ' + data.content, actor, 'post', postId); } catch (e) { console.warn('Post mention notifications failed:', e); } }
-    return { ...postData, id: postId, createdAt: now, updatedAt: now } as CommunityPost;
+    return { ...confirmed.data(), id: confirmed.id, createdAt: mapDocDates(confirmed.data()).createdAt || now, updatedAt: mapDocDates(confirmed.data()).updatedAt || now } as CommunityPost;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, p);
     throw error;
