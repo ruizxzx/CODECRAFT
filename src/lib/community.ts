@@ -515,10 +515,11 @@ export async function deleteCarouselSlide(id: string) {
 }
 
 export function subscribeCommunityPosts(type: 'discussion' | 'blog' | undefined, callback: (posts: CommunityPost[]) => void): () => void {
-  const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+  const q = query(collection(db, 'posts'), limit(100));
   return onSnapshot(q, (snap) => {
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
     if (type) results = results.filter(r => r.type === type);
+    results.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     callback(results);
   }, (error) => {
     console.error('Community post realtime subscription failed:', error);
@@ -532,10 +533,11 @@ export async function getPosts(type?: 'discussion' | 'blog', username?: string):
     // Deliberately avoid the type+createdAt composite query here. Community blog
     // posts must work immediately in a fresh Firebase project without requiring
     // a manually-created composite index. Sort/filter the cloud result client-side.
-    const snap = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
+    const snap = await getDocs(query(collection(db, 'posts'), limit(200)));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
     if (type) results = results.filter(r => r.type === type);
     if (username) results = results.filter(r => r.authorUsername === username);
+    results.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     return results;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, p);
