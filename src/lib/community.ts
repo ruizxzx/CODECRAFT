@@ -313,10 +313,23 @@ export async function getPosts(type?: 'discussion' | 'blog', username?: string):
     const snap = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
     if (type) results = results.filter(r => r.type === type);
-    if (username) results = results.filter(r => r.authorUsername === username || r.authorId === username);
+    if (username) results = results.filter(r => r.authorUsername === username);
     return results;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, p);
+    return [];
+  }
+}
+
+export async function getUserPosts(userId: string, username?: string): Promise<CommunityPost[]> {
+  try {
+    const snap = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
+    const cleanUsername = username?.toLowerCase().trim();
+    return snap.docs
+      .map(d => ({ ...d.data(), id: d.id } as CommunityPost))
+      .filter(post => post.authorId === userId || (!!cleanUsername && post.authorUsername?.toLowerCase() === cleanUsername));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'posts');
     return [];
   }
 }

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Cropper, { Area } from 'react-easy-crop';
 import { Article, Category, SiteConfig, BentoLink, CarouselSlide } from '../types';
 import { 
   X, 
@@ -25,13 +24,11 @@ import {
   Quote,
   List,
   Move,
-  Upload,
   Minus,
   Plus,
   Trash
 } from 'lucide-react';
-import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS, storage } from '../lib/firebase';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
 import { 
   saveArticle, 
   deleteArticle, 
@@ -61,33 +58,65 @@ interface AdminStudioModalProps {
 }
 
 
-const createCroppedImageBlob = async (imageSrc: string, pixelCrop: Area): Promise<Blob> => {
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = imageSrc;
-  });
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(pixelCrop.width));
-  canvas.height = Math.max(1, Math.round(pixelCrop.height));
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Could not create image canvas.');
-  ctx.drawImage(
-    image,
-    pixelCrop.x,
-    pixelCrop.y,
-    pixelCrop.width,
-    pixelCrop.height,
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Image crop failed.')), 'image/jpeg', 0.9);
-  });
-};
+mport React, { useState, useEffect, useRef } from 'react';
+import { Article, Category, SiteConfig, BentoLink, CarouselSlide } from '../types';
+import { 
+  X, 
+  PlusCircle, 
+  Check, 
+  Settings, 
+  Trash2, 
+  Smartphone, 
+  Link as LinkIcon, 
+  ArrowUp, 
+  ArrowDown, 
+  Edit2, 
+  Shield, 
+  Layout, 
+  RefreshCw, 
+  Database,
+  Lock,
+  ExternalLink,
+  Sparkles,
+  AlertTriangle,
+  Image as ImageIcon,
+  Type,
+  Quote,
+  List,
+  Move,
+  Minus,
+  Plus,
+  Trash
+} from 'lucide-react';
+import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
+import { 
+  saveArticle, 
+  deleteArticle, 
+  saveSiteConfig, 
+  saveBentoLinks, 
+  setArticleFeaturedStatus,
+  syncAuthorToAllCloudArticles,
+  syncAdminAuthorProfile
+} from '../lib/cms';
+import { 
+  getCarouselSlides, 
+  addCarouselSlide, 
+  updateCarouselSlide, 
+  deleteCarouselSlide 
+} from '../lib/community';
+
+interface AdminStudioModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onArticlePublished: (article: Article) => void;
+  articles: Article[];
+  onDeleteArticle: (slug: string) => void;
+  siteConfig: SiteConfig;
+  onUpdateSiteConfig: (config: SiteConfig) => void;
+  bentoLinks: BentoLink[];
+  onUpdateBentoLinks: (links: BentoLink[]) => void;
+}
+
 
 export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   isOpen,
@@ -500,14 +529,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   ]);
   const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
   const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false);
-  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
-  const [cropTarget, setCropTarget] = useState<'cover' | 'inline' | 'avatar' | 'slide'>('cover');
-  const [cropBlockIndex, setCropBlockIndex] = useState<number | null>(null);
-  const [cropAspect, setCropAspect] = useState(16 / 9);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
-  const [isUploadingCroppedImage, setIsUploadingCroppedImage] = useState(false);
   const cropFileInputRef = useRef<HTMLInputElement | null>(null);
 
 
@@ -747,76 +768,18 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setPublishError(null);
   };
 
-  // Cloud image pipeline: local file -> crop modal -> Firebase Storage -> public URL.
-  const openImageCropper = (file: File, target: 'cover' | 'inline' | 'avatar' | 'slide', blockIndex: number | null = null) => {
-    if (!file.type.startsWith('image/')) {
-      setPublishError('Please select an image file.');
-      return;
-    }
-    if (file.size > 12 * 1024 * 1024) {
-      setPublishError('Image is too large. Please choose an image under 12 MB.');
-      return;
-    }
-    setPublishError(null);
-    setCropTarget(target);
-    setCropBlockIndex(blockIndex);
-    setCropAspect(target === 'avatar' ? 1 : target === 'slide' ? 16 / 6 : target === 'inline' ? 16 / 9 : 16 / 9);
-    setCrop({ x: 0, y: 0 });
-    setZoom(1);
-    setCroppedAreaPixels(null);
-    setCropImageSrc(URL.createObjectURL(file));
+  // Images are URL-only in this no-Storage build.
+  const handleAvatarUpload = (_e: React.ChangeEvent<HTMLInputElement>) => {
+    setPublishError('Firebase Storage is disabled. Paste a public image URL in the Author Picture field.');
   };
-
-  const handleCoverUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) openImageCropper(file, 'cover');
-    e.currentTarget.value = '';
+  const handleCoverUpload = (_e: React.ChangeEvent<HTMLInputElement>) => {
+    setPublishError('Firebase Storage is disabled. Paste a public image URL in the Cover Image field.');
   };
-
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) openImageCropper(file, 'avatar');
-    e.currentTarget.value = '';
+  const handleSlideUpload = (_e: React.ChangeEvent<HTMLInputElement>) => {
+    setCarouselErrorMessage('Firebase Storage is disabled. Paste a public image URL for the carousel image.');
   };
-
-  const handleSlideUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) openImageCropper(file, 'slide');
-    e.currentTarget.value = '';
-  };
-
-  const handleInlineImageUpload = (e: React.ChangeEvent<HTMLInputElement>, blockIndex: number) => {
-    const file = e.target.files?.[0];
-    if (file) openImageCropper(file, 'inline', blockIndex);
-    e.currentTarget.value = '';
-  };
-
-  const uploadCroppedImage = async () => {
-    if (!cropImageSrc || !croppedAreaPixels || !auth.currentUser) return;
-    setIsUploadingCroppedImage(true);
-    try {
-      const blob = await createCroppedImageBlob(cropImageSrc, croppedAreaPixels);
-      const safeName = `${cropTarget}-${Date.now()}.jpg`;
-      const fileRef = storageRef(storage, `article-images/${auth.currentUser.uid}/${safeName}`);
-      const snapshot = await uploadBytes(fileRef, blob, { contentType: 'image/jpeg', cacheControl: 'public,max-age=31536000,immutable' });
-      const url = await getDownloadURL(snapshot.ref);
-      if (cropTarget === 'cover') {
-        setNewCoverImage(url);
-      } else if (cropTarget === 'avatar') {
-        setAuthorAvatarUrl(url);
-      } else if (cropTarget === 'slide') {
-        setNewSlideImageUrl(url);
-      } else if (cropTarget === 'inline' && cropBlockIndex !== null) {
-        setContentBlocks(prev => prev.map((block, i) => i === cropBlockIndex ? { ...block, type: 'image', imageUrl: url, imageAlt: block.imageAlt || 'Article image' } : block));
-      }
-      setCropImageSrc(null);
-      setCropBlockIndex(null);
-    } catch (error: any) {
-      console.error('Failed to upload cropped image:', error);
-      setPublishError(`Image upload failed: ${error.message || 'Check Firebase Storage rules.'}`);
-    } finally {
-      setIsUploadingCroppedImage(false);
-    }
+  const handleInlineImageUpload = (_e: React.ChangeEvent<HTMLInputElement>, _blockIndex: number) => {
+    setPublishError('Firebase Storage is disabled. Paste a public image URL in the image block.');
   };
 
   const addContentBlock = (type: Article['content'][number]['type']) => {
@@ -1120,13 +1083,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                             className="w-full px-3 py-2 border-2 border-black font-mono text-xs focus:outline-none bg-white" 
                             placeholder="https://images.unsplash.com/..."
                           />
-                          <div className="flex items-center gap-2">
-                            <label className="px-3 py-1.5 bg-[var(--color-primary)] border-2 border-black font-mono text-[10px] font-bold cursor-pointer uppercase flex items-center gap-1.5">
-                              <Upload className="w-3 h-3" /> UPLOAD & CROP
-                              <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
-                            </label>
-                            <span className="font-mono text-[10px] text-neutral-500">JPG, PNG, WebP</span>
-                          </div>
                         </div>
                       </div>
                     </div>
@@ -1385,10 +1341,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                     <div className="space-y-2 border-2 border-black p-3 bg-neutral-50">
                       <div className="flex items-center justify-between gap-3">
                         <label className="font-mono text-xs font-bold uppercase text-black block">Cover Image</label>
-                        <label className="px-3 py-2 bg-[var(--color-primary)] border-2 border-black font-display font-black text-xs uppercase cursor-pointer hover:bg-[var(--color-secondary)] flex items-center gap-1.5">
-                          <Upload className="w-3.5 h-3.5" /> UPLOAD & CROP
-                          <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
-                        </label>
                       </div>
                       <input
                         type="url"
@@ -1398,7 +1350,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         className="w-full px-3 py-2 border-2 border-black font-mono text-xs bg-white"
                       />
                       {newCoverImage && <img src={newCoverImage} alt="Cover preview" className="w-full h-40 object-cover border-2 border-black" />}
-                      <p className="font-mono text-[10px] text-neutral-500 uppercase">Uploaded images are cropped and stored in Firebase Storage.</p>
+                      <p className="font-mono text-[10px] text-neutral-500 uppercase">Paste a public image URL. Firebase Storage is disabled.</p>
                     </div>
 
                     {/* Advanced Block Editor */}
@@ -1406,7 +1358,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-black pb-3">
                         <div>
                           <h4 className="font-display font-black text-lg uppercase">Article Block Editor</h4>
-                          <p className="font-mono text-[10px] uppercase text-neutral-500">Drag blocks to reorder. Images are uploaded, cropped and cloud-persisted.</p>
+                          <p className="font-mono text-[10px] uppercase text-neutral-500">Drag blocks to reorder. Images are stored as public URLs in Firestore.</p>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {([
@@ -1440,7 +1392,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                               <div className="space-y-2">
                                 {block.imageUrl ? <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-64 object-cover border-2 border-black" /> : <div className="h-32 border-2 border-dashed border-black flex items-center justify-center font-mono text-xs">NO IMAGE SELECTED</div>}
                                 <div className="flex flex-wrap gap-2">
-                                  <label className="px-3 py-2 bg-black text-white font-mono text-xs font-bold cursor-pointer flex items-center gap-1.5"> <Upload className="w-3.5 h-3.5" /> UPLOAD & CROP <input type="file" accept="image/*" className="hidden" onChange={(e) => handleInlineImageUpload(e,index)} /> </label>
                                   <input type="url" value={block.imageUrl || ''} onChange={(e) => updateContentBlock(index,{imageUrl:e.target.value})} placeholder="Or paste image URL" className="flex-1 min-w-[220px] px-3 py-2 border-2 border-black font-mono text-xs" />
                                 </div>
                                 <input value={block.imageAlt || ''} onChange={(e)=>updateContentBlock(index,{imageAlt:e.target.value})} placeholder="Alt text" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
@@ -2086,26 +2037,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               </div>
             )}
 
-          </div>
-        )}
-
-        {/* Integrated image crop modal */}
-        {cropImageSrc && (
-          <div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4">
-            <div className="w-full max-w-3xl bg-white border-4 border-black neo-shadow-lg overflow-hidden">
-              <div className="px-4 py-3 bg-[var(--color-primary)] border-b-4 border-black flex items-center justify-between">
-                <div><h3 className="font-display font-black text-lg uppercase">Crop Image</h3><p className="font-mono text-[10px] uppercase">{cropTarget === 'avatar' ? '1:1 PROFILE' : cropTarget === 'slide' ? 'WIDE CAROUSEL' : '16:9 EDITORIAL'}</p></div>
-                <button type="button" onClick={()=>setCropImageSrc(null)} className="p-2 border-2 border-black bg-white"><X className="w-5 h-5" /></button>
-              </div>
-              <div className="relative h-[55vh] min-h-[320px] bg-neutral-900">
-                <Cropper image={cropImageSrc} crop={crop} zoom={zoom} aspect={cropAspect} onCropChange={setCrop} onZoomChange={setZoom} onCropComplete={(_,pixels)=>setCroppedAreaPixels(pixels)} objectFit="contain" />
-              </div>
-              <div className="p-4 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center border-t-4 border-black bg-neutral-100">
-                <label className="font-mono text-xs font-bold uppercase flex items-center gap-2 flex-1">ZOOM <input type="range" min={1} max={3} step={0.05} value={zoom} onChange={(e)=>setZoom(Number(e.target.value))} className="w-full" /></label>
-                <button type="button" onClick={()=>setCropImageSrc(null)} className="px-4 py-2 border-2 border-black bg-white font-display font-black text-xs uppercase">CANCEL</button>
-                <button type="button" disabled={isUploadingCroppedImage} onClick={uploadCroppedImage} className="px-5 py-2 border-2 border-black bg-[var(--color-primary)] font-display font-black text-xs uppercase disabled:opacity-50">{isUploadingCroppedImage ? 'UPLOADING...' : 'CROP & SAVE TO CLOUD'}</button>
-              </div>
-            </div>
           </div>
         )}
 

@@ -4,7 +4,7 @@
 - Project: `krishficient-portfolio`
 - Firestore database: `(default)`
 - Google Authentication: required
-- Firebase Storage: required for cropped image uploads
+- Firebase Storage: not used
 
 ## Vercel environment variables
 Set these for the production deployment:
@@ -40,8 +40,8 @@ The admin profile is linked into site configuration and every new/synchronized m
 ## Custom categories
 Admin-created categories are stored in `siteConfig/global.customCategories` and are immediately available in the article editor and public Blog category filter.
 
-## Firebase Storage
-The admin image pipeline uploads cropped cover, inline, avatar, and carousel images to `article-images/<adminUid>/...`. Deploy `storage.rules` to the project bucket before using uploads.
+## Images
+Image fields use public HTTPS image URLs stored in Firestore. No Firebase Storage bucket or storage rules are required.
 
 ## Profile synchronization
-Deploy `firestore.rules` and `storage.rules`. Users can upload their own profile image under `profile-images/{uid}`. Profile changes propagate to their existing community posts and comments.
+Deploy `firestore.rules`. Users can update their profile image by pasting a public image URL. Profile changes propagate to their existing community posts and comments.

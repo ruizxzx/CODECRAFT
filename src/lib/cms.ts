@@ -1,5 +1,6 @@
 import { 
   collection, 
+  collectionGroup,
   doc, 
   getDoc, 
   getDocs, 
@@ -7,6 +8,7 @@ import {
   deleteDoc, 
   onSnapshot, 
   query, 
+  where,
   orderBy, 
   serverTimestamp,
   Timestamp,
@@ -173,6 +175,19 @@ export async function syncAdminAuthorProfile(author: {
   if (existingUser.exists()) batch.update(userRef, profileData);
   else batch.set(userRef, profileData);
   await batch.commit();
+
+  // Keep the canonical admin identity synchronized across community content.
+  const contentWrites: Array<{ ref: any; data: any }> = [];
+  const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', uid)));
+  postsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: { authorName: profileData.displayName, authorAvatar: profileData.photoURL, authorUsername: username, updatedAt: serverTimestamp() } }));
+  const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', uid)));
+  commentsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: { authorName: profileData.displayName, authorAvatar: profileData.photoURL, authorUsername: username, updatedAt: serverTimestamp() } }));
+  for (let i = 0; i < contentWrites.length; i += 450) {
+    const contentBatch = writeBatch(db);
+    contentWrites.slice(i, i + 450).forEach(w => contentBatch.update(w.ref, w.data));
+    await contentBatch.commit();
+  }
+
   return { uid, username };
 }
 

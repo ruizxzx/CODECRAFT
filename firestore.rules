@@ -89,13 +89,13 @@ service cloud.firestore {
       }
 
       match /upvotes/{postId} {
-        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow read: if true;
         allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().postId == postId;
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
 
       match /reposts/{postId} {
-        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow read: if true;
         allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().postId == postId;
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
