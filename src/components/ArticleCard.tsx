@@ -127,16 +127,16 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
             <div className="pt-4 border-t-2 border-black flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
                 <img
-                  src={siteConfig?.authorAvatarUrl || article.author.avatar}
-                  alt={siteConfig?.authorName || article.author.name}
+                  src={article.author.avatar}
+                  alt={article.author.name}
                   className="w-8 h-8 rounded-none border-2 border-black object-cover"
                 />
                 <div>
                   <div className="font-display font-black text-xs text-black">
-                    <span className="inline-flex items-center gap-1">{siteConfig?.authorName || article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
+                    <span className="inline-flex items-center gap-1">{article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
                   </div>
                   <div className="font-mono text-[10px] text-neutral-500">
-                    {siteConfig?.authorRole || "Lead Developer"}
+                    {article.author.role || "Author"}
                   </div>
                 </div>
               </div>
@@ -232,12 +232,12 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
       <div className="px-5 py-3 border-t-2 border-black bg-gray-50 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <img
-            src={siteConfig?.authorAvatarUrl || article.author.avatar}
-            alt={siteConfig?.authorName || article.author.name}
+            src={article.author.avatar}
+            alt={article.author.name}
             className="w-6 h-6 border border-black object-cover"
           />
           <span className="font-display font-bold text-xs text-neutral-900">
-            <span className="inline-flex items-center gap-1">{siteConfig?.authorName || article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
+            <span className="inline-flex items-center gap-1">{article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
           </span>
         </div>
 

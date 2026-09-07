@@ -18,12 +18,16 @@ import {
   ChevronRight,
   Sparkles,
   Layers,
-  Terminal
+  Terminal,
+  List,
+  HeartPulse
 } from 'lucide-react';
 import { ArticleCard } from './ArticleCard';
 import { CommentsSection } from './CommentsSection';
 import { auth, loginWithGoogle } from '../lib/firebase';
 import { getArticleLikeStatus, toggleArticleLike } from '../lib/community';
+import { recordArticleView, ARTICLE_REACTIONS, getArticleReaction, setArticleReaction, getSeriesArticles } from '../lib/cms';
+import type { ArticleReaction } from '../lib/cms';
 import { useAuthState } from 'react-firebase-hooks/auth';
 
 interface ArticleViewProps {
@@ -54,6 +58,14 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [fontSize, setFontSize] = useState<'normal' | 'large'>('normal');
   const [scrollProgress, setScrollProgress] = useState(0);
   const [user] = useAuthState(auth);
+  const [reaction, setReaction] = useState<ArticleReaction|null>(null);
+  const [reactionBusy, setReactionBusy] = useState(false);
+  const [seriesArticles, setSeriesArticles] = useState<Article[]>([]);
+
+  useEffect(() => { void recordArticleView(article.slug, user?.uid); }, [article.slug, user?.uid]);
+
+  useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
+  useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
 
   // Check if current user has liked this article in Firestore
   useEffect(() => {
@@ -116,7 +128,11 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   // Related articles (same category or latest excluding current)
   const relatedArticles = allArticles
     .filter((a) => a.slug !== article.slug)
-    .slice(0, 3);
+    .map(a => ({ a, score: (a.category === article.category ? 4 : 0) + (a.tags||[]).filter(t => (article.tags||[]).map(x=>x.toLowerCase()).includes(String(t).toLowerCase())).length * 2 }))
+    .sort((x,y) => y.score - x.score || new Date(y.a.publishedAt).getTime() - new Date(x.a.publishedAt).getTime())
+    .slice(0, 3)
+    .map(x=>x.a);
+  const toc = article.content.map((b,i)=>({b,i})).filter(x=>x.b.type==='heading2'||x.b.type==='heading3');
 
   return (
     <div className="w-full bg-white min-h-screen">
@@ -217,19 +233,19 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         <div className="p-4 bg-white neo-border neo-shadow mb-10 flex flex-wrap items-center justify-between gap-4">
           <button type="button" onClick={() => { const u = article.author.username || siteConfig.authorProfileUsername; if (u && onOpenAuthorProfile) onOpenAuthorProfile(u); }} className="flex items-center space-x-3.5 text-left">
             <img
-              src={siteConfig.authorAvatarUrl || article.author.avatar}
-              alt={siteConfig.authorName || article.author.name}
+              src={article.author.avatar}
+              alt={article.author.name}
               className="w-12 h-12 neo-border-2 object-cover"
             />
             <div>
               <div className="font-display font-black text-base text-black flex items-center space-x-1.5">
-                <span className="inline-flex items-center gap-1">{siteConfig.authorName || article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
+                <span className="inline-flex items-center gap-1">{article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
                 <span className="text-[11px] font-mono font-bold bg-[var(--color-success)] text-black px-1.5 py-0.2 border-2 border-black">
                   AUTHOR
                 </span>
               </div>
               <div className="font-mono text-xs text-neutral-500">
-                {siteConfig.authorRole || article.author.role}
+                {article.author.role}
               </div>
             </div>
           </button>
@@ -246,6 +262,33 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             </div>
           </div>
         </div>
+
+        {article.republishedBy && (
+          <div className="mb-8 border-2 border-black bg-[var(--color-primary)] p-3 font-mono text-xs flex flex-wrap items-center gap-2">
+            <span>REPUBLISHED BY</span>
+            {article.republishedBy.avatar && <img src={article.republishedBy.avatar} alt="" className="w-6 h-6 border-2 border-black object-cover" />}
+            <strong>@{article.republishedBy.username || 'krishsarkar'}</strong>
+            <span>with credit to the original creator</span>
+          </div>
+        )}
+
+        {article.seriesId && seriesArticles.length > 0 && (
+          <aside className="mb-10 border-4 border-black p-4 bg-neutral-50">
+            <div className="font-display font-black uppercase flex items-center gap-2"><List className="w-4 h-4"/> {article.seriesName || 'Article Series'}</div>
+            <div className="mt-3 grid gap-2">
+              {seriesArticles.map((item)=><button key={item.slug} onClick={()=>onSelectArticle(item.slug)} className={`text-left border-2 border-black p-2 font-mono text-xs ${item.slug===article.slug?'bg-[var(--color-primary)] font-black':'bg-white'}`}>{item.seriesOrder ? `${item.seriesOrder}. ` : ''}{item.title}</button>)}
+            </div>
+          </aside>
+        )}
+
+        {toc.length > 0 && (
+          <nav className="mb-10 border-4 border-black bg-neutral-50 p-4 neo-shadow">
+            <div className="font-display font-black uppercase mb-3">Table of contents</div>
+            <div className="grid gap-1">
+              {toc.map(({b,i})=><button key={i} onClick={()=>document.getElementById(`article-block-${i}`)?.scrollIntoView({behavior:'smooth',block:'start'})} className={`text-left font-mono text-xs py-1 ${b.type==='heading3'?'pl-5':'font-black'}`}>{b.content}</button>)}
+            </div>
+          </nav>
+        )}
 
         {/* Featured Cover Image */}
         <div className="mb-12 neo-border neo-shadow-lg overflow-hidden bg-neutral-900">
@@ -276,6 +319,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               return (
                 <h2 
                   key={index} 
+                  id={`article-block-${index}`}
                   className="font-display font-black text-2xl sm:text-3xl text-black tracking-tight mt-12 pt-6 border-t-2 border-black/20 uppercase"
                 >
                   {block.content}
@@ -287,6 +331,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               return (
                 <h3 
                   key={index} 
+                  id={`article-block-${index}`}
                   className="font-display font-black text-xl sm:text-2xl text-black mt-8"
                 >
                   {block.content}
@@ -409,6 +454,13 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
             return null;
           })}
+        </div>
+
+        <div className="my-10 border-4 border-black bg-white p-5 neo-shadow">
+          <div className="font-display font-black uppercase mb-3 flex items-center gap-2"><HeartPulse className="w-4 h-4"/> Reader reactions</div>
+          <div className="flex flex-wrap gap-2">
+            {ARTICLE_REACTIONS.map((r)=><button key={r} disabled={reactionBusy} onClick={async()=>{let u=user;if(!u){try{u=await loginWithGoogle();}catch{return}} if(!u)return;setReactionBusy(true);try{const next=reaction===r?null:r;await setArticleReaction(article.slug,u.uid,next);setReaction(next);}catch(e){console.warn(e)}finally{setReactionBusy(false)}}} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${reaction===r?'bg-[var(--color-primary)]':'bg-white'}`}>{r}</button>)}
+          </div>
         </div>
 
         {/* Tags list */}

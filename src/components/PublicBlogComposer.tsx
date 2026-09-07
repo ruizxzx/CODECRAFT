@@ -48,6 +48,8 @@ export const PublicBlogComposer: React.FC<Props> = ({
   const [coverImage, setCoverImage] = useState('');
   const [coverImageAlt, setCoverImageAlt] = useState('');
   const [coverImageCaption, setCoverImageCaption] = useState('');
+  const [seriesName, setSeriesName] = useState('');
+  const [seriesOrder, setSeriesOrder] = useState('');
   const [blocks, setBlocks] = useState<ArticleContentBlock[]>([{ type: 'paragraph', content: '' }]);
   const [publishing, setPublishing] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -64,6 +66,8 @@ export const PublicBlogComposer: React.FC<Props> = ({
     setCoverImage(initialPost.coverImage || '');
     setCoverImageAlt(initialPost.coverImageAlt || '');
     setCoverImageCaption(initialPost.coverImageCaption || '');
+    setSeriesName(initialPost.seriesName || '');
+    setSeriesOrder(initialPost.seriesOrder ? String(initialPost.seriesOrder) : '');
     setBlocks(Array.isArray(initialPost.contentBlocks) && initialPost.contentBlocks.length
       ? initialPost.contentBlocks
       : [{ type: 'paragraph', content: initialPost.content || '' }]);
@@ -149,6 +153,9 @@ export const PublicBlogComposer: React.FC<Props> = ({
         tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 20),
         readingTimeMinutes: readingTime,
         contentBlocks: blocks,
+        seriesId: seriesName.trim() ? seriesName.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60) : '',
+        seriesName: seriesName.trim(),
+        seriesOrder: seriesName.trim() && seriesOrder ? Math.max(1, Number(seriesOrder)||1) : undefined,
       };
 
       let post: any;

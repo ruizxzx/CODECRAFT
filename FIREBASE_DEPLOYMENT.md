@@ -29,3 +29,11 @@ Keep any existing `comments / authorId / Collection group / Ascending` configura
 The profile post aggregation no longer relies on a collection-group `posts` index; it reads the existing public community collections and merges matching posts with the existing root `posts` collection.
 
 Existing blog/discussion documents are preserved. New blog/discussion posts continue using the original `posts` collection so old profiles and historical content remain compatible.
+
+
+## V31
+- Deploy `firestore.rules` from this build.
+- No new composite indexes are required.
+- New protected collections: `articleRevisions` (admin only) and `articleViews` (signed-in users may create their own view receipt; admins may read).
+- Article reactions are stored under `articles/{slug}/reactions/{userId}`.
+- Series queries use a single-field equality filter and do not require a composite index.

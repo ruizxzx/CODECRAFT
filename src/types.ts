@@ -35,6 +35,12 @@ export interface Article {
   pinned?: boolean;
   trending?: boolean;
   collaborators?: Array<{ uid?: string; username?: string; name?: string; role?: string }>;
+  seriesId?: string;
+  seriesName?: string;
+  seriesOrder?: number;
+  reactionCounts?: Record<string, number>;
+  viewsCount?: number;
+  republishedBy?: { uid?: string; username?: string; name?: string; avatar?: string };
   sourcePostId?: string;
   origin?: 'admin' | 'community_blog' | 'community_post';
   promotedToArticleSlug?: string;
@@ -51,7 +57,6 @@ export interface Article {
     verificationColor?: string;
   };
   content: ArticleContentBlock[];
-  viewsCount?: number;
   clapsCount?: number;
 }
 
@@ -177,6 +182,9 @@ export interface CommunityPost {
   readingTimeMinutes?: number;
   contentBlocks?: ArticleContentBlock[];
   collaborators?: Array<{ uid?: string; username?: string; name?: string; role?: string }>;
+  seriesId?: string;
+  seriesName?: string;
+  seriesOrder?: number;
   sourcePostId?: string;
   origin?: 'admin' | 'community_blog' | 'community_post';
   promotedToArticleSlug?: string;

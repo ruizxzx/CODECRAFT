@@ -298,17 +298,17 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-white text-black neo-border flex items-center justify-center font-display font-black text-base overflow-hidden">
                     <img 
-                      src={siteConfig.authorAvatarUrl || featuredArticle.author.avatar} 
-                      alt={siteConfig.authorName || featuredArticle.author.name} 
+                      src={featuredArticle.author.avatar} 
+                      alt={featuredArticle.author.name} 
                       className="w-full h-full object-cover" 
                     />
                   </div>
                   <div>
                     <div className="text-white font-bold text-sm">
-                      {siteConfig.authorName || featuredArticle.author.name}
+                      {featuredArticle.author.name}
                     </div>
                     <div className="text-neutral-400 text-xs font-mono">
-                      {siteConfig.authorRole || featuredArticle.author.role}
+                      {featuredArticle.author.role}
                     </div>
                   </div>
                 </div>

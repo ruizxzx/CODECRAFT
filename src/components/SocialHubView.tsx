@@ -142,6 +142,5 @@ export const SocialHubView:React.FC<Props>=({userProfile,onNavigate,siteConfig})
   {selected&&simpleComposer==='discussion'&&null}
  </div>;
 };
-const BookIcon=(p:any)=><span {...p} className="inline-block w-4 h-4 border-2 border-current"/>;
 const Modal:React.FC<{title:string;close:()=>void;children:React.ReactNode}>=({title,close,children})=><div className="fixed inset-0 z-[200] bg-black/70 p-4 grid place-items-center"><div className="bg-white border-4 border-black w-full max-w-xl neo-shadow-lg max-h-[90vh] overflow-auto"><div className="bg-[var(--color-primary)] border-b-4 border-black p-4 flex justify-between"><h2 className="font-display font-black uppercase">{title}</h2><button onClick={close}><X/></button></div><div className="p-5 space-y-4">{children}</div></div></div>;
 const Empty=({text}:{text:string})=><div className="border-4 border-dashed border-black p-10 text-center font-mono text-xs">{text}</div>;

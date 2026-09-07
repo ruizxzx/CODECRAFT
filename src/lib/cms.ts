@@ -14,7 +14,8 @@ import {
   serverTimestamp,
   Timestamp,
   writeBatch,
-  limit 
+  limit,
+  increment
 } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
 import { deletePost } from './community';
@@ -380,12 +381,48 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
   };
 }
 
+
+export async function recordArticleView(slug:string, viewerId?:string):Promise<void>{
+  // Store one view receipt per signed-in user/article/day. This avoids allowing a
+  // public client to mutate the protected article aggregate directly.
+  if(!viewerId) return;
+  const day=new Date().toISOString().slice(0,10);
+  const ref=doc(db,'articleViews',`${slug}_${viewerId}_${day}`);
+  try {
+    const existing=await getDoc(ref);
+    if(!existing.exists()) await setDoc(ref,{slug,userId:viewerId,day,createdAt:serverTimestamp()});
+  } catch(e){ console.warn('Article view tracking failed:',e); }
+}
+
+export const ARTICLE_REACTIONS = ['like','useful','insightful','interesting'] as const;
+export type ArticleReaction = typeof ARTICLE_REACTIONS[number];
+export async function setArticleReaction(slug:string,userId:string,reaction:ArticleReaction|null):Promise<void>{
+  if(!userId) throw new Error('Sign in required.');
+  const ref=doc(db,'articles',slug,'reactions',userId);
+  if(reaction) await setDoc(ref,{userId,reaction,updatedAt:serverTimestamp()},{merge:true});
+  else { const old=await getDoc(ref); if(old.exists()) await deleteDoc(ref); }
+}
+export async function getArticleReaction(slug:string,userId:string):Promise<ArticleReaction|null>{
+  if(!userId) return null; const s=await getDoc(doc(db,'articles',slug,'reactions',userId)); return s.exists()?(s.data()?.reaction||null):null;
+}
+export async function getSeriesArticles(seriesId:string):Promise<Article[]>{
+  if(!seriesId) return [];
+  const snap=await getDocs(query(collection(db,'articles'),where('seriesId','==',seriesId),limit(100)));
+  return snap.docs.map(d=>({...d.data(),id:d.id,slug:(d.data() as any).slug||d.id} as Article)).sort((a:any,b:any)=>(a.seriesOrder||0)-(b.seriesOrder||0));
+}
+export async function createArticleRevision(article:Article):Promise<void>{
+  if(!checkIsAdmin(auth.currentUser?.email)) return;
+  const id=`${article.slug}_${Date.now()}`;
+  await setDoc(doc(db,'articleRevisions',id),{article,slug:article.slug,createdBy:auth.currentUser?.uid||'',createdAt:serverTimestamp()});
+}
+
 export async function saveArticle(article: Article): Promise<Article> {
   if (!article.title || !article.slug) {
     throw new Error("Article must have a title and a valid slug.");
   }
   const articleDocRef = doc(db, 'articles', article.slug);
   const existingSnap = await getDoc(articleDocRef);
+  if(existingSnap.exists() && checkIsAdmin(auth.currentUser?.email)) { try { await createArticleRevision({...existingSnap.data(), id: existingSnap.id, slug: existingSnap.id} as Article); } catch(e){ console.warn('Revision snapshot failed:',e); } }
   const isNewArticle = !existingSnap.exists();
   const dataToSave = stripUndefinedDeep({
     ...article,
@@ -455,6 +492,10 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
     origin: 'community_blog',
     sourcePostId: post.id,
     collaborators: collaborateAsEditor ? [{uid:post.authorId,username:post.authorUsername,name:post.authorName,role:'Original Creator'}] : [],
+    republishedBy: {uid: auth.currentUser?.uid || '', username: 'krishsarkar', name: 'Krish', avatar: auth.currentUser?.photoURL || DEFAULT_SITE_CONFIG.authorAvatarUrl},
+    seriesId: (post as any).seriesId || undefined,
+    seriesName: (post as any).seriesName || undefined,
+    seriesOrder: (post as any).seriesOrder || undefined,
     author: {
       name: post.authorName,
       role: 'Community Creator',
