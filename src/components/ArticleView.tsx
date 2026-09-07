@@ -267,6 +267,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         <h1 className="font-display font-black text-3xl sm:text-5xl md:text-6xl text-black tracking-tight leading-[1.05] mb-6">
           {article.title}
         </h1>
+        {article.editedAt && <div className="mb-4 inline-block px-2 py-1 border-2 border-black bg-neutral-100 font-mono text-[10px] font-black uppercase">EDITED</div>}
+        {article.editReviewStatus === 'pending' && <div className="mb-4 ml-2 inline-block px-2 py-1 border-2 border-black bg-yellow-200 font-mono text-[10px] font-black uppercase">EDIT PENDING REVIEW</div>}
 
         {/* Excerpt */}
         <p className="font-serif text-xl sm:text-2xl text-neutral-800 leading-relaxed font-normal italic mb-8 border-l-4 border-black pl-4 py-1">
@@ -302,24 +304,6 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             </div>
           </div>
         </div>
-
-        {article.editedAt && article.sourceEditPendingApproval && (
-          <div className="mb-8 border-4 border-black bg-yellow-300 p-4 font-mono text-xs font-bold">
-            EDITED BY @{resolvedOriginalAuthor?.username || article.originalAuthor?.username || 'creator'} · {article.editedAt}. This republished article reflects a creator edit that has not yet been re-approved by OFFSCRPT administration. Verify this updated version before relying on it.
-          </div>
-        )}
-        {article.editedAt && !article.sourceEditPendingApproval && (
-          <div className="mb-6 border-2 border-black bg-neutral-100 p-2 font-mono text-[10px] font-bold">EDITED BY @{resolvedOriginalAuthor?.username || article.originalAuthor?.username || 'creator'} · {article.editedAt}</div>
-        )}
-
-        {article.editedAt && article.sourceEditPendingApproval && (
-          <div className="mb-8 border-4 border-black bg-yellow-300 p-4 font-mono text-xs font-bold">
-            EDITED BY @{resolvedOriginalAuthor?.username || article.originalAuthor?.username || 'creator'} · {article.editedAt}. This republished article reflects an edit made by the original creator that has not yet been re-approved by OFFSCRPT administration. Verify this updated version before relying on it.
-          </div>
-        )}
-        {article.editedAt && !article.sourceEditPendingApproval && (
-          <div className="mb-6 border-2 border-black bg-neutral-100 p-2 font-mono text-[10px] font-bold">EDITED BY @{resolvedOriginalAuthor?.username || article.originalAuthor?.username || 'creator'} · {article.editedAt}</div>
-        )}
 
         {article.republishedBy && (
           <div className="mb-8 border-2 border-black bg-[var(--color-primary)] p-3 font-mono text-xs flex flex-wrap items-center gap-2">

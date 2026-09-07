@@ -1,14 +1,16 @@
-# OFFSCRPT V36
+# OFFSCRPT V36 — Published Creator Edit Synchronization
 
-## Republished creator-edit synchronization
-- Public/root and community blog edits now synchronize atomically to a linked main article when that source blog is republished.
-- Main article retains the original creator as author and the admin as republisher.
-- A creator edit sets `sourceEditPendingApproval=true` on the linked main article.
-- Main article displays an explicit pending-review warning with creator handle and edit time.
-- Master admin can approve the creator edit from Admin Control; approval clears the warning and syncs the source record.
-- Existing source content is preserved; no destructive migration.
+## Fixed
+- Published public creator blogs now resolve their canonical source from both root `posts/{postId}` and `communities/{communityId}/posts/{postId}`.
+- Main publication now live-refreshes from its source post document, so creator edits propagate without requiring a manual page refresh.
+- Public edits to a blog that is already published on Main set `editReviewStatus: pending` and retain the `editedAt` marker.
+- Master Control Posts now recognizes both root `type: blog` and community `postType: blog` records.
+- Added `APPROVE EDIT` in Master Control for published creator blogs with pending edits.
+- Approval clears the pending-review warning while preserving the EDITED marker and sync metadata.
+- Master/admin edits to already-published blogs are automatically marked approved.
+- Article cards, article pages, and public Social/Blogs surfaces display the pending-review state where applicable.
 
-## Public blog editing
-- Existing public blog edits use the same cloud update path as new blogs.
-- Optional fields are sanitized before Firestore writes.
-- Edited timestamps are persisted and surfaced across article cards/views.
+## Data safety
+- Existing creator posts and publications are not deleted or migrated.
+- Republished article identity and creator attribution are preserved.
+- No new Firestore index is required.

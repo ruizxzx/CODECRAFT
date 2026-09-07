@@ -48,11 +48,12 @@ export interface Article {
   isPublished?: boolean;
   mainPublicationStatus?: 'published' | 'unpublished';
   promotedAt?: string;
-  promotedBy?: string;
   editedAt?: string;
-  sourceEditPendingApproval?: boolean;
-  sourceEditApprovedAt?: string;
-  sourceEditApprovedBy?: string;
+  editReviewStatus?: 'pending' | 'approved';
+  editReviewRequestedAt?: string;
+  editReviewedAt?: string;
+  editReviewedBy?: string;
+  promotedBy?: string;
   author: {
     name: string;
     role: string;
@@ -198,10 +199,12 @@ export interface CommunityPost {
   isPublished?: boolean;
   mainPublicationStatus?: 'published' | 'unpublished';
   promotedAt?: string;
-  promotedBy?: string;
   editedAt?: string;
-  sourceEditPendingApproval?: boolean;
-  sourceEditApprovedBy?: string;
+  editReviewStatus?: 'pending' | 'approved';
+  editReviewRequestedAt?: string;
+  editReviewedAt?: string;
+  editReviewedBy?: string;
+  promotedBy?: string;
   clapsCount?: number; // legacy
   upvotesCount: number;
   downvotesCount: number;
@@ -210,7 +213,6 @@ export interface CommunityPost {
   isFeatured: boolean;
   createdAt: string;
   updatedAt: string;
-  editedAt?: string;
   quoteText?: string;
   quotedPostId?: string;
   mentionedUsernames?: string[];

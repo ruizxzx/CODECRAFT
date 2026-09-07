@@ -367,30 +367,81 @@ async function hydrateArticleAuthors(articles: Article[]): Promise<Article[]> {
   return articles.map(a => bySlug.get(a.slug) || a);
 }
 
+async function hydratePublishedSourcePosts(articles: Article[]): Promise<Article[]> {
+  const candidates = articles.filter(a => !!a.sourcePostId && a.origin === 'community_blog' && a.mainPublicationStatus !== 'unpublished');
+  if (!candidates.length) return articles;
+  const hydrated = await Promise.all(candidates.map(async article => {
+    try {
+      let post:any = null;
+      if ((article as any).sourceCommunityId) {
+        const snap = await getDoc(doc(db,'communities',(article as any).sourceCommunityId,'posts',article.sourcePostId!));
+        post = snap.exists() ? { ...snap.data(), id: snap.id } : null;
+      } else {
+        post = await getPost(article.sourcePostId!);
+      }
+      if (!post || post.mainPublicationStatus === 'unpublished') return article;
+      const contentBlocks = Array.isArray(post.contentBlocks) && post.contentBlocks.length ? post.contentBlocks : article.content;
+      return {
+        ...article,
+        title: post.title || article.title,
+        excerpt: post.excerpt || article.excerpt,
+        coverImage: post.coverImage || article.coverImage,
+        coverImageAlt: post.coverImageAlt || article.coverImageAlt,
+        coverImageCaption: post.coverImageCaption || article.coverImageCaption,
+        category: post.category || article.category,
+        tags: Array.isArray(post.tags) ? post.tags : article.tags,
+        readingTimeMinutes: post.readingTimeMinutes || article.readingTimeMinutes,
+        seriesId: post.seriesId || article.seriesId,
+        seriesName: post.seriesName || article.seriesName,
+        seriesOrder: post.seriesOrder || article.seriesOrder,
+        content: contentBlocks,
+        editedAt: post.editedAt || article.editedAt,
+        editReviewStatus: post.editReviewStatus || article.editReviewStatus,
+        editReviewRequestedAt: post.editReviewRequestedAt || article.editReviewRequestedAt,
+        editReviewedAt: post.editReviewedAt || article.editReviewedAt,
+        editReviewedBy: post.editReviewedBy || article.editReviewedBy,
+        originalAuthor: article.originalAuthor,
+        author: article.author,
+      } as Article;
+    } catch { return article; }
+  }));
+  const bySlug = new Map(hydrated.map(a => [a.slug, a]));
+  return articles.map(a => bySlug.get(a.slug) || a);
+}
+
 export function subscribeArticles(callback: (articles: Article[]) => void): () => void {
   const articlesRef = collection(db, 'articles');
-  return onSnapshot(articlesRef, async (snap) => {
+  let sourceUnsubs: Array<()=>void> = [];
+  let disposed = false;
+  let latestCloudArticles: Article[] = [];
+  const emit = async () => {
+    if(disposed) return;
     const deletedSlugs = await getDeletedSlugs();
-    if (!snap.empty) {
-      const cloudArticles = snap.docs.map(d => {
-        const data = d.data();
-        return {
-          ...data,
-          id: data.id || d.id,
-          slug: data.slug || d.id
-        } as Article;
-      }).filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
-      // Sort by publishedAt desc
-      cloudArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-      hydrateArticleAuthors(cloudArticles).then(hydrated => callback(mergeArticlesWithInitial(hydrated, deletedSlugs))).catch(() => callback(mergeArticlesWithInitial(cloudArticles, deletedSlugs)));
-    } else {
-      const fallback = INITIAL_ARTICLES.filter(a => !deletedSlugs.has(a.slug));
-      callback(fallback);
-    }
-  }, (err) => {
-    console.warn("Real-time articles subscription failed, using local archive:", err);
-    callback(INITIAL_ARTICLES);
+    const visible = latestCloudArticles.filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
+    const hydrated = await hydrateArticleAuthors(visible).then(hydratePublishedSourcePosts);
+    if(!disposed) callback(mergeArticlesWithInitial(hydrated, deletedSlugs));
+  };
+  const resetSourceListeners = (articles:Article[]) => {
+    sourceUnsubs.forEach(u=>u()); sourceUnsubs=[];
+    articles.filter(a=>!!a.sourcePostId && a.origin==='community_blog' && a.mainPublicationStatus!=='unpublished').forEach(article=>{
+      const ref = (article as any).sourceCommunityId
+        ? doc(db,'communities',(article as any).sourceCommunityId,'posts',article.sourcePostId!)
+        : doc(db,'posts',article.sourcePostId!);
+      const unsub=onSnapshot(ref,()=>{ void emit(); },()=>{});
+      sourceUnsubs.push(unsub);
+    });
+  };
+  const unsubArticles=onSnapshot(articlesRef, async snap=>{
+    if(disposed) return;
+    latestCloudArticles=snap.docs.map(d=>{const data=d.data();return {...data,id:(data as any).id||d.id,slug:(data as any).slug||d.id} as Article;});
+    latestCloudArticles.sort((a,b)=>new Date(b.publishedAt||0).getTime()-new Date(a.publishedAt||0).getTime());
+    resetSourceListeners(latestCloudArticles);
+    await emit();
+  }, err=>{
+    console.warn('Real-time articles subscription failed, using local archive:',err);
+    if(!disposed) callback(INITIAL_ARTICLES);
   });
+  return ()=>{ disposed=true; unsubArticles(); sourceUnsubs.forEach(u=>u()); sourceUnsubs=[]; };
 }
 
 export async function fetchAllArticlesForAdmin(): Promise<Article[]> {
@@ -415,7 +466,7 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
         } as Article;
       }).filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
       cloudArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-      const hydrated = await hydrateArticleAuthors(cloudArticles);
+      const hydrated = await hydratePublishedSourcePosts(await hydrateArticleAuthors(cloudArticles));
       return {
         articles: mergeArticlesWithInitial(hydrated, deletedSlugs),
         source: 'firestore'
@@ -547,7 +598,7 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
   if (existingSource) {
     slug = existingSource.id;
     const existingArticle = existingSource.data() as any;
-    const restored = { ...existingArticle, id: existingSource.id, slug: existingSource.id, title: post.title, excerpt: post.excerpt || post.content.slice(0,240), coverImage: post.coverImage || '', coverImageAlt: post.coverImageAlt || post.title, category: post.category || 'Community', tags: Array.isArray(post.tags) ? post.tags : [], content: blocks, author: originalAuthor, originalAuthor, sourcePostId: post.id, sourceCommunityId: (post as any).communityId || undefined, isPublished: true, mainPublicationStatus: 'published', sourceEditPendingApproval: false, updatedAt: serverTimestamp() };
+    const restored = { ...existingArticle, id: existingSource.id, slug: existingSource.id, title: post.title, excerpt: post.excerpt || post.content.slice(0,240), coverImage: post.coverImage || '', coverImageAlt: post.coverImageAlt || post.title, category: post.category || 'Community', tags: Array.isArray(post.tags) ? post.tags : [], content: blocks, author: originalAuthor, originalAuthor, sourcePostId: post.id, sourceCommunityId: (post as any).communityId || undefined, isPublished: true, mainPublicationStatus: 'published', updatedAt: serverTimestamp() };
     await setDoc(existingSource.ref, stripUndefinedDeep(restored), { merge: true });
     try { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: slug, mainPublicationStatus: 'published', updatedAt: serverTimestamp() }); } catch {}
     return { ...existingArticle, id: slug, slug, isPublished: true, mainPublicationStatus: 'published' } as Article;
@@ -570,7 +621,6 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
     origin: 'community_blog',
     isPublished: true,
     mainPublicationStatus: 'published',
-    sourceEditPendingApproval: false,
     sourcePostId: post.id,
     sourceCommunityId: (post as any).communityId || undefined,
     collaborators: collaborateAsEditor ? [{uid:originalAuthor.uid,username:originalAuthor.username,name:originalAuthor.name,role:'Original Creator'}] : [],
@@ -579,6 +629,7 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
     seriesId: (post as any).seriesId || undefined,
     seriesName: (post as any).seriesName || undefined,
     seriesOrder: (post as any).seriesOrder || undefined,
+    editedAt: (post as any).editedAt || undefined,
     author: originalAuthor,
     content: blocks
   } as Article;
@@ -587,30 +638,29 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
   return saved;
 }
 
-
-export async function approveArticleSourceEdit(article: Article): Promise<Article> {
-  const admin = auth.currentUser;
-  if (!admin || !checkIsAdmin(admin.email)) throw new Error('Master admin access required.');
-  if (!article.slug || !article.sourcePostId) throw new Error('This article is not linked to a creator post.');
-  const articleRef = doc(db, 'articles', article.slug);
-  await updateDoc(articleRef, {
-    sourceEditPendingApproval: false,
-    sourceEditApprovedAt: serverTimestamp(),
-    sourceEditApprovedBy: admin.uid,
-    updatedAt: serverTimestamp(),
-  });
+export async function approvePublicBlogEdit(sourcePostId:string, sourceCommunityId?:string, articleSlug?:string): Promise<void> {
+  if (!checkIsAdmin(auth.currentUser?.email)) throw new Error('Master admin access required.');
+  if(!sourcePostId) throw new Error('Source post is required.');
+  let sourceRef = sourceCommunityId ? doc(db,'communities',sourceCommunityId,'posts',sourcePostId) : doc(db,'posts',sourcePostId);
+  const sourceSnap = await getDoc(sourceRef);
+  if(!sourceSnap.exists()) throw new Error('Original creator post was not found.');
+  const source:any = sourceSnap.data();
+  const slug = articleSlug || source.promotedToArticleSlug;
+  if(!slug) throw new Error('No main publication is linked to this creator blog.');
+  const articleRef=doc(db,'articles',slug);
+  const articleSnap=await getDoc(articleRef);
+  if(!articleSnap.exists()) throw new Error('Main article was not found.');
+  const article:any=articleSnap.data();
+  const patch:any={
+    title:source.title||article.title, excerpt:source.excerpt||article.excerpt, coverImage:source.coverImage||article.coverImage, coverImageAlt:source.coverImageAlt||article.coverImageAlt, coverImageCaption:source.coverImageCaption||article.coverImageCaption, category:source.category||article.category, tags:Array.isArray(source.tags)?source.tags:article.tags, readingTimeMinutes:source.readingTimeMinutes||article.readingTimeMinutes, content:Array.isArray(source.contentBlocks)&&source.contentBlocks.length?source.contentBlocks:article.content, editedAt:source.editedAt||article.editedAt, editReviewStatus:'approved', editReviewedAt:serverTimestamp(), editReviewedBy:auth.currentUser?.uid||'', updatedAt:serverTimestamp()
+  };
+  await updateDoc(articleRef, stripUndefinedDeep(patch));
+  await updateDoc(sourceRef,{editReviewStatus:'approved',editReviewedAt:serverTimestamp(),editReviewedBy:auth.currentUser?.uid||'',updatedAt:serverTimestamp()});
   try {
-    const sourceRef = (article as any).sourceCommunityId
-      ? doc(db, 'communities', (article as any).sourceCommunityId, 'posts', article.sourcePostId)
-      : doc(db, 'posts', article.sourcePostId);
-    await updateDoc(sourceRef, {
-      sourceEditPendingApproval: false,
-      sourceEditApprovedAt: serverTimestamp(),
-      sourceEditApprovedBy: admin.uid,
-      updatedAt: serverTimestamp(),
-    });
-  } catch (e) { console.warn('Could not sync source approval flag:', e); }
-  return ({ ...article, sourceEditPendingApproval: false, sourceEditApprovedBy: admin.uid } as Article);
+    if(source.authorId && source.authorId!==auth.currentUser?.uid) {
+      await setDoc(doc(db,'users',source.authorId,'notifications',`edit-approval-${slug}-${Date.now()}`),{type:'blog_edit_approved',actorId:auth.currentUser?.uid||'',actorUsername:'krishsarkar',actorName:'Krish',message:`approved your edited blog: ${source.title||article.title}`.slice(0,200),targetType:'article',targetId:slug,read:false,createdAt:serverTimestamp()});
+    }
+  } catch {}
 }
 
 export async function unpublishMainArticle(article: Article): Promise<void> {

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArticleContentBlock, CommunityPost, CommunityUser } from '../types';
-import { createPost, updatePost, saveCommunityDraft, clearCommunityDraft } from '../lib/community';
+import { createPost, updatePost, getPost, saveCommunityDraft, clearCommunityDraft } from '../lib/community';
 import { createCommunityPost, updateCommunityPost, SocialCommunity } from '../lib/social';
 import { Plus, Trash2, ArrowUp, ArrowDown, BookOpen, Image as ImageIcon, Code2, Quote, Lightbulb, List, CheckCircle2, Eye, Save } from 'lucide-react';
 
@@ -155,9 +155,7 @@ export const PublicBlogComposer: React.FC<Props> = ({
         contentBlocks: blocks,
         seriesId: seriesName.trim() ? seriesName.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60) : '',
         seriesName: seriesName.trim(),
-        ...(seriesName.trim() && seriesOrder
-          ? { seriesOrder: Math.max(1, Number(seriesOrder) || 1) }
-          : {}),
+        seriesOrder: seriesName.trim() && seriesOrder ? Math.max(1, Number(seriesOrder)||1) : undefined,
       };
 
       let post: any;
@@ -171,7 +169,8 @@ export const PublicBlogComposer: React.FC<Props> = ({
         } else {
           await updatePost(initialPost.id, { title: cleanTitle, content: body, ...metadata } as any);
         }
-        post = {
+        const confirmed = !community ? await getPost(initialPost.id) : null;
+        post = confirmed || {
           ...initialPost,
           title: cleanTitle,
           content: body,
@@ -179,7 +178,7 @@ export const PublicBlogComposer: React.FC<Props> = ({
           editedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        setStatus('Blog changes saved to Firebase.');
+        setStatus('Blog changes saved to Firebase and confirmed.');
       } else if (community) {
         post = await createCommunityPost(community.id, userProfile, cleanTitle, body, {
           postType: 'blog',

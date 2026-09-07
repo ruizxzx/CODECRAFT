@@ -76,7 +76,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
               <div className="flex items-center space-x-3">
                 <span className="flex items-center space-x-1">
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>{article.publishedAt}</span>{article.editedAt && <><span>•</span><span className="font-black">EDITED{article.sourceEditPendingApproval ? " · REVIEW PENDING" : ""}</span></>}
+                  <span>{article.publishedAt}</span>
                 </span>
                 <span>•</span>
                 <span className="flex items-center space-x-1">
@@ -106,6 +106,8 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
             >
               {article.title}
             </h2>
+            {article.editedAt && <span className="inline-block mb-3 px-2 py-0.5 border-2 border-black bg-neutral-100 font-mono text-[9px] font-black uppercase">EDITED</span>}
+            {article.editReviewStatus === 'pending' && <span className="inline-block mb-3 ml-1 px-2 py-0.5 border-2 border-black bg-yellow-200 font-mono text-[9px] font-black uppercase">EDIT PENDING REVIEW</span>}
 
             <p className="text-neutral-800 font-serif text-base sm:text-lg leading-relaxed line-clamp-4 mb-6">
               {article.excerpt}
@@ -201,7 +203,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
         {/* Card Content */}
         <div className="p-5">
           <div className="flex items-center space-x-2 text-xs font-mono font-semibold text-neutral-500 mb-2.5">
-            <span>{article.publishedAt}</span>{article.editedAt && <><span>•</span><span className="font-black">EDITED{article.sourceEditPendingApproval ? " · REVIEW PENDING" : ""}</span></>}
+            <span>{article.publishedAt}</span>
             <span>•</span>
             <span>{article.readingTimeMinutes} min read</span>
           </div>

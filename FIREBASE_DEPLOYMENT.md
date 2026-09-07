@@ -1,10 +1,10 @@
-# V33 Firebase Deployment
+# OFFSCRPT V36 Firebase Deployment
 
-No new index is required for V33.
+## Firestore Rules
+Use the included `firestore.rules` if your deployed rules predate V35/V36. V36 does not require a new index.
 
-Publish `firestore.rules` only if your deployed rules are older than the current V32/V33 rules. The creator-attribution repair itself is application-side and does not require a data migration.
+## Indexes
+No manual Firestore index change is required for V36.
 
-Existing articles/posts are preserved.
-
-## V36 update
-Publish the V36 `firestore.rules` in Firebase Console. No new index is required. The rules include the linked-article creator edit path and source-edit approval metadata.
+## Data
+V36 uses the existing `posts`, `communities/*/posts`, `articles`, and notification collections. No migration or destructive data operation is required.
