@@ -1,0 +1,147 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile in the community",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "username": { "type": "string", "maxLength": 32, "pattern": "^[a-zA-Z0-9_]+$" },
+        "displayName": { "type": "string", "maxLength": 64 },
+        "photoURL": { "type": "string", "maxLength": 2048 },
+        "bio": { "type": "string", "maxLength": 500 },
+        "themeColor": { "type": "string", "maxLength": 7, "pattern": "^#[0-9a-fA-F]{6}$" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "username", "displayName", "createdAt", "updatedAt"]
+    },
+    "Username": {
+      "title": "Username",
+      "description": "Map from username to uid to ensure uniqueness",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["uid"]
+    },
+    "Post": {
+      "title": "Post",
+      "description": "A community discussion or blog post",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["discussion", "blog"] },
+        "title": { "type": "string", "maxLength": 256 },
+        "content": { "type": "string", "maxLength": 100000 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorUsername": { "type": "string", "maxLength": 32 },
+        "authorName": { "type": "string", "maxLength": 64 },
+        "authorAvatar": { "type": "string", "maxLength": 2048 },
+        "clapsCount": { "type": "number" },
+        "commentsCount": { "type": "number" },
+        "isFeatured": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["type", "title", "content", "authorId", "authorUsername", "clapsCount", "commentsCount", "createdAt", "updatedAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a post",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "maxLength": 128 },
+        "authorId": { "type": "string", "maxLength": 128 },
+        "authorUsername": { "type": "string", "maxLength": 32 },
+        "authorName": { "type": "string", "maxLength": 64 },
+        "authorAvatar": { "type": "string", "maxLength": 2048 },
+        "content": { "type": "string", "maxLength": 5000 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["postId", "authorId", "authorUsername", "content", "createdAt", "updatedAt"]
+    },
+    "Clap": {
+      "title": "Clap",
+      "description": "A clap on a post",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["postId", "userId", "createdAt"]
+    },
+    "Save": {
+      "title": "Save",
+      "description": "A saved article or community post",
+      "type": "object",
+      "properties": {
+        "itemId": { "type": "string", "maxLength": 128 },
+        "itemType": { "type": "string", "enum": ["article", "post"] },
+        "title": { "type": "string", "maxLength": 256 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["itemId", "itemType", "createdAt"]
+    },
+    "ArticleLike": {
+      "title": "ArticleLike",
+      "description": "A like on a main site dispatch/article",
+      "type": "object",
+      "properties": {
+        "slug": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["slug", "userId", "createdAt"]
+    },
+    "CarouselSlide": {
+      "title": "CarouselSlide",
+      "description": "Promotional carousel slide on the homepage",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 256 },
+        "imageUrl": { "type": "string", "maxLength": 2048 },
+        "linkUrl": { "type": "string", "maxLength": 2048 },
+        "order": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["imageUrl", "order"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Community user profiles"
+    },
+    "users/{userId}/saves/{saveId}": {
+      "schema": "Save",
+      "description": "User saved articles and posts"
+    },
+    "usernames/{username}": {
+      "schema": "Username",
+      "description": "Mapping to ensure unique usernames"
+    },
+    "posts/{postId}": {
+      "schema": "Post",
+      "description": "Discussions and blog posts"
+    },
+    "posts/{postId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments within a post"
+    },
+    "posts/{postId}/claps/{userId}": {
+      "schema": "Clap",
+      "description": "Claps from users for a post. Uses userId as document ID."
+    },
+    "articleLikes/{slug}/likes/{userId}": {
+      "schema": "ArticleLike",
+      "description": "Likes from users for main site articles"
+    },
+    "carousel_slides/{slideId}": {
+      "schema": "CarouselSlide",
+      "description": "Promotional carousel slides configured by administrators"
+    }
+  }
+}

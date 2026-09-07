@@ -1,0 +1,8 @@
+{
+  "name": "KRISHFICIENT",
+  "description": "A high-impact personal technology publication combining Neo-Brutalism, Gumroad, and Medium aesthetics covering software engineering, web development, AI, and computer science.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

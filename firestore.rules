@@ -1,0 +1,265 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} { 
+      allow read, write: if false; 
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    // Hardcoded admin emails and UID fallback
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.get('email', '') in ['ruizxzxz@gmail.com', 'krishsarkar456@gmail.com']
+      ); 
+    }
+
+    // USER VALIDATION
+    function isValidUser(data) {
+      return data.keys().hasAll(["uid", "username", "displayName", "createdAt", "updatedAt"])
+        && data.uid is string && data.uid.size() <= 128
+        && data.username is string && data.username.size() <= 32 && data.username.matches('^[a-zA-Z0-9_]+$')
+        && data.displayName is string && data.displayName.size() <= 64
+        && data.get('photoURL', '') is string && data.get('photoURL', '').size() <= 2048
+        && data.get('bio', '') is string && data.get('bio', '').size() <= 500
+        && data.get('themeColor', '#000000') is string && data.get('themeColor', '#000000').size() <= 7 && data.get('themeColor', '#000000').matches('^#[0-9a-fA-F]{6}$')
+        && data.get('followersCount', 0) is number
+        && data.get('followingCount', 0) is number
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isSignedIn() 
+        && isValidId(userId)
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        && incoming().uid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/usernames/$(incoming().username));
+      allow update: if (isSignedIn()
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().username == existing().username
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().get('isBlocked', false) == existing().get('isBlocked', false))
+        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'updatedAt']))
+        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))
+        || (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']));
+
+      match /followers/{followerId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.auth.uid == followerId
+          && incoming().keys().hasAll(["createdAt", "uid", "username"])
+          && incoming().uid == followerId;
+        allow delete: if isSignedIn() && request.auth.uid == followerId;
+      }
+
+      match /following/{followingId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.auth.uid == userId
+          && incoming().keys().hasAll(["createdAt", "uid", "username"])
+          && incoming().uid == followingId;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /saves/{saveId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn()
+          && request.auth.uid == userId
+          && incoming().keys().hasAll(["itemId", "itemType", "createdAt"])
+          && incoming().itemId is string && incoming().itemId.size() <= 128
+          && incoming().itemType in ['article', 'post']
+          && incoming().createdAt is timestamp;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && incoming().keys().hasAll(["uid"]) && incoming().keys().size() == 1
+        && incoming().uid is string && incoming().uid == request.auth.uid
+        && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // POST VALIDATION
+    function isValidPost(data) {
+      return data.keys().hasAll(["type", "title", "content", "authorId", "authorUsername", "upvotesCount", "downvotesCount", "commentsCount", "createdAt", "updatedAt"])
+        && data.type is string && (data.type == 'discussion' || data.type == 'blog')
+        && data.title is string && data.title.size() <= 256
+        && data.content is string && data.content.size() <= 100000
+        && data.authorId is string && data.authorId.size() <= 128
+        && data.authorUsername is string && data.authorUsername.size() <= 32
+        && data.get('authorName', '') is string && data.get('authorName', '').size() <= 64
+        && data.get('authorAvatar', '') is string && data.get('authorAvatar', '').size() <= 2048
+        && data.upvotesCount is number
+        && data.downvotesCount is number
+        && data.commentsCount is number
+        && data.get('isFeatured', false) is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && isValidId(postId)
+        && !get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBlocked', false)
+        && isValidPost(incoming())
+        && incoming().authorId == request.auth.uid
+        && incoming().upvotesCount == 0
+        && incoming().downvotesCount == 0
+        && incoming().commentsCount == 0
+        && incoming().get('isFeatured', false) == false
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn()
+        && isValidPost(incoming())
+        && incoming().authorId == existing().authorId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'updatedAt']))
+          || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
+          || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
+          || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isFeatured', 'updatedAt']))
+        );
+      allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
+      
+      match /comments/{commentId} {
+        function isValidComment(data) {
+          return data.keys().hasAll(["postId", "authorId", "authorUsername", "content", "createdAt", "updatedAt"])
+            && data.postId is string && data.postId == postId
+            && data.authorId is string && data.authorId.size() <= 128
+            && data.authorUsername is string && data.authorUsername.size() <= 32
+            && data.get('authorName', '') is string && data.get('authorName', '').size() <= 64
+            && data.get('authorAvatar', '') is string && data.get('authorAvatar', '').size() <= 2048
+            && data.content is string && data.content.size() <= 5000
+            && data.createdAt is timestamp
+            && data.updatedAt is timestamp;
+        }
+
+        allow read: if true;
+        allow create: if isSignedIn()
+          && isValidId(commentId)
+          && !get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBlocked', false)
+          && isValidComment(incoming())
+          && incoming().authorId == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isSignedIn()
+          && isValidComment(incoming())
+          && request.auth.uid == existing().authorId
+          && incoming().authorId == existing().authorId
+          && incoming().postId == existing().postId
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']);
+        allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
+      }
+
+      match /votes/{userId} {
+        allow read: if true;
+        allow create, update: if isSignedIn()
+          && userId == request.auth.uid
+          && incoming().postId == postId
+          && incoming().userId == request.auth.uid
+          && incoming().type in ['up', 'down'];
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /claps/{userId} {
+        allow read: if true;
+        allow create, update: if isSignedIn()
+          && userId == request.auth.uid
+          && incoming().postId == postId
+          && incoming().userId == request.auth.uid;
+        allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      }
+    }
+    
+    match /carousel_slides/{slideId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /site_config/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /siteConfig/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /bento_links/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /bento/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /newsletter_subscribers/{subscriberId} {
+      allow create: if incoming().email is string && incoming().email.size() <= 256;
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /articles/{slug} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && incoming().authorId == request.auth.uid
+          && incoming().content is string
+          && incoming().content.size() <= 2000;
+        allow update: if isSignedIn()
+          && request.auth.uid == existing().authorId
+          && incoming().authorId == existing().authorId;
+        allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
+      }
+    }
+
+    match /deleted_articles/{slug} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /admins/{userId} {
+      allow read: if true;
+    }
+
+    match /articleLikes/{slug} {
+      allow read: if true;
+      allow create, update: if isSignedIn();
+      
+      match /likes/{userId} {
+        allow read: if true;
+        allow create, update: if isSignedIn()
+          && request.auth.uid == userId
+          && incoming().keys().hasAll(["slug", "userId", "createdAt"])
+          && incoming().slug is string && incoming().slug == slug
+          && incoming().userId is string && incoming().userId == request.auth.uid
+          && incoming().createdAt is timestamp;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+    }
+  }
+}
