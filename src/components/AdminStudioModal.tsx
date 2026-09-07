@@ -341,6 +341,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [contactTwitter, setContactTwitter] = useState(siteConfig.contactTwitter || '');
   const [contactGithub, setContactGithub] = useState(siteConfig.contactGithub || '');
   const [contactTelegram, setContactTelegram] = useState(siteConfig.contactTelegram || '');
+  const [contactInstagram, setContactInstagram] = useState(siteConfig.contactInstagram || '');
 
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSuccess, setConfigSuccess] = useState(false);
@@ -381,6 +382,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setContactTwitter(siteConfig.contactTwitter || '');
     setContactGithub(siteConfig.contactGithub || '');
     setContactTelegram(siteConfig.contactTelegram || '');
+    setContactInstagram(siteConfig.contactInstagram || '');
     setCustomCategories(siteConfig.customCategories || []);
   }, [siteConfig]);
 
@@ -455,6 +457,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         contactTwitter,
         contactGithub,
         contactTelegram,
+        contactInstagram,
         customCategories,
         authorProfileUid: authorProfile.uid,
         authorProfileUsername: authorProfile.username
@@ -1231,6 +1234,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         <label className="font-mono text-xs font-bold uppercase text-black">Telegram Handle</label>
                         <input type="text" value={contactTelegram} onChange={(e) => setContactTelegram(e.target.value)} className="w-full px-3 py-2 border-2 border-black font-mono text-xs focus:outline-none" />
                       </div>
+                      <div className="space-y-1">
+                        <label className="font-mono text-xs font-bold uppercase text-black">Instagram Handle / URL</label>
+                        <input type="text" value={contactInstagram} onChange={(e) => setContactInstagram(e.target.value)} placeholder="https://instagram.com/..." className="w-full px-3 py-2 border-2 border-black font-mono text-xs focus:outline-none" />
+                      </div>
                     </div>
                   </div>
 
@@ -1655,6 +1662,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         <option value="mail">Newsletter / Mail</option>
                         <option value="globe">Website</option>
                         <option value="linkedin">LinkedIn</option>
+                        <option value="instagram">Instagram</option>
                       </select>
                     </div>
                     <div className="space-y-1">

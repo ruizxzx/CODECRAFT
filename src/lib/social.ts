@@ -10,7 +10,7 @@ async function profile(uid:string){ const s=await getDoc(doc(db,'users',uid)); r
 async function notify(uid:string, data:any){ if(!uid || uid===data.actorId) return; await setDoc(doc(db,'users',uid,'notifications',id()),{...data,read:false,createdAt:serverTimestamp()}); }
 
 export interface SocialCommunity { id:string; name:string; slug:string; description:string; iconUrl?:string; bannerUrl?:string; rules?:string[]; membersCount:number; postsCount:number; ownerId:string; ownerUsername?:string; ownerName?:string; ownerAvatar?:string; createdAt:string; updatedAt?:string; }
-export interface CommunityFeedPost { id:string; communityId:string; title:string; content:string; authorId:string; authorUsername:string; authorName:string; authorAvatar:string; score:number; commentsCount:number; isFeatured?:boolean; createdAt:string; updatedAt?:string; editedAt?:string; }
+export interface CommunityFeedPost { id:string; communityId?:string; title:string; content:string; authorId:string; authorUsername:string; authorName:string; authorAvatar:string; score:number; commentsCount:number; isFeatured?:boolean; createdAt:string; updatedAt?:string; editedAt?:string; }
 export interface SocialQuestion { id:string; title:string; details:string; authorId:string; authorUsername:string; authorName:string; authorAvatar:string; topics:string[]; followersCount:number; answersCount:number; upvotesCount:number; bestAnswerId?:string; createdAt:string; updatedAt?:string; }
 export interface SocialAnswer { id:string; questionId:string; content:string; authorId:string; authorUsername:string; authorName:string; authorAvatar:string; upvotesCount:number; downvotesCount:number; isBest:boolean; createdAt:string; updatedAt:string; }
 export interface SocialTopic { id:string; name:string; slug:string; description:string; followersCount:number; createdAt:string; updatedAt?:string; createdBy?:string; creatorUsername?:string; }
@@ -55,17 +55,7 @@ export async function updateCommunity(communityId:string, userId:string, data:Pa
 export async function deleteCommunity(communityId:string,userId:string){
   const c=await getCommunity(communityId); if(!c) return;
   if(c.ownerId!==userId && !isSocialAdmin()) throw new Error('Only the community creator or an admin can delete this community.');
-
-  // Delete descendants BEFORE the parent. Keeping the parent document alive while
-  // descendant rules execute avoids permission failures in Firestore rule lookups.
-  const deleteInBatches = async (refs:any[]) => {
-    for(let i=0;i<refs.length;i+=400){
-      const b=writeBatch(db);
-      refs.slice(i,i+400).forEach((r:any)=>b.delete(r));
-      if (refs.length) await b.commit();
-    }
-  };
-
+  const chunk=async(refs:any[])=>{ for(let i=0;i<refs.length;i+=400){ const b=writeBatch(db); refs.slice(i,i+400).forEach((r:any)=>b.delete(r)); await b.commit(); } };
   const postRefs:any[]=[];
   const posts=await getDocs(collection(db,'communities',communityId,'posts'));
   for(const post of posts.docs){
@@ -73,15 +63,9 @@ export async function deleteCommunity(communityId:string,userId:string){
     votes.docs.forEach(v=>postRefs.push(v.ref));
     postRefs.push(post.ref);
   }
-  await deleteInBatches(postRefs);
-
+  await chunk(postRefs);
   const members=await getDocs(collection(db,'communities',communityId,'members'));
-  await deleteInBatches(members.docs.filter(d=>d.id!==c.ownerId).map(d=>d.ref));
-  // Finally remove the owner membership and root community. Admin/owner is allowed.
-  const ownerMember=doc(db,'communities',communityId,'members',c.ownerId);
-  try { await deleteDoc(ownerMember); } catch (e) {
-    if (!isSocialAdmin()) throw e;
-  }
+  await chunk(members.docs.map(d=>d.ref));
   await deleteDoc(doc(db,'communities',communityId));
 }
 
@@ -176,6 +160,23 @@ export function subscribeMessages(uid:string,cb:(m:SocialMessage[])=>void){
   return ()=>{a();b();};
 }
 
+export function subscribeConversation(uid:string,otherUid:string,cb:(m:SocialMessage[])=>void){
+  if(!uid||!otherUid) return ()=>{};
+  const sentQ=query(collection(db,'messages'),where('senderId','==',uid),limit(500));
+  const receivedQ=query(collection(db,'messages'),where('senderId','==',otherUid),limit(500));
+  let sent:SocialMessage[]=[]; let received:SocialMessage[]=[];
+  const emit=()=>{
+    const byId=new Map<string,SocialMessage>();
+    [...sent,...received].forEach(m=>{
+      if((m.senderId===uid&&m.recipientId===otherUid)||(m.senderId===otherUid&&m.recipientId===uid)) byId.set(m.id,m);
+    });
+    cb(Array.from(byId.values()).sort((a,b)=>new Date(a.createdAt||0).getTime()-new Date(b.createdAt||0).getTime()));
+  };
+  const a=onSnapshot(sentQ,s=>{sent=s.docs.map(map) as SocialMessage[];emit();},err=>{console.warn('Conversation sent listener failed',err);sent=[];emit();});
+  const b=onSnapshot(receivedQ,s=>{received=s.docs.map(map) as SocialMessage[];emit();},err=>{console.warn('Conversation received listener failed',err);received=[];emit();});
+  return ()=>{a();b();};
+}
+
 export async function reportContent(user:CommunityUser,targetType:string,targetId:string,reason:string){
   const rid=id();
   await setDoc(doc(db,'reports',rid),{reporterId:user.uid,reporterUsername:user.username,targetType,targetId,reason:reason.slice(0,500),status:'open',createdAt:serverTimestamp()});
@@ -230,5 +231,5 @@ export async function adminSetRootPostFeatured(postId:string,featured:boolean){ 
 export async function getAdminMessages():Promise<SocialMessage[]>{ if(!isSocialAdmin()) throw new Error('Admin access required.'); const s=await getDocs(query(collection(db,'messages'),limit(500))); return s.docs.map(map).sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime()) as SocialMessage[]; }
 export async function adminUpdateMessage(mid:string,content:string){ if(!isSocialAdmin()) throw new Error('Admin access required.'); await updateDoc(doc(db,'messages',mid),{content:content.trim().slice(0,5000)}); }
 export async function adminDeleteMessage(mid:string){ if(!isSocialAdmin()) throw new Error('Admin access required.'); await deleteDoc(doc(db,'messages',mid)); }
-export async function adminUpdateUser(uid:string,data:{displayName?:string;bio?:string;photoURL?:string;coverImageUrl?:string;websiteUrl?:string;location?:string;socialX?:string;socialGithub?:string;socialTelegram?:string;role?:string;isAuthor?:boolean;isVerified?:boolean;verificationColor?:string;isBlocked?:boolean}){ if(!isSocialAdmin()) throw new Error('Admin access required.'); await updateDoc(doc(db,'users',uid),{...data,updatedAt:serverTimestamp()}); }
+export async function adminUpdateUser(uid:string,data:{displayName?:string;bio?:string;photoURL?:string;coverImageUrl?:string;websiteUrl?:string;location?:string;socialX?:string;socialGithub?:string;socialTelegram?:string;socialInstagram?:string;role?:string;isAuthor?:boolean;isVerified?:boolean;verificationColor?:string;isBlocked?:boolean}){ if(!isSocialAdmin()) throw new Error('Admin access required.'); await updateDoc(doc(db,'users',uid),{...data,updatedAt:serverTimestamp()}); }
 export async function adminDeleteUserProfile(uid:string){ if(!isSocialAdmin()) throw new Error('Admin access required.'); await deleteDoc(doc(db,'users',uid)); }

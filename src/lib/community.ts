@@ -565,24 +565,23 @@ export async function getUserPosts(userId: string, username?: string): Promise<C
       });
     }
 
-    // Also include community posts from every community. This makes the profile's
-    // Posts tab a true global history rather than only the legacy /posts collection.
+    // Also include posts made inside every community without relying on a collection-group index.
+    // This keeps profile history complete even when collection-group indexing is disabled.
     try {
-      const groupSnap = await getDocs(collectionGroup(db, 'posts'));
-      for (const d of groupSnap.docs) {
-        const path = d.ref.path.split('/');
-        // Root /posts/{postId} is already covered above. Community paths are
-        // /communities/{communityId}/posts/{postId}.
-        const isCommunityPost = path.length === 4 && path[0] === 'communities' && path[2] === 'posts';
-        if (!isCommunityPost) continue;
-        const data: any = d.data();
-        if (data.authorId === userId || (cleanUsername && data.authorUsername?.toLowerCase() === cleanUsername)) {
-          let communitySlug='';
-          try {
-            const cSnap = await getDoc(doc(db, 'communities', path[1]));
-            communitySlug = cSnap.exists() ? (cSnap.data()?.slug || '') : '';
-          } catch {}
-          byId.set(`community:${path[1]}:${d.id}`, { ...data, id: d.id, sourceType: 'community', communityId: path[1], communitySlug } as any);
+      const communitiesSnap = await getDocs(collection(db, 'communities'));
+      const communityResults = await Promise.allSettled(communitiesSnap.docs.map(async cDoc => {
+        const postsSnap = await getDocs(collection(db, 'communities', cDoc.id, 'posts'));
+        return { cDoc, postsSnap };
+      }));
+      for (const result of communityResults) {
+        if (result.status !== 'fulfilled') continue;
+        const {cDoc, postsSnap} = result.value;
+        const communitySlug = (cDoc.data() as any).slug || cDoc.id;
+        for (const d of postsSnap.docs) {
+          const data:any = d.data();
+          if (data.authorId === userId || (cleanUsername && data.authorUsername?.toLowerCase() === cleanUsername)) {
+            byId.set(`community:${cDoc.id}:${d.id}`, { ...data, id: d.id, sourceType: 'community', communityId: cDoc.id, communitySlug } as any);
+          }
         }
       }
     } catch (communityError) {

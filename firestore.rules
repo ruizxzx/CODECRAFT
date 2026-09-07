@@ -33,6 +33,7 @@ service cloud.firestore {
         && data.get('socialX', '') is string && data.get('socialX', '').size() <= 512
         && data.get('socialGithub', '') is string && data.get('socialGithub', '').size() <= 512
         && data.get('socialTelegram', '') is string && data.get('socialTelegram', '').size() <= 512
+        && data.get('socialInstagram', '') is string && data.get('socialInstagram', '').size() <= 512
         && data.get('bio', '') is string && data.get('bio', '').size() <= 500
         && data.get('themeColor', '#000000') is string && data.get('themeColor', '#000000').size() <= 7 && data.get('themeColor', '#000000').matches('^#[0-9a-fA-F]{6}$')
         && data.get('followersCount', 0) is number
@@ -67,8 +68,8 @@ service cloud.firestore {
         && incoming().get('verificationColor', '#2196F3') == existing().get('verificationColor', '#2196F3')
         && incoming().get('isAuthor', false) == existing().get('isAuthor', false)
         && incoming().get('role', '') == existing().get('role', ''))
-        || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'bio', 'themeColor', 'role', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
-        || (isAdmin() && incoming().username == 'krishsarkar' && incoming().isAuthor == true && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'bio', 'themeColor', 'role', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
+        || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'role', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
+        || (isAdmin() && incoming().username == 'krishsarkar' && incoming().isAuthor == true && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'role', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt']))
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))

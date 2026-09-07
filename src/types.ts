@@ -84,6 +84,7 @@ export interface SiteConfig {
   contactTwitter?: string;
   contactGithub?: string;
   contactTelegram?: string;
+  contactInstagram?: string;
   
   // Extra Info
   aboutMeImageUrl?: string;
@@ -116,6 +117,7 @@ export interface CommunityUser {
   socialX?: string;
   socialGithub?: string;
   socialTelegram?: string;
+  socialInstagram?: string;
   bio: string;
   themeColor: string;
   isBlocked?: boolean;

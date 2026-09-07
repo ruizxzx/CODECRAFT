@@ -175,6 +175,11 @@ export const Footer: React.FC<FooterProps> = ({
                 </button>
               </li>
               <li>
+                <button onClick={() => onNavigate('contact')} className="text-neutral-300 hover:text-[var(--color-secondary)]">
+                  Instagram: {siteConfig.contactInstagram || ''}
+                </button>
+              </li>
+              <li>
                 <button
                   onClick={() => onNavigate('contact')}
                   className="text-neutral-300 hover:text-[var(--color-accent)]"

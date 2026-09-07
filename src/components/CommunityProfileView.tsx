@@ -35,6 +35,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [socialXInput, setSocialXInput] = useState('');
   const [socialGithubInput, setSocialGithubInput] = useState('');
   const [socialTelegramInput, setSocialTelegramInput] = useState('');
+  const [socialInstagramInput, setSocialInstagramInput] = useState('');
   const [bioInput, setBioInput] = useState('');
   const [themeInput, setThemeInput] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
@@ -99,6 +100,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         setSocialXInput(p.socialX || '');
         setSocialGithubInput(p.socialGithub || '');
         setSocialTelegramInput(p.socialTelegram || '');
+        setSocialInstagramInput(p.socialInstagram || '');
         // Load profile activity independently so one optional collection
         // (comments/upvotes/reposts/articles) cannot hide the user's posts.
         const results = await Promise.allSettled([
@@ -157,14 +159,14 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       const nextX = socialXInput.trim();
       const nextGithub = socialGithubInput.trim();
       const nextTelegram = socialTelegramInput.trim();
-      for (const [label, value] of [['Website', nextWebsite], ['X', nextX], ['GitHub', nextGithub], ['Telegram', nextTelegram]] as const) {
+      for (const [label, value] of [['Website', nextWebsite], ['X', nextX], ['GitHub', nextGithub], ['Telegram', nextTelegram], ['Instagram', socialInstagramInput.trim()]] as const) {
         if (value && !/^https?:\/\//i.test(value)) { alert(`${label} URL must start with http:// or https://`); return; }
       }
       const nextDisplayName = displayNameInput.trim() || profile.username;
       if (nextDisplayName.length > 64) { alert('Display name must be 64 characters or less.'); return; }
-      await updateCommunityProfile(profile.uid, { displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram });
+      await updateCommunityProfile(profile.uid, { displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, socialInstagram: socialInstagramInput.trim() });
       try { await updateProfile(activeUser, { displayName: nextDisplayName, photoURL: nextPhotoURL || null }); } catch (authError) { console.warn('Firebase Auth avatar update skipped:', authError); }
-      const nextProfile = { ...profile, displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, updatedAt: new Date().toISOString() };
+      const nextProfile = { ...profile, displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, socialInstagram: socialInstagramInput.trim(), updatedAt: new Date().toISOString() };
       setProfile(nextProfile);
       await syncUserIdentityAcrossContent(activeUser.uid, { displayName: nextProfile.displayName, photoURL: nextPhotoURL, username: nextProfile.username });
       setIsEditing(false);
@@ -268,15 +270,17 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
             <input value={locationInput} onChange={e => setLocationInput(e.target.value)} maxLength={100} placeholder="Location" className="px-3 py-2 border-2 border-black font-mono text-xs" />
             <input type="url" value={socialXInput} onChange={e => setSocialXInput(e.target.value)} placeholder="X profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
             <input type="url" value={socialGithubInput} onChange={e => setSocialGithubInput(e.target.value)} placeholder="GitHub profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
-            <input type="url" value={socialTelegramInput} onChange={e => setSocialTelegramInput(e.target.value)} placeholder="Telegram profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs sm:col-span-2" />
+            <input type="url" value={socialTelegramInput} onChange={e => setSocialTelegramInput(e.target.value)} placeholder="Telegram profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
+            <input type="url" value={socialInstagramInput} onChange={e => setSocialInstagramInput(e.target.value)} placeholder="Instagram profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
           </div>
           <textarea value={bioInput} onChange={e => setBioInput(e.target.value)} rows={4} maxLength={500} placeholder="Bio" className="w-full px-3 py-2 border-2 border-black" /><div className="flex gap-2"><input type="color" value={themeInput} onChange={e => setThemeInput(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={themeInput} onChange={e => setThemeInput(e.target.value)} className="px-3 py-2 border-2 border-black font-mono" /></div><div className="flex gap-2"><button className="px-6 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-bold uppercase">Save</button><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2 bg-neutral-200 border-2 border-black font-mono text-xs font-bold uppercase">Cancel</button></div></form> : <div><h1 className="font-display font-black text-3xl sm:text-4xl uppercase flex items-center gap-2">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-6 h-6 shrink-0" /></h1><p className="font-mono text-sm text-neutral-500 mb-2">@{profile.username}</p>{profile.role && <p className="font-mono text-xs font-bold uppercase mb-4">{profile.role}</p>}{profile.bio && <p className="font-sans text-neutral-800 max-w-2xl text-sm leading-relaxed mb-4 whitespace-pre-wrap">{profile.bio}</p>}
-            {(profile.websiteUrl || profile.location || profile.socialX || profile.socialGithub || profile.socialTelegram) && <div className="flex flex-wrap items-center gap-2 mb-5 font-mono text-[10px] font-bold uppercase">
+            {(profile.websiteUrl || profile.location || profile.socialX || profile.socialGithub || profile.socialTelegram || profile.socialInstagram) && <div className="flex flex-wrap items-center gap-2 mb-5 font-mono text-[10px] font-bold uppercase">
               {profile.location && <span className="inline-flex items-center gap-1 px-2 py-1 border-2 border-black bg-neutral-100"><MapPin className="w-3 h-3" />{profile.location}</span>}
               {profile.websiteUrl && <a href={profile.websiteUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 px-2 py-1 border-2 border-black bg-[var(--color-secondary)] hover:bg-[var(--color-primary)]"><LinkIcon className="w-3 h-3" />Website</a>}
               {profile.socialX && <a href={profile.socialX} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="px-2 py-1 border-2 border-black bg-white hover:bg-[var(--color-primary)]">X</a>}
               {profile.socialGithub && <a href={profile.socialGithub} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="px-2 py-1 border-2 border-black bg-white hover:bg-[var(--color-primary)]">GitHub</a>}
               {profile.socialTelegram && <a href={profile.socialTelegram} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="px-2 py-1 border-2 border-black bg-white hover:bg-[var(--color-primary)]">Telegram</a>}
+              {profile.socialInstagram && <a href={profile.socialInstagram} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="px-2 py-1 border-2 border-black bg-white hover:bg-[var(--color-primary)]">Instagram</a>}
             </div>}
             <div className="flex flex-wrap gap-3 font-mono text-xs">
             <button type="button" onClick={() => setRelationModal('followers')} className="underline underline-offset-4 hover:bg-[var(--color-primary)] px-1 py-0.5 font-bold">{profile.followersCount || 0} Followers</button>

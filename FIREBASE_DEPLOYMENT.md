@@ -1,32 +1,31 @@
-# OFFSCRPT Social / Community — Firebase Console deployment
+# OFFSCRPT v25 — Firebase Console deployment
 
-This build uses the existing Firebase project `krishficient-portfolio` and Firestore `(default)`.
+Use the existing Firebase project `krishficient-portfolio` and Firestore `(default)`.
 
-## 1. Firestore Rules
+## Firestore Rules
 
 Firebase Console → Firestore Database → Rules.
 
-Replace the current rules with the `firestore.rules` included in this project and click **Publish**.
+Replace the current rules with the `firestore.rules` included in this build and click **Publish**.
 
-The updated rules cover:
-- unified communities
-- community owners and moderators
-- creator/admin editing and deletion
-- community members and roles
-- community posts and votes
-- questions and answers
-- topics and topic followers
+The rules include:
+- admin access for Master Control moderation
+- community owners/moderators
+- community post moderation
+- questions, answers and topics
 - direct messages
-- reports and admin moderation
+- reports and reporter notifications
+- user profile social links, including Instagram
+- site-config backup storage
 
-## 2. Firestore Indexes
+## Firestore Indexes
 
-No new composite index is required for the unified Social / Community build.
+**No new index is required for v25.**
 
-If the project already has the `comments / authorId / Collection group / Ascending` single-field configuration from the previous batch, keep it enabled.
+Keep any existing `comments / authorId / Collection group / Ascending` configuration already deployed from earlier builds; do not create a new manual index for v25.
 
-## 3. Important for the previous "Missing or insufficient permissions" error
+## Notes
 
-The source now makes community post creation the primary write and treats the community post counter update as secondary, so an older ruleset cannot cause the entire post creation to fail after the post itself is accepted.
+The profile post aggregation no longer relies on a collection-group `posts` index; it reads the existing public community collections and merges matching posts with the existing root `posts` collection.
 
-However, the **new `firestore.rules` must still be published** before testing owner/admin moderation and all new Social / Community operations.
+Existing blog/discussion documents are preserved. New blog/discussion posts continue using the original `posts` collection so old profiles and historical content remain compatible.

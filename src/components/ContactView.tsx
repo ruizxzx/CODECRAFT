@@ -10,7 +10,8 @@ import {
   ExternalLink,
   Phone,
   ShieldCheck,
-  Terminal
+  Terminal,
+  Instagram
 } from 'lucide-react';
 
 export const ContactView: React.FC<{siteConfig: SiteConfig}> = ({ siteConfig }) => {
@@ -54,6 +55,16 @@ export const ContactView: React.FC<{siteConfig: SiteConfig}> = ({ siteConfig }) 
       copyValue: siteConfig.contactTwitter || '',
       color: 'bg-[var(--color-accent)]',
       icon: MessageSquare,
+    },
+    {
+      id: 'instagram',
+      name: 'Instagram',
+      handle: siteConfig.contactInstagram || '',
+      description: 'Visual updates, experiments, and behind-the-scenes OFFSCRPT activity.',
+      actionText: 'Copy Link',
+      copyValue: siteConfig.contactInstagram || '',
+      color: 'bg-[var(--color-primary)]',
+      icon: Instagram,
     },
     {
       id: 'github',

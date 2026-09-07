@@ -12,7 +12,8 @@ import {
   orderBy, 
   serverTimestamp,
   Timestamp,
-  writeBatch 
+  writeBatch,
+  limit 
 } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
 import { deletePost } from './community';
@@ -47,6 +48,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   contactTwitter: "@krishficient",
   contactGithub: "krishficient",
   contactTelegram: "@krishficient",
+  contactInstagram: "@krishficient",
   customCategories: [],
   authorProfileUid: '',
   authorProfileUsername: 'krishsarkar'

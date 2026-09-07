@@ -1,8 +1,14 @@
 {
-  "name": "KRISHFICIENT",
-  "description": "A high-impact personal technology publication combining Neo-Brutalism, Gumroad, and Medium aesthetics covering software engineering, web development, AI, and computer science.",
-  "requestFramePermissions": [],
+  "name": "OFFSCRPT",
+  "version": "v25",
+  "description": "OFFSCRPT social/community reliability and master-control patch: Instagram profile/contact controls, resilient admin cloud loading, community blog/discussion publishing, complete profile post aggregation, and reliable direct-message history/live conversations.",
   "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+    "Unified Social / Community",
+    "Cloud-synced moderation",
+    "Master Control",
+    "Direct messaging",
+    "Community blogs and discussions",
+    "Complete profile post history",
+    "Instagram social link configuration"
   ]
 }
