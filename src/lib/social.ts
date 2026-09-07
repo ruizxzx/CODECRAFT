@@ -22,6 +22,7 @@ const staffRole=(u:CommunityUser)=> (u.platformRole || (checkIsAdmin(auth.curren
 const dedupePosts=(items:CommunityFeedPost[])=>{ const seen=new Set<string>(); const sigs=new Set<string>(); return items.filter(p=>{ if(seen.has(p.id)) return false; seen.add(p.id); const sig=`${p.authorId}|${p.title.trim().toLowerCase()}|${p.content.trim()}|${Math.floor(new Date(p.createdAt||0).getTime()/60000)}`; if(sigs.has(sig)) return false; sigs.add(sig); return true; }); };
 
 
+const stripUndefined=(value:any):any=>Array.isArray(value)?value.filter((v:any)=>v!==undefined).map(stripUndefined):(value&&typeof value==='object'&&!(value instanceof Date)&&!('_methodName' in value)&&!String(value.constructor?.name||'').includes('FieldValue')?Object.fromEntries(Object.entries(value).filter(([,v])=>v!==undefined).map(([k,v])=>[k,stripUndefined(v)])):value);
 const hashText=(raw:string)=>{ let h=2166136261; for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619);} return (h>>>0).toString(36); };
 const communityDedupeKey=(data:{communityId:string;authorId:string;title:string;content:string;postType:string;parentPostId?:string})=> hashText(`${data.communityId}|${data.authorId}|${data.postType}|${data.parentPostId||''}|${data.title.trim().toLowerCase()}|${data.content.trim()}`);
 
@@ -152,6 +153,29 @@ export async function recomputeCommunityCounters(cid:string){
 }
 
 
+export async function getAllCommunityFeedPosts(): Promise<CommunityFeedPost[]> {
+  try {
+    const s = await getDocs(query(collectionGroup(db,'posts'), limit(500)));
+    const items: CommunityFeedPost[] = [];
+    for (const d of s.docs) {
+      const path = d.ref.path.split('/');
+      if (path.length !== 4 || path[0] !== 'communities' || path[2] !== 'posts') continue;
+      const p:any = map(d);
+      p.communityId = path[1];
+      if (!p.isArchived) items.push(p as CommunityFeedPost);
+    }
+    return dedupePosts(items).sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime());
+  } catch { return []; }
+}
+
+export function subscribeAllCommunityPosts(cb:(x:CommunityFeedPost[])=>void){
+  const q = query(collectionGroup(db,'posts'), limit(500));
+  return onSnapshot(q, snap => {
+    const items = snap.docs.map(d=>{ const path=d.ref.path.split('/'); if(path.length!==4 || path[0]!=='communities' || path[2]!=='posts') return null; const p:any=map(d); p.communityId=path[1]; return p as CommunityFeedPost; }).filter(Boolean) as CommunityFeedPost[];
+    cb(dedupePosts(items.filter(p=>!p.isArchived)).sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime()));
+  }, err => { console.warn('All-community realtime feed failed:', err); void getAllCommunityFeedPosts().then(cb); });
+}
+
 export async function getCommunityPosts(cid:string,sort:'new'|'hot'|'top'='new'){ const s=await getDocs(query(collection(db,'communities',cid,'posts'),limit(200))); const items=dedupePosts((s.docs.map(map) as CommunityFeedPost[]).filter(p=>!p.isArchived)); const rank=(a:CommunityFeedPost,b:CommunityFeedPost)=>{ if(!!b.isPinned!==!!a.isPinned) return b.isPinned?1:-1; if(sort==='top') return (b.score||0)-(a.score||0); if(sort==='hot') return ((b.score||0)*3 + new Date(b.createdAt||0).getTime()/86400000)-((a.score||0)*3 + new Date(a.createdAt||0).getTime()/86400000); return new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime(); }; return items.sort(rank); }
 export function subscribeCommunityFeed(cid:string,cb:(x:CommunityFeedPost[])=>void){
   // Avoid an orderBy so a fresh project does not depend on an index. Sort the
@@ -172,7 +196,7 @@ export function subscribeCommunityFeed(cid:string,cb:(x:CommunityFeedPost[])=>vo
 }
 export type CommunityPublishResult = CommunityFeedPost & { publishStatus: 'created' | 'existing' };
 
-export async function createCommunityPost(cid:string,user:CommunityUser,title:string,content:string,options:{parentPostId?:string;postType?:'blog'|'discussion'|'question'|'link'|'poll'|'announcement';flair?:string;linkUrl?:string;mediaUrls?:string[];poll?:{question:string;options:string[]}}={} ):Promise<CommunityPublishResult>{
+export async function createCommunityPost(cid:string,user:CommunityUser,title:string,content:string,options:{parentPostId?:string;postType?:'blog'|'discussion'|'question'|'link'|'poll'|'announcement';flair?:string;linkUrl?:string;mediaUrls?:string[];poll?:{question:string;options:string[]};contentBlocks?:any[];excerpt?:string;coverImage?:string;coverImageAlt?:string;coverImageCaption?:string;category?:string;tags?:string[];readingTimeMinutes?:number}={} ):Promise<CommunityPublishResult>{
   const c=await getCommunity(cid); if(!c) throw new Error('Community not found.');
   if(c.isArchived || c.isLocked) throw new Error('This community is not accepting new posts.');
   const memberRef=doc(db,'communities',cid,'members',user.uid);
@@ -195,6 +219,8 @@ export async function createCommunityPost(cid:string,user:CommunityUser,title:st
   if(!cleanTitle || !cleanContent) throw new Error('Title and content are required.');
   if(options.parentPostId){ const parent=await getDoc(doc(db,'communities',cid,'posts',options.parentPostId)); if(!parent.exists()) throw new Error('Parent thread not found.'); if(parent.data()?.isLocked) throw new Error('This thread is locked.'); }
   const data:any={communityId:cid,parentPostId:options.parentPostId||'',postType,flair:options.flair?.trim().slice(0,30)||'',linkUrl:options.linkUrl?.trim().slice(0,2000)||'',mediaUrls:Array.isArray(options.mediaUrls)?options.mediaUrls.filter(Boolean).slice(0,6):[],dedupeKey,title:cleanTitle,content:cleanContent,authorId:user.uid,authorUsername:user.username,authorName:user.displayName,authorAvatar:user.photoURL||'',authorPlatformRole:staffRole(user),score:0,commentsCount:0,isFeatured:false,isPinned:false,isLocked:false,isArchived:false,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+  if (Array.isArray(options.contentBlocks) && options.contentBlocks.length) data.contentBlocks=options.contentBlocks;
+  for (const [k,v] of Object.entries({excerpt:options.excerpt,coverImage:options.coverImage,coverImageAlt:options.coverImageAlt,coverImageCaption:options.coverImageCaption,category:options.category,readingTimeMinutes:options.readingTimeMinutes,tags:options.tags})) if(v!==undefined) data[k]=v;
   if(options.poll && postType==='poll'){
     const pollOptions=options.poll.options.map(x=>String(x).trim()).filter(Boolean).slice(0,8);
     if(pollOptions.length<2) throw new Error('A poll needs at least two options.');
@@ -202,7 +228,7 @@ export async function createCommunityPost(cid:string,user:CommunityUser,title:st
   }
   const postRef=doc(db,'communities',cid,'posts',pid);
   try {
-    await setDoc(postRef,data,{merge:false});
+    await setDoc(postRef, stripUndefined(data), {merge:false});
   } catch(err:any) {
     // A deterministic document id makes double-clicks idempotent. If the same
     // publication raced with this write, re-read the cloud document instead of
@@ -218,7 +244,7 @@ export async function createCommunityPost(cid:string,user:CommunityUser,title:st
   return Object.assign(map(createdSnap) as CommunityFeedPost,{publishStatus:'created' as const});
 }
 async function canModerateCommunity(cid:string,uid:string){ if(isSocialAdmin()) return true; const c=await getCommunity(cid); if(c?.ownerId===uid) return true; const m=await getDoc(doc(db,'communities',cid,'members',uid)); return m.exists() && ['owner','moderator'].includes(m.data().role||'member'); }
-export async function updateCommunityPost(cid:string,pid:string,uid:string,data:Pick<CommunityFeedPost,'title'|'content'>){ const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) throw new Error('Post not found.'); if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot edit this post.'); await updateDoc(p.ref,{title:data.title.trim().slice(0,256),content:data.content.trim().slice(0,100000),editedAt:serverTimestamp(),updatedAt:serverTimestamp()}); }
+export async function updateCommunityPost(cid:string,pid:string,uid:string,data:Pick<CommunityFeedPost,'title'|'content'> & Partial<CommunityFeedPost>){ const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) throw new Error('Post not found.'); if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot edit this post.'); const payload:any={title:data.title.trim().slice(0,256),content:data.content.trim().slice(0,100000),editedAt:serverTimestamp(),updatedAt:serverTimestamp()}; const optional=['excerpt','coverImage','coverImageAlt','coverImageCaption','category','tags','readingTimeMinutes','contentBlocks']; optional.forEach(k=>{if((data as any)[k]!==undefined) payload[k]=(data as any)[k];}); await updateDoc(p.ref,payload); }
 export async function deleteCommunityPost(cid:string,pid:string,uid:string){
   const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) return;
   if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot delete this post.');

@@ -34,6 +34,12 @@ export interface Article {
   featured?: boolean;
   pinned?: boolean;
   trending?: boolean;
+  collaborators?: Array<{ uid?: string; username?: string; name?: string; role?: string }>;
+  sourcePostId?: string;
+  origin?: 'admin' | 'community_blog' | 'community_post';
+  promotedToArticleSlug?: string;
+  promotedAt?: string;
+  promotedBy?: string;
   author: {
     name: string;
     role: string;
@@ -99,7 +105,13 @@ export interface SiteConfig {
   allowQuestions?: boolean;
   allowTopics?: boolean;
   allowDirectMessages?: boolean;
+  allowPublicBlogs?: boolean;
+  allowCommunityBlogs?: boolean;
+  allowCommunityDiscussions?: boolean;
+  showSocialAnnouncement?: boolean;
   socialAnnouncement?: string;
+  socialAnnouncementLink?: string;
+  socialDefaultSort?: 'new' | 'hot' | 'top' | 'rising';
   customCategories?: string[];
   authorProfileUid?: string;
   authorProfileUsername?: string;
@@ -156,6 +168,20 @@ export interface CommunityPost {
   isVerified?: boolean;
   verificationColor?: string;
   platformRole?: 'member' | 'moderator' | 'master_admin';
+  excerpt?: string;
+  coverImage?: string;
+  coverImageAlt?: string;
+  coverImageCaption?: string;
+  category?: string;
+  tags?: string[];
+  readingTimeMinutes?: number;
+  contentBlocks?: ArticleContentBlock[];
+  collaborators?: Array<{ uid?: string; username?: string; name?: string; role?: string }>;
+  sourcePostId?: string;
+  origin?: 'admin' | 'community_blog' | 'community_post';
+  promotedToArticleSlug?: string;
+  promotedAt?: string;
+  promotedBy?: string;
   clapsCount?: number; // legacy
   upvotesCount: number;
   downvotesCount: number;

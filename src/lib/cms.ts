@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
 import { deletePost } from './community';
-import { Article, SiteConfig, BentoLink, ArticleComment } from '../types';
+import { Article, SiteConfig, BentoLink, ArticleComment, CommunityPost } from '../types';
 import { INITIAL_ARTICLES } from '../data/articles';
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
@@ -59,11 +59,31 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   allowQuestions: true,
   allowTopics: true,
   allowDirectMessages: true,
+  allowPublicBlogs: true,
+  allowCommunityBlogs: true,
+  allowCommunityDiscussions: true,
+  showSocialAnnouncement: false,
   socialAnnouncement: "",
+  socialAnnouncementLink: "",
+  socialDefaultSort: 'new',
   customCategories: [],
   authorProfileUid: '',
   authorProfileUsername: 'krishsarkar'
 };
+
+
+function stripUndefinedDeep<T>(value:T):T {
+  if (value === undefined) return value;
+  if (Array.isArray(value)) return value.map(v => stripUndefinedDeep(v)).filter(v => v !== undefined) as T;
+  if (value && typeof value === 'object') {
+    const obj:any = value as any;
+    if (obj && typeof obj === 'object' && ('_methodName' in obj || obj?.constructor?.name?.includes('FieldValue'))) return value;
+    const out:any = {};
+    Object.entries(obj).forEach(([k,v]) => { if (v !== undefined) out[k] = stripUndefinedDeep(v as any); });
+    return out as T;
+  }
+  return value;
+}
 
 export const DEFAULT_BENTO_LINKS: BentoLink[] = [
   {
@@ -366,11 +386,11 @@ export async function saveArticle(article: Article): Promise<Article> {
   const articleDocRef = doc(db, 'articles', article.slug);
   const existingSnap = await getDoc(articleDocRef);
   const isNewArticle = !existingSnap.exists();
-  const dataToSave = {
+  const dataToSave = stripUndefinedDeep({
     ...article,
     updatedAt: serverTimestamp(),
     createdAt: (article as any).createdAt || serverTimestamp()
-  };
+  });
   await setDoc(articleDocRef, dataToSave, { merge: true });
 
   // Every registered OFFSCRPT user receives an in-app notification when the admin
@@ -405,6 +425,49 @@ export async function saveArticle(article: Article): Promise<Article> {
     }
   }
   return article;
+}
+
+export async function promoteCommunityBlogToMain(post: CommunityPost, collaborateAsEditor = true): Promise<Article> {
+  if (!checkIsAdmin(auth.currentUser?.email)) throw new Error('Master admin access required.');
+  if (post.type !== 'blog') throw new Error('Only a community blog can be promoted to the main publication.');
+  const baseSlug = String(post.title || 'community-blog').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70) || 'community-blog';
+  let slug = `community-${baseSlug}`;
+  let n = 2;
+  while ((await getDoc(doc(db,'articles',slug))).exists()) slug = `community-${baseSlug}-${n++}`;
+  const blocks = Array.isArray(post.contentBlocks) && post.contentBlocks.length
+    ? post.contentBlocks.map((b:any)=>({...b}))
+    : [{type:'paragraph' as const, content:post.content}];
+  const article: Article = {
+    id: slug,
+    slug,
+    title: post.title,
+    excerpt: post.excerpt || post.content.slice(0,240),
+    coverImage: post.coverImage || '',
+    coverImageAlt: post.coverImageAlt || post.title,
+    coverImageCaption: post.coverImageCaption,
+    category: post.category || 'Community',
+    tags: Array.isArray(post.tags) ? post.tags : [],
+    publishedAt: new Date().toISOString(),
+    readingTimeMinutes: post.readingTimeMinutes || Math.max(1, Math.ceil(post.content.split(/\s+/).filter(Boolean).length/220)),
+    featured: true,
+    pinned: false,
+    origin: 'community_blog',
+    sourcePostId: post.id,
+    collaborators: collaborateAsEditor ? [{uid:post.authorId,username:post.authorUsername,name:post.authorName,role:'Original Creator'}] : [],
+    author: {
+      name: post.authorName,
+      role: 'Community Creator',
+      avatar: post.authorAvatar,
+      uid: post.authorId,
+      username: post.authorUsername,
+      isVerified: !!post.isVerified,
+      verificationColor: post.verificationColor
+    },
+    content: blocks
+  } as Article;
+  const saved = await saveArticle(article);
+  { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: saved.slug, promotedAt: serverTimestamp(), promotedBy: auth.currentUser?.uid || '', updatedAt: serverTimestamp() }); }
+  return saved;
 }
 
 export async function setArticleFeaturedStatus(

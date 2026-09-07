@@ -341,9 +341,25 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
             )}
           </div>
         )}
-        <div className="font-sans text-lg leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-neutral-800 mb-12 min-w-0">
-          {renderTextWithMentions(post.content)}
-        </div>
+        {post.coverImage && <figure className="mb-8"><img src={post.coverImage} alt={post.coverImageAlt || post.title} className="w-full max-h-[620px] object-cover border-2 border-black" />{post.coverImageCaption && <figcaption className="font-mono text-[10px] text-neutral-500 mt-2">{post.coverImageCaption}</figcaption>}</figure>}
+        {Array.isArray(post.contentBlocks) && post.contentBlocks.length ? (
+          <div className="space-y-6 mb-12 min-w-0">
+            {post.contentBlocks.map((block:any, idx:number) => {
+              if (block.type === 'image') return <figure key={idx} className="space-y-2"><img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-[620px] object-cover border-2 border-black"/>{block.imageCaption && <figcaption className="font-mono text-[10px] text-neutral-500">{block.imageCaption}</figcaption>}</figure>;
+              if (block.type === 'code') return <pre key={idx} className="border-2 border-black bg-black text-white p-4 overflow-auto font-mono text-xs whitespace-pre"><code>{block.codeBlock?.code || ''}</code></pre>;
+              if (block.type === 'quote') return <blockquote key={idx} className="border-l-8 border-black bg-[var(--color-primary)] p-4 font-serif text-lg italic">{renderTextWithMentions(block.content || '')}{block.quoteAuthor && <div className="font-mono text-[10px] not-italic mt-2">— {block.quoteAuthor}</div>}</blockquote>;
+              if (block.type === 'callout') return <div key={idx} className="border-2 border-black bg-[var(--color-secondary)]/30 p-4"><div className="font-display font-black uppercase text-sm">{block.calloutTitle || block.calloutType || 'NOTE'}</div><div className="font-sans text-base leading-relaxed mt-2 whitespace-pre-wrap">{renderTextWithMentions(block.content || '')}</div></div>;
+              if (block.type === 'list' || block.type === 'takeaways') return <div key={idx} className="border-2 border-black p-4"><div className="font-display font-black uppercase text-sm mb-2">{block.type === 'takeaways' ? 'Key Takeaways' : 'List'}</div><ul className="list-disc pl-6 space-y-1 font-sans text-base">{(block.items || []).filter(Boolean).map((item:string,j:number)=><li key={j}>{renderTextWithMentions(item)}</li>)}</ul></div>;
+              if (block.type === 'heading2') return <h2 key={idx} className="font-display font-black text-2xl sm:text-3xl uppercase border-b-2 border-black pb-2">{block.content || ''}</h2>;
+              if (block.type === 'heading3') return <h3 key={idx} className="font-display font-black text-xl sm:text-2xl uppercase">{block.content || ''}</h3>;
+              return <p key={idx} className="font-sans text-lg leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-neutral-800">{renderTextWithMentions(block.content || '')}</p>;
+            })}
+          </div>
+        ) : (
+          <div className="font-sans text-lg leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-neutral-800 mb-12 min-w-0">
+            {renderTextWithMentions(post.content)}
+          </div>
+        )}
         <div className="mb-10"><CommunityPostExtras post={post} onHashtag={(tag) => onNavigate('explore', tag)} /></div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 pt-6 border-t-2 border-neutral-200 min-w-0">

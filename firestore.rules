@@ -21,6 +21,15 @@ service cloud.firestore {
     }
     function isPlatformModerator() { return isSignedIn() && exists(/databases/$(database)/documents/siteModerators/$(request.auth.uid)); }
     function isStaff() { return isAdmin() || isPlatformModerator(); }
+    function siteConfigExists() { return exists(/databases/$(database)/documents/siteConfig/global); }
+    function publicBlogsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowPublicBlogs', true) == true; }
+    function communityBlogsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowCommunityBlogs', true) == true; }
+    function communityDiscussionsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowCommunityDiscussions', true) == true; }
+    function communityCreationEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowCommunityCreation', true) == true; }
+    function communityPostsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowCommunityPosts', true) == true; }
+    function questionsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowQuestions', true) == true; }
+    function topicsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowTopics', true) == true; }
+    function directMessagesEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowDirectMessages', true) == true; }
 
     // USER VALIDATION
     function isValidUser(data) {
@@ -139,7 +148,7 @@ service cloud.firestore {
 
     match /communities/{communityId} {
       allow read: if true;
-      allow create: if isSignedIn()
+      allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || communityCreationEnabled())
         && incoming().ownerId == request.auth.uid
         && incoming().membersCount == 1
         && incoming().postsCount == 0
@@ -179,14 +188,15 @@ service cloud.firestore {
 
       match /posts/{postId} {
         allow read: if true;
-        allow create: if isSignedIn()
+        allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || communityPostsEnabled())
           && incoming().authorId == request.auth.uid
           && exists(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid))
           && validText(incoming().title, 256)
           && validText(incoming().content, 100000)
           && incoming().score == 0
           && incoming().commentsCount == 0
-          && incoming().get('isFeatured', false) == false;
+          && incoming().get('isFeatured', false) == false
+          && (incoming().get('postType', 'discussion') == 'blog' ? communityBlogsEnabled() : communityDiscussionsEnabled());
         allow update: if isSignedIn() && (
           isAdmin() ||
           isPlatformModerator() ||
@@ -209,7 +219,7 @@ service cloud.firestore {
 
     match /questions/{questionId} {
       allow read: if true;
-      allow create: if isSignedIn() && incoming().authorId == request.auth.uid && validText(incoming().title,256) && validText(incoming().details,100000) && incoming().answersCount == 0;
+      allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || questionsEnabled()) && incoming().authorId == request.auth.uid && validText(incoming().title,256) && validText(incoming().details,100000) && incoming().answersCount == 0;
       allow update: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().authorId);
       allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().authorId);
       match /answers/{answerId} {
@@ -232,7 +242,7 @@ service cloud.firestore {
 
     match /topics/{topicId} {
       allow read: if true;
-      allow create: if isSignedIn() && incoming().createdBy == request.auth.uid && validText(incoming().name,80) && validText(incoming().slug,80);
+      allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || topicsEnabled()) && incoming().createdBy == request.auth.uid && validText(incoming().name,80) && validText(incoming().slug,80);
       allow update: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().createdBy || incoming().diff(existing()).affectedKeys().hasOnly(['followersCount','updatedAt']));
       allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().createdBy);
       match /followers/{userId} {
@@ -244,7 +254,7 @@ service cloud.firestore {
 
     match /messages/{messageId} {
       allow read: if isAdmin() || (isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.recipientId || request.auth.uid in resource.data.get('participants', [])));
-      allow create: if isSignedIn() && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participants && incoming().recipientId in incoming().participants && validText(incoming().content,5000);
+      allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || directMessagesEnabled()) && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participants && incoming().recipientId in incoming().participants && validText(incoming().content,5000);
       allow update: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId) && incoming().diff(existing()).affectedKeys().hasOnly(['content','read']));
       allow delete: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId));
     }
@@ -337,6 +347,15 @@ service cloud.firestore {
         && data.get('hashtags', []).size() <= 20
         && data.get('mediaUrls', []) is list
         && data.get('mediaUrls', []).size() <= 6
+        && data.get('excerpt', '') is string && data.get('excerpt', '').size() <= 500
+        && data.get('coverImage', '') is string && data.get('coverImage', '').size() <= 2048
+        && data.get('coverImageAlt', '') is string && data.get('coverImageAlt', '').size() <= 200
+        && data.get('coverImageCaption', '') is string && data.get('coverImageCaption', '').size() <= 300
+        && data.get('category', '') is string && data.get('category', '').size() <= 80
+        && data.get('tags', []) is list && data.get('tags', []).size() <= 20
+        && data.get('contentBlocks', []) is list && data.get('contentBlocks', []).size() <= 100
+        && data.get('readingTimeMinutes', 1) is number && data.get('readingTimeMinutes', 1) >= 1 && data.get('readingTimeMinutes', 1) <= 180
+        && data.get('promotedToArticleSlug', '') is string && data.get('promotedToArticleSlug', '').size() <= 150
         && (data.get('editedAt', null) == null || data.get('editedAt', null) is timestamp)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
@@ -349,6 +368,7 @@ service cloud.firestore {
         && !get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBlocked', false)
         && isValidPost(incoming())
         && incoming().authorId == request.auth.uid
+        && (incoming().type == 'blog' ? publicBlogsEnabled() : communityDiscussionsEnabled())
         && incoming().upvotesCount == 0
         && incoming().downvotesCount == 0
         && incoming().commentsCount == 0
@@ -363,7 +383,7 @@ service cloud.firestore {
         && (
           isAdmin()
           || isPlatformModerator()
-          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'editedAt', 'updatedAt']))
+          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'editedAt', 'updatedAt']))
           || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'isVerified', 'verificationColor', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))

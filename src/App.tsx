@@ -424,6 +424,9 @@ export default function App() {
     }
   };
 
+  const isMasterAdmin = checkIsAdmin(userAuth?.email);
+  const inMaintenance = !!siteConfig.maintenanceMode && !isMasterAdmin;
+
   const activeArticle = articles.find((a) => a.slug === activeArticleSlug);
 
   useEffect(() => {
@@ -476,6 +479,10 @@ export default function App() {
           </div>
         ) : (
           <>
+            {inMaintenance ? (
+              <div className="max-w-3xl mx-auto px-4 py-28"><div className="border-4 border-black bg-black text-white p-8 text-center"><div className="font-mono text-[10px] text-[var(--color-primary)] font-black">OFFSCRPT MAINTENANCE</div><h1 className="font-display font-black text-4xl uppercase mt-2">BACK SOON.</h1><p className="font-mono text-sm text-neutral-300 mt-4 whitespace-pre-wrap">{siteConfig.maintenanceMessage || 'OFFSCRPT is temporarily under maintenance.'}</p></div></div>
+            ) : (
+            <>
             {currentPage === 'home' && (
               <HomeView
                 articles={articles}
@@ -560,7 +567,7 @@ export default function App() {
             )}
 
             {currentPage === 'social' && (
-              <SocialHubView userProfile={userProfile} onNavigate={navigateTo} />
+              <SocialHubView userProfile={userProfile} onNavigate={navigateTo} siteConfig={siteConfig} />
             )}
             {currentPage === 'explore' && (
               <ExploreView articles={articles} userAuth={userAuth} userProfile={userProfile} onNavigate={navigateTo} initialHashtag={activeArticleSlug || ''} />
@@ -601,6 +608,8 @@ export default function App() {
 
             {currentPage === 'contact' && (
               <ContactView siteConfig={siteConfig} />
+            )}
+              </>
             )}
           </>
         )}

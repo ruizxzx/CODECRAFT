@@ -440,7 +440,7 @@ export async function checkIsFollowing(currentUserId: string, targetUserId: stri
 }
 
 function postDedupeKey(data: Partial<CommunityPost>) {
-  const raw = `${data.authorId || ''}|${data.type || ''}|${String(data.title || '').trim().toLowerCase()}|${String(data.content || '').trim()}`;
+  const raw = `${data.authorId || ''}|${data.type || ''}|${String(data.title || '').trim().toLowerCase()}|${String(data.content || '').trim()}|${Math.floor(Date.now()/600000)}`;
   let h = 2166136261;
   for (let i = 0; i < raw.length; i++) { h ^= raw.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0).toString(36);
@@ -459,192 +459,177 @@ function generateId() {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) return value.filter(v => v !== undefined).map(v => stripUndefined(v)) as unknown as T;
+  if (value && typeof value === 'object') {
+    if ('_methodName' in (value as any) || String((value as any).constructor?.name || '').includes('FieldValue')) return value;
+    const out: any = {};
+    Object.entries(value as any).forEach(([k, v]) => { if (v !== undefined) out[k] = stripUndefined(v as any); });
+    return out as T;
+  }
+  return value;
+}
+
 export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 'updatedAt' | 'upvotesCount' | 'downvotesCount' | 'commentsCount' | 'isFeatured'>) {
-  const dedupeKey = postDedupeKey(data);
+  if (!auth.currentUser || auth.currentUser.uid !== data.authorId) throw new Error('You must be signed in as the post author.');
+  const cleanTitle = String(data.title || '').trim().slice(0, 256);
+  const cleanContent = String(data.content || '').trim().slice(0, 100000);
+  if (!cleanTitle || !cleanContent) throw new Error('Title and content are required.');
+  const dedupeKey = postDedupeKey({ ...data, title: cleanTitle, content: cleanContent });
   try {
     const existingSnap = await getDocs(query(collection(db, 'posts'), where('dedupeKey', '==', dedupeKey), limit(5)));
     const existing = existingSnap.docs.find(d => d.data()?.authorId === data.authorId && d.data()?.type === data.type);
-    if (existing) return { ...existing.data(), id: existing.id } as CommunityPost;
+    if (existing) return { ...existing.data(), id: existing.id, _publishStatus: 'existing' } as CommunityPost & { _publishStatus?: string };
     const postId = generateId();
     const p = `posts/${postId}`;
     const now = new Date().toISOString();
-    const postData = {
+    const postData = stripUndefined({
       ...data,
+      title: cleanTitle,
+      content: cleanContent,
       dedupeKey,
-      ...(data.platformRole || (auth.currentUser?.email && checkIsAdmin(auth.currentUser.email) ? 'master_admin' : null) ? { platformRole: data.platformRole || (checkIsAdmin(auth.currentUser?.email) ? 'master_admin' : undefined) } : {}),
-      mentionedUsernames: extractMentions(`${data.title} ${data.content}`),
-      hashtags: extractHashtags(`${data.title} ${data.content}`),
+      platformRole: data.platformRole || (checkIsAdmin(auth.currentUser.email) ? 'master_admin' : 'member'),
+      mentionedUsernames: extractMentions(`${cleanTitle} ${cleanContent}`),
+      hashtags: extractHashtags(`${cleanTitle} ${cleanContent}`),
       upvotesCount: 0,
       downvotesCount: 0,
       commentsCount: 0,
       repostsCount: 0,
       isFeatured: false,
+      origin: data.origin || 'community_post',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
-    };
+    });
     await setDoc(doc(db, 'posts', postId), postData);
     const confirmed = await getDoc(doc(db, 'posts', postId));
     if (!confirmed.exists()) throw new Error('Post was not confirmed in the cloud. Please refresh before retrying.');
-    const actor = await getCommunityProfile(auth.currentUser?.uid || data.authorId);
-    if (actor) { try { await notifyMentions(data.title + ' ' + data.content, actor, 'post', postId); } catch (e) { console.warn('Post mention notifications failed:', e); } }
-    return { ...confirmed.data(), id: confirmed.id, createdAt: mapDocDates(confirmed.data()).createdAt || now, updatedAt: mapDocDates(confirmed.data()).updatedAt || now } as CommunityPost;
+    const actor = await getCommunityProfile(auth.currentUser.uid);
+    if (actor) { try { await notifyMentions(cleanTitle + ' ' + cleanContent, actor, 'post', postId); } catch (e) { console.warn('Post mention notifications failed:', e); } }
+    return { ...confirmed.data(), id: confirmed.id, _publishStatus: 'created', createdAt: mapDocDates(confirmed.data()).createdAt || now, updatedAt: mapDocDates(confirmed.data()).updatedAt || now } as CommunityPost & { _publishStatus?: string };
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, p);
+    handleFirestoreError(error, OperationType.CREATE, pForCreatePost(data));
+    throw error;
+  }
+}
+function pForCreatePost(data: Partial<CommunityPost>) { return `posts/${data.id || 'new'}`; }
+
+export async function getPosts(type?: 'blog' | 'discussion'): Promise<CommunityPost[]> {
+  const path = 'posts';
+  try {
+    const snap = await getDocs(query(collection(db, 'posts'), limit(500)));
+    const items = snap.docs.map(d => ({ id: d.id, ...mapDocDates(d.data()) } as CommunityPost));
+    const filtered = type ? items.filter(p => p.type === type) : items;
+    return dedupeLegacyPosts(filtered).sort((a, b) => {
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
+  } catch (error) {
+    console.warn('Failed to load legacy posts:', error);
     throw error;
   }
 }
 
+export function subscribeCommunityPosts(type: 'blog' | 'discussion' | undefined, callback: (posts: CommunityPost[]) => void): () => void {
+  let active = true;
+  const q = query(collection(db, 'posts'), limit(500));
+  const fallback = async () => {
+    try {
+      const items = await getPosts(type);
+      if (active) callback(items);
+    } catch (error) {
+      console.warn('Legacy post fallback failed:', error);
+      if (active) callback([]);
+    }
+  };
+  const unsub = onSnapshot(q, (snap) => {
+    const items = snap.docs.map(d => ({ id: d.id, ...mapDocDates(d.data()) } as CommunityPost));
+    const filtered = type ? items.filter(p => p.type === type) : items;
+    if (active) callback(dedupeLegacyPosts(filtered).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()));
+  }, (error) => {
+    console.warn('Legacy post realtime subscription failed:', error);
+    void fallback();
+  });
+  return () => { active = false; unsub(); };
+}
+
+
+
 export async function getCarouselSlides(): Promise<CarouselSlide[]> {
   try {
-    const q = query(collection(db, 'carousel_slides'), orderBy('order', 'asc'));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => ({ ...d.data(), id: d.id } as CarouselSlide));
+    const snap = await getDocs(query(collection(db, 'carousel_slides'), orderBy('order', 'asc')));
+    return snap.docs.map(d => ({ ...mapDocDates(d.data()), id: d.id } as CarouselSlide));
   } catch (error) {
-    console.error("Error fetching carousel slides:", error);
+    console.warn('Failed to load carousel slides:', error);
     return [];
   }
 }
 
 export function subscribeCarouselSlides(callback: (slides: CarouselSlide[]) => void): () => void {
   const q = query(collection(db, 'carousel_slides'), orderBy('order', 'asc'));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as CarouselSlide)));
-  }, (err) => {
-    console.warn("Real-time carousel subscription failed:", err);
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({ ...mapDocDates(d.data()), id: d.id } as CarouselSlide)));
+  }, error => {
+    console.warn('Carousel realtime subscription failed:', error);
     callback([]);
   });
 }
 
 export async function addCarouselSlide(data: Omit<CarouselSlide, 'id' | 'createdAt' | 'updatedAt'>): Promise<CarouselSlide> {
-  const slideId = generateId();
-  try {
-    const now = new Date().toISOString();
-    const slideData = {
-      ...data,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
-    await setDoc(doc(db, 'carousel_slides', slideId), slideData);
-    return { ...slideData, id: slideId, createdAt: now, updatedAt: now } as CarouselSlide;
-  } catch (error) {
-    console.error("Error adding carousel slide:", error);
-    throw error;
-  }
+  const id = generateId();
+  const now = new Date().toISOString();
+  await setDoc(doc(db, 'carousel_slides', id), stripUndefined({ ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+  const confirmed = await getDoc(doc(db, 'carousel_slides', id));
+  if (!confirmed.exists()) throw new Error('Carousel slide was not confirmed in the cloud.');
+  return { ...mapDocDates(confirmed.data()), id: confirmed.id, createdAt: now, updatedAt: now } as CarouselSlide;
 }
 
-export async function updateCarouselSlide(id: string, data: Partial<CarouselSlide>) {
-  try {
-    await updateDoc(doc(db, 'carousel_slides', id), { ...data, updatedAt: serverTimestamp() });
-  } catch (error) {
-    console.error("Error updating carousel slide:", error);
-    throw error;
-  }
+export async function updateCarouselSlide(id: string, data: Partial<CarouselSlide>): Promise<void> {
+  await updateDoc(doc(db, 'carousel_slides', id), stripUndefined({ ...data, updatedAt: serverTimestamp() }));
 }
 
-export async function deleteCarouselSlide(id: string) {
-  try {
-    await deleteDoc(doc(db, 'carousel_slides', id));
-  } catch (error) {
-    console.error("Error deleting carousel slide:", error);
-    throw error;
-  }
+export async function deleteCarouselSlide(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'carousel_slides', id));
 }
 
-export function subscribeCommunityPosts(type: 'discussion' | 'blog' | undefined, callback: (posts: CommunityPost[]) => void): () => void {
-  const q = query(collection(db, 'posts'), limit(100));
-  return onSnapshot(q, (snap) => {
-    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
-    if (type) results = results.filter(r => r.type === type);
-    results = dedupeLegacyPosts(results);
-    results.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    callback(results);
-  }, (error) => {
-    console.error('Community post realtime subscription failed:', error);
-    callback([]);
-  });
-}
-
-export async function getPosts(type?: 'discussion' | 'blog', username?: string): Promise<CommunityPost[]> {
-  const p = `posts`;
-  try {
-    // Deliberately avoid the type+createdAt composite query here. Community blog
-    // posts must work immediately in a fresh Firebase project without requiring
-    // a manually-created composite index. Sort/filter the cloud result client-side.
-    const snap = await getDocs(query(collection(db, 'posts'), limit(200)));
-    let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
-    if (type) results = results.filter(r => r.type === type);
-    if (username) results = results.filter(r => r.authorUsername === username);
-    results = dedupeLegacyPosts(results);
-    results.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
-    return results;
-  } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, p);
-    return [];
-  }
-}
 
 export async function getUserPosts(userId: string, username?: string): Promise<CommunityPost[]> {
   const cleanUsername = username?.toLowerCase().trim();
+  const byId = new Map<string, CommunityPost & { sourceType?: string; communityId?: string; communitySlug?: string }>();
   try {
-    // Query by authorId first. This is a simple single-field Firestore query
-    // and does not require a composite index. If older posts have a stale or
-    // missing authorId, also scan the public posts collection and reconcile by
-    // the canonical handle so historical content remains visible on profiles.
     const authorSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
-    const byId = new Map<string, CommunityPost & { sourceType?: string; communityId?: string; communitySlug?: string }>();
-    authorSnap.docs.forEach(d => byId.set(`root:${d.id}`, { ...d.data(), id: d.id, sourceType: 'root' } as any));
-
-    // Preserve all historical root posts, including older records with stale author IDs.
+    authorSnap.docs.forEach(d => byId.set(`root:${d.id}`, { ...mapDocDates(d.data()), id: d.id, sourceType: 'root' } as any));
     if (cleanUsername) {
-      const allSnap = await getDocs(collection(db, 'posts'));
+      const allSnap = await getDocs(query(collection(db, 'posts'), limit(500)));
       allSnap.docs.forEach(d => {
-        const post = { ...d.data(), id: d.id } as CommunityPost;
+        const post = { ...mapDocDates(d.data()), id: d.id } as CommunityPost;
         if (post.authorUsername?.toLowerCase() === cleanUsername) byId.set(`root:${d.id}`, { ...post, sourceType: 'root' } as any);
       });
     }
-
-    // Also include posts made inside every community without relying on a collection-group index.
-    // This keeps profile history complete even when collection-group indexing is disabled.
-    try {
-      const communitiesSnap = await getDocs(collection(db, 'communities'));
-      const authorProfiles = new Map<string,CommunityUser>();
-      try { const usersSnap = await getDocs(collection(db,'users')); usersSnap.docs.forEach(d=>authorProfiles.set(d.id,mapDocDates(d.data()) as CommunityUser)); } catch {}
-      const communityResults = await Promise.allSettled(communitiesSnap.docs.map(async cDoc => {
-        const postsSnap = await getDocs(collection(db, 'communities', cDoc.id, 'posts'));
-        return { cDoc, postsSnap };
-      }));
-      for (const result of communityResults) {
-        if (result.status !== 'fulfilled') continue;
-        const {cDoc, postsSnap} = result.value;
-        const communitySlug = (cDoc.data() as any).slug || cDoc.id;
-        for (const d of postsSnap.docs) {
-          const data:any = d.data();
-          if (data.authorId === userId || (cleanUsername && data.authorUsername?.toLowerCase() === cleanUsername)) {
-            const ap=authorProfiles.get(data.authorId); byId.set(`community:${cDoc.id}:${d.id}`, { ...data, id: d.id, sourceType: 'community', communityId: cDoc.id, communitySlug, platformRole: data.platformRole || ap?.platformRole, role: data.role || ap?.role } as any);
-          }
-        }
-      }
-    } catch (communityError) {
-      console.warn('Community post profile scan failed:', communityError);
-    }
-
-    return Array.from(byId.values()).sort((a, b) =>
-      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-    ) as CommunityPost[];
   } catch (error) {
-    // Last-resort public scan for legacy records. Profile rendering should not
-    // silently fail just because an index or query shape is unavailable.
-    try {
-      const allSnap = await getDocs(collection(db, 'posts'));
-      return allSnap.docs
-        .map(d => ({ ...d.data(), id: d.id, sourceType: 'root' } as any))
-        .filter(post => post.authorId === userId || (!!cleanUsername && post.authorUsername?.toLowerCase() === cleanUsername))
-        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()) as CommunityPost[];
-    } catch (fallbackError) {
-      handleFirestoreError(fallbackError, OperationType.LIST, 'posts');
-      return [];
-    }
+    console.warn('Root profile post query failed:', error);
   }
+  try {
+    const communitiesSnap = await getDocs(query(collection(db, 'communities'), limit(200)));
+    const results = await Promise.allSettled(communitiesSnap.docs.map(async cDoc => {
+      const postsSnap = await getDocs(query(collection(db, 'communities', cDoc.id, 'posts'), limit(200)));
+      return { cDoc, postsSnap };
+    }));
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      const { cDoc, postsSnap } = result.value;
+      const cData: any = cDoc.data();
+      for (const d of postsSnap.docs) {
+        const data: any = d.data();
+        if (data.authorId !== userId && !(cleanUsername && String(data.authorUsername || '').toLowerCase() === cleanUsername)) continue;
+        byId.set(`community:${cDoc.id}:${d.id}`, {
+          ...mapDocDates(data), id: d.id, sourceType: 'community', communityId: cDoc.id,
+          communitySlug: cData.slug || cDoc.id
+        } as any);
+      }
+    }
+  } catch (error) {
+    console.warn('Community profile post scan failed:', error);
+  }
+  return Array.from(byId.values()).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()) as CommunityPost[];
 }
 
 export async function getPost(postId: string): Promise<CommunityPost | null> {
@@ -659,6 +644,10 @@ export async function getPost(postId: string): Promise<CommunityPost | null> {
     handleFirestoreError(error, OperationType.GET, p);
     return null;
   }
+}
+
+export async function markPostAsMainArticleSource(postId: string, articleSlug: string): Promise<void> {
+  await updateDoc(doc(db, 'posts', postId), { promotedToArticleSlug: articleSlug, promotedAt: serverTimestamp(), updatedAt: serverTimestamp() });
 }
 
 export async function updatePost(postId: string, data: Partial<CommunityPost>) {
