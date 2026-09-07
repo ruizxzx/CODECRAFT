@@ -1,10 +1,14 @@
-# OFFSCRPT V36 Firebase Deployment
+# OFFSCRPT V37 Firebase Deployment
 
-## Firestore Rules
-Use the included `firestore.rules` if your deployed rules predate V35/V36. V36 does not require a new index.
+## Required
+Publish the included `firestore.rules` in Firebase Console:
+
+Firestore Database → Rules → replace with this file → Publish.
+
+The rules change is required so public creators can edit published blogs and set the controlled `editReviewStatus: pending` review state without granting them approval authority.
 
 ## Indexes
-No manual Firestore index change is required for V36.
+No new Firestore index is required for V37.
 
 ## Data
-V36 uses the existing `posts`, `communities/*/posts`, `articles`, and notification collections. No migration or destructive data operation is required.
+Existing posts, articles, communities, profiles, discussions, and messages are preserved. V37 does not run a data migration.

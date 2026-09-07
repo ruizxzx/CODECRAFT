@@ -670,8 +670,12 @@ export async function updatePost(postId: string, data: Partial<CommunityPost>) {
       }
     }
     await updateDoc(doc(db, 'posts', postId), patch);
-    // Public creator edits are reflected by the main article reader/listing via sourcePostId hydration.
-    // The canonical editable record remains the creator's post; public users are never granted article write access.
+    const confirmed = await getDoc(doc(db, 'posts', postId));
+    if (!confirmed.exists()) throw new Error('Your edit was not confirmed in Firebase. Please refresh and try again.');
+    // Public creator edits remain canonical in the source post. Published main articles
+    // are hydrated from this source, so edits appear on the main site immediately with
+    // EDITED + PENDING REVIEW until a master admin approves the change.
+    return { ...mapDocDates(confirmed.data()), id: confirmed.id } as CommunityPost;
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, p);
     throw error;

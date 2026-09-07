@@ -201,7 +201,11 @@ service cloud.firestore {
           isAdmin() ||
           isPlatformModerator() ||
           isCommunityModerator(communityId) ||
-          request.auth.uid == existing().authorId
+          (request.auth.uid == existing().authorId && (
+            existing().get('postType', 'discussion') != 'blog' ||
+            (existing().get('promotedToArticleSlug', '') == '' && existing().get('mainPublicationStatus', '') != 'published') ||
+            (incoming().get('editReviewStatus', '') == 'pending' && incoming().get('editReviewRequestedAt', null) is timestamp && incoming().get('editReviewedAt', null) == null && incoming().get('editReviewedBy', null) == null)
+          ))
         );
         allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || isCommunityModerator(communityId) || request.auth.uid == existing().authorId);
         match /votes/{userId} {
@@ -357,6 +361,10 @@ service cloud.firestore {
         && data.get('readingTimeMinutes', 1) is number && data.get('readingTimeMinutes', 1) >= 1 && data.get('readingTimeMinutes', 1) <= 180
         && data.get('promotedToArticleSlug', '') is string && data.get('promotedToArticleSlug', '').size() <= 150
         && (data.get('editedAt', null) == null || data.get('editedAt', null) is timestamp)
+        && data.get('editReviewStatus', 'approved') in ['pending', 'approved']
+        && (data.get('editReviewRequestedAt', null) == null || data.get('editReviewRequestedAt', null) is timestamp)
+        && (data.get('editReviewedAt', null) == null || data.get('editReviewedAt', null) is timestamp)
+        && (data.get('editReviewedBy', null) == null || (data.get('editReviewedBy', '') is string && data.get('editReviewedBy', '').size() <= 128))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -383,7 +391,17 @@ service cloud.firestore {
         && (
           isAdmin()
           || isPlatformModerator()
-          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'editedAt', 'updatedAt']))
+          || (request.auth.uid == existing().authorId
+              && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'editedAt', 'updatedAt'])
+              && existing().get('promotedToArticleSlug', '') == ''
+              && existing().get('mainPublicationStatus', '') != 'published')
+          || (request.auth.uid == existing().authorId
+              && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'editedAt', 'updatedAt', 'editReviewStatus', 'editReviewRequestedAt', 'editReviewedAt', 'editReviewedBy'])
+              && (existing().get('promotedToArticleSlug', '') != '' || existing().get('mainPublicationStatus', '') == 'published')
+              && incoming().get('editReviewStatus', '') == 'pending'
+              && incoming().get('editReviewRequestedAt', null) is timestamp
+              && incoming().get('editReviewedAt', null) == null
+              && incoming().get('editReviewedBy', null) == null)
           || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'isVerified', 'verificationColor', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
