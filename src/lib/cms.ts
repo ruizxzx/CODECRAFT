@@ -139,6 +139,25 @@ export async function saveSiteConfig(config: SiteConfig): Promise<void> {
 }
 
 
+export async function createSiteConfigBackup(config: SiteConfig, label='Manual backup') {
+  const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
+  const id=`backup_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  await setDoc(doc(db,'siteConfigBackups',id),{label:label.trim().slice(0,120)||'Manual backup',snapshot:config,createdBy:admin.uid,createdByEmail:admin.email||'',createdAt:serverTimestamp()});
+}
+
+export async function getSiteConfigBackups():Promise<any[]> {
+  const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
+  const snap=await getDocs(query(collection(db,'siteConfigBackups'),limit(100)));
+  return snap.docs.map(d=>({id:d.id,...d.data(),createdAt:(d.data() as any).createdAt?.toDate?.()?.toISOString?.() || String((d.data() as any).createdAt||'')})).sort((a:any,b:any)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime());
+}
+
+export async function restoreSiteConfigBackup(backupId:string):Promise<SiteConfig> {
+  const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
+  const snap=await getDoc(doc(db,'siteConfigBackups',backupId)); if(!snap.exists()) throw new Error('Backup not found.');
+  const config=snap.data().snapshot as SiteConfig; await saveSiteConfig(config); return config;
+}
+
+
 export async function syncAdminAuthorProfile(author: {
   name: string;
   role: string;

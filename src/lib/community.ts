@@ -515,10 +515,11 @@ export async function deleteCarouselSlide(id: string) {
 }
 
 export function subscribeCommunityPosts(type: 'discussion' | 'blog' | undefined, callback: (posts: CommunityPost[]) => void): () => void {
-  const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+  const q = query(collection(db, 'posts'), limit(100));
   return onSnapshot(q, (snap) => {
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
     if (type) results = results.filter(r => r.type === type);
+    results.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     callback(results);
   }, (error) => {
     console.error('Community post realtime subscription failed:', error);
@@ -532,10 +533,11 @@ export async function getPosts(type?: 'discussion' | 'blog', username?: string):
     // Deliberately avoid the type+createdAt composite query here. Community blog
     // posts must work immediately in a fresh Firebase project without requiring
     // a manually-created composite index. Sort/filter the cloud result client-side.
-    const snap = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
+    const snap = await getDocs(query(collection(db, 'posts'), limit(200)));
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
     if (type) results = results.filter(r => r.type === type);
     if (username) results = results.filter(r => r.authorUsername === username);
+    results.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     return results;
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, p);
@@ -551,29 +553,54 @@ export async function getUserPosts(userId: string, username?: string): Promise<C
     // missing authorId, also scan the public posts collection and reconcile by
     // the canonical handle so historical content remains visible on profiles.
     const authorSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
-    const byId = new Map<string, CommunityPost>();
-    authorSnap.docs.forEach(d => byId.set(d.id, { ...d.data(), id: d.id } as CommunityPost));
+    const byId = new Map<string, CommunityPost & { sourceType?: string; communityId?: string; communitySlug?: string }>();
+    authorSnap.docs.forEach(d => byId.set(`root:${d.id}`, { ...d.data(), id: d.id, sourceType: 'root' } as any));
 
+    // Preserve all historical root posts, including older records with stale author IDs.
     if (cleanUsername) {
       const allSnap = await getDocs(collection(db, 'posts'));
       allSnap.docs.forEach(d => {
         const post = { ...d.data(), id: d.id } as CommunityPost;
-        if (post.authorUsername?.toLowerCase() === cleanUsername) byId.set(d.id, post);
+        if (post.authorUsername?.toLowerCase() === cleanUsername) byId.set(`root:${d.id}`, { ...post, sourceType: 'root' } as any);
       });
+    }
+
+    // Also include community posts from every community. This makes the profile's
+    // Posts tab a true global history rather than only the legacy /posts collection.
+    try {
+      const groupSnap = await getDocs(collectionGroup(db, 'posts'));
+      for (const d of groupSnap.docs) {
+        const path = d.ref.path.split('/');
+        // Root /posts/{postId} is already covered above. Community paths are
+        // /communities/{communityId}/posts/{postId}.
+        const isCommunityPost = path.length === 4 && path[0] === 'communities' && path[2] === 'posts';
+        if (!isCommunityPost) continue;
+        const data: any = d.data();
+        if (data.authorId === userId || (cleanUsername && data.authorUsername?.toLowerCase() === cleanUsername)) {
+          let communitySlug='';
+          try {
+            const cSnap = await getDoc(doc(db, 'communities', path[1]));
+            communitySlug = cSnap.exists() ? (cSnap.data()?.slug || '') : '';
+          } catch {}
+          byId.set(`community:${path[1]}:${d.id}`, { ...data, id: d.id, sourceType: 'community', communityId: path[1], communitySlug } as any);
+        }
+      }
+    } catch (communityError) {
+      console.warn('Community post profile scan failed:', communityError);
     }
 
     return Array.from(byId.values()).sort((a, b) =>
       new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-    );
+    ) as CommunityPost[];
   } catch (error) {
     // Last-resort public scan for legacy records. Profile rendering should not
     // silently fail just because an index or query shape is unavailable.
     try {
       const allSnap = await getDocs(collection(db, 'posts'));
       return allSnap.docs
-        .map(d => ({ ...d.data(), id: d.id } as CommunityPost))
+        .map(d => ({ ...d.data(), id: d.id, sourceType: 'root' } as any))
         .filter(post => post.authorId === userId || (!!cleanUsername && post.authorUsername?.toLowerCase() === cleanUsername))
-        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()) as CommunityPost[];
     } catch (fallbackError) {
       handleFirestoreError(fallbackError, OperationType.LIST, 'posts');
       return [];

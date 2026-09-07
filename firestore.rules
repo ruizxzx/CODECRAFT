@@ -72,7 +72,9 @@ service cloud.firestore {
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt']))
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))
-        || (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']));
+        || (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']))
+        || (isAdmin() && isValidUser(incoming()));
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
 
       match /followers/{followerId} {
         allow read: if true;
@@ -149,7 +151,7 @@ service cloud.firestore {
         allow create: if isSignedIn() && (request.auth.uid == memberId || isAdmin() || isCommunityOwner(communityId))
           && incoming().uid == memberId;
         allow update: if isSignedIn() && (isAdmin() || isCommunityOwner(communityId) || existing().get('role','member') == 'owner' && request.auth.uid == get(/databases/$(database)/documents/communities/$(communityId)).data.ownerId);
-        allow delete: if isSignedIn() && (isAdmin() || isCommunityOwner(communityId) || request.auth.uid == memberId) && memberId != get(/databases/$(database)/documents/communities/$(communityId)).data.ownerId;
+        allow delete: if isSignedIn() && (isAdmin() || (isCommunityOwner(communityId) || request.auth.uid == memberId) && memberId != get(/databases/$(database)/documents/communities/$(communityId)).data.ownerId || (request.auth.uid == memberId && get(/databases/$(database)/documents/communities/$(communityId)).data.ownerId == request.auth.uid));
       }
 
       match /posts/{postId} {
@@ -160,7 +162,8 @@ service cloud.firestore {
           && validText(incoming().title, 256)
           && validText(incoming().content, 100000)
           && incoming().score == 0
-          && incoming().commentsCount == 0;
+          && incoming().commentsCount == 0
+          && incoming().get('isFeatured', false) == false;
         allow update: if isSignedIn() && (
           isAdmin() ||
           isCommunityModerator(communityId) ||
@@ -211,10 +214,10 @@ service cloud.firestore {
     }
 
     match /messages/{messageId} {
-      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow read: if isAdmin() || (isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.recipientId || request.auth.uid in resource.data.get('participants', [])));
       allow create: if isSignedIn() && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participants && incoming().recipientId in incoming().participants && validText(incoming().content,5000);
-      allow update: if isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId) && incoming().diff(existing()).affectedKeys().hasOnly(['content','read']);
-      allow delete: if isSignedIn() && (isAdmin() || request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId);
+      allow update: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId) && incoming().diff(existing()).affectedKeys().hasOnly(['content','read']));
+      allow delete: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId));
     }
 
     match /reports/{reportId} {
@@ -329,13 +332,12 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'editedAt', 'updatedAt']))
+          isAdmin()
+          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'editedAt', 'updatedAt']))
           || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'isVerified', 'verificationColor', 'updatedAt']))
-          || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['repostsCount', 'updatedAt']))
-          || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isFeatured', 'updatedAt']))
         );
       allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
       
@@ -412,6 +414,11 @@ service cloud.firestore {
     match /siteConfig/{docId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    match /siteConfigBackups/{backupId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     match /bento_links/{docId} {

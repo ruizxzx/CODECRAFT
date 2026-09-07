@@ -33,7 +33,8 @@ import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../li
 import { 
   saveArticle, 
   deleteArticle, 
-  saveSiteConfig, 
+  saveSiteConfig,
+  getSiteConfig,
   saveBentoLinks, 
   setArticleFeaturedStatus,
   syncAuthorToAllCloudArticles,
@@ -48,6 +49,7 @@ import {
   getUserVerificationByUsername
 } from '../lib/community';
 import { SocialAdminPanel } from './SocialAdminPanel';
+import { AdminControlPanel } from './AdminControlPanel';
 
 interface AdminStudioModalProps {
   isOpen: boolean;
@@ -119,7 +121,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setCurrentUserEmail(null);
   };
 
-  const [activeTab, setActiveTab] = useState<'settings' | 'create' | 'manage' | 'links' | 'carousel' | 'social'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'create' | 'manage' | 'links' | 'carousel' | 'social' | 'control'>('settings');
 
   // Carousel State
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([]);
@@ -895,7 +897,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
           <div className="bg-white min-h-[600px] flex flex-col">
 
             {/* Tab Selector (5 Clean Modules) */}
-            <div className="grid grid-cols-6 border-b-4 border-black font-display font-black text-[10px] sm:text-xs uppercase bg-white overflow-x-auto whitespace-nowrap">
+            <div className="grid grid-cols-7 border-b-4 border-black font-display font-black text-[10px] sm:text-xs uppercase bg-white overflow-x-auto whitespace-nowrap">
               <button
                 onClick={() => setActiveTab('settings')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
@@ -954,6 +956,16 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               >
                 <Shield className="w-4 h-4" />
                 <span className="hidden sm:inline">SOCIAL MOD</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('control')}
+                className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
+                  activeTab === 'control' ? 'bg-[var(--color-primary)] text-black' : 'hover:bg-neutral-100'
+                }`}
+              >
+                <Database className="w-4 h-4" />
+                <span className="hidden sm:inline">MASTER CONTROL</span>
               </button>
             </div>
 
@@ -1715,6 +1727,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
             {/* TAB: SOCIAL MODERATION */}
             {activeTab === 'social' && <SocialAdminPanel />}
+
+            {/* TAB: MASTER CONTROL */}
+            {activeTab === 'control' && <AdminControlPanel onSiteConfigRestored={async () => { onUpdateSiteConfig(await getSiteConfig()); }} />}
 
             {/* TAB: CAROUSEL */}
             {activeTab === 'carousel' && (
