@@ -109,7 +109,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
             </span>
           </div>
           <div className="text-neutral-600">
-            Posting in Community feed
+            Posting in Community feed · use @handle to mention someone
           </div>
         </div>
 

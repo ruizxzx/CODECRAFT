@@ -144,6 +144,7 @@ export interface CommunityPost {
   editedAt?: string;
   quoteText?: string;
   quotedPostId?: string;
+  mentionedUsernames?: string[];
 }
 
 export interface CommunityComment {

@@ -46,9 +46,21 @@ async function notifyMentions(text: string, actor: CommunityUser, targetType: 'p
   if (!handles.length) return;
   await Promise.all(handles.map(async username => {
     try {
-      const snap = await getDoc(doc(db, 'usernames', username));
-      const uid = snap.exists() ? snap.data()?.uid : null;
-      if (uid) await createNotification(uid, { type: 'mention', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: `mentioned you in a ${targetType}`, targetType, targetId });
+      // Primary lookup uses the canonical username reservation. The users fallback
+      // also supports older profiles that predate username reservation documents.
+      const usernameSnap = await getDoc(doc(db, 'usernames', username));
+      let uid = usernameSnap.exists() ? usernameSnap.data()?.uid : null;
+      if (!uid) {
+        const userSnap = await getDocs(query(collection(db, 'users'), where('username', '==', username), limit(1)));
+        uid = userSnap.empty ? null : userSnap.docs[0].id;
+      }
+      if (uid) {
+        await createNotification(uid, {
+          type: 'mention', actorId: actor.uid, actorUsername: actor.username,
+          actorName: actor.displayName, actorAvatar: actor.photoURL || '',
+          message: `mentioned you in a ${targetType}`, targetType, targetId
+        });
+      }
     } catch (e) { console.warn('Mention notification failed:', e); }
   }));
 }
@@ -354,6 +366,7 @@ export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 
     const now = new Date().toISOString();
     const postData = {
       ...data,
+      mentionedUsernames: extractMentions(`${data.title} ${data.content}`),
       upvotesCount: 0,
       downvotesCount: 0,
       commentsCount: 0,
@@ -549,6 +562,7 @@ export async function addComment(postId: string, currentCommentsCount: number | 
     const commentData = {
       ...data,
       postId,
+      mentionedUsernames: extractMentions(data.content),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     };
@@ -904,8 +918,25 @@ export async function toggleRepost(postId: string, userId: string, isReposted: b
 export async function quoteRepost(postId: string, user: CommunityUser, quoteText: string): Promise<CommunityPost> {
   const original = await getPost(postId);
   if (!original) throw new Error('Original post no longer exists.');
-  const created = await createPost({ type: original.type, title: original.title, content: original.content, authorId: user.uid, authorUsername: user.username, authorName: user.displayName, authorAvatar: user.photoURL || '', isVerified: !!user.isVerified, verificationColor: user.verificationColor || '#2196F3', quoteText: quoteText.trim(), quotedPostId: postId });
-  await toggleRepost(postId, user.uid, false);
+  const text = quoteText.trim();
+  if (!text) throw new Error('Add a comment before publishing the quote.');
+
+  // Publishing the quote is the primary operation. Repost bookkeeping is
+  // intentionally best-effort so a stale/older Firestore rule cannot prevent
+  // the quote itself from being published.
+  const created = await createPost({
+    type: original.type, title: original.title, content: original.content,
+    authorId: user.uid, authorUsername: user.username, authorName: user.displayName,
+    authorAvatar: user.photoURL || '', isVerified: !!user.isVerified,
+    verificationColor: user.verificationColor || '#2196F3',
+    quoteText: text, quotedPostId: postId
+  });
+
+  try {
+    await toggleRepost(postId, user.uid, false);
+  } catch (e) {
+    console.warn('Quote published but repost bookkeeping failed:', e);
+  }
   return created;
 }
 

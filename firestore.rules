@@ -120,7 +120,7 @@ service cloud.firestore {
         && request.resource.data.message is string
         && request.resource.data.message.size() <= 200
         && request.resource.data.read is bool
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt is timestamp;
     }
 
     match /users/{userId}/drafts/{draftId} {

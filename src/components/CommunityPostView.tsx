@@ -104,6 +104,27 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     finally { setIsReposting(false); }
   };
 
+
+  const renderTextWithMentions = (text: string) => {
+    const parts = text.split(/(@[a-zA-Z0-9_]{3,30})/g);
+    return parts.map((part, index) => {
+      if (/^@[a-zA-Z0-9_]{3,30}$/.test(part)) {
+        const username = part.slice(1).toLowerCase();
+        return (
+          <button
+            key={`${username}-${index}`}
+            type="button"
+            onClick={() => onNavigate('community_profile', username)}
+            className="font-bold underline decoration-2 underline-offset-2 hover:opacity-70"
+          >
+            {part}
+          </button>
+        );
+      }
+      return <React.Fragment key={index}>{part}</React.Fragment>;
+    });
+  };
+
   const handleShare = async () => {
     const url = window.location.href;
     try {
@@ -287,8 +308,25 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           </div>
         </div>
 
+        {post.quoteText && (
+          <div className="mb-6 border-2 border-black bg-[var(--color-primary)] p-4">
+            <div className="font-mono text-[10px] font-black uppercase mb-2">Quote</div>
+            <div className="font-sans text-base leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {renderTextWithMentions(post.quoteText)}
+            </div>
+            {post.quotedPostId && (
+              <button
+                type="button"
+                onClick={() => onNavigate('community_post', post.quotedPostId)}
+                className="mt-3 font-mono text-xs font-bold underline uppercase"
+              >
+                View original post →
+              </button>
+            )}
+          </div>
+        )}
         <div className="font-sans text-lg leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-neutral-800 mb-12 min-w-0">
-          {post.content}
+          {renderTextWithMentions(post.content)}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 pt-6 border-t-2 border-neutral-200 min-w-0">
@@ -353,7 +391,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
             <textarea 
               value={commentInput}
               onChange={(e) => setCommentInput(e.target.value)}
-              placeholder="Add to the discussion..."
+              placeholder="Add to the discussion... (use @handle to mention someone)"
               className="w-full px-4 py-3 border-2 border-black font-sans text-sm min-h-[100px] focus:outline-none focus:bg-neutral-50"
               required
             />
@@ -391,7 +429,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
                 )}
               </div>
               <div className="font-sans text-sm text-neutral-800 whitespace-pre-wrap ml-11">
-                {c.content}
+                {renderTextWithMentions(c.content)}
               </div>
             </div>
           ))}
