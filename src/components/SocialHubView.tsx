@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
 import {
-  getCommunities, createCommunity, updateCommunity, deleteCommunity, joinCommunity, leaveCommunity,
+  getCommunities, getCommunity, createCommunity, updateCommunity, deleteCommunity, joinCommunity, leaveCommunity,
   subscribeCommunityFeed, createCommunityPost, updateCommunityPost, deleteCommunityPost,
   voteCommunityPost, voteCommunityPoll, getCommunityMembers, setCommunityMemberRole, removeCommunityMember,
   getQuestions, createQuestion, updateQuestion, deleteQuestion, getAnswers, createAnswer, updateAnswer,
@@ -231,9 +231,14 @@ export const SocialHubView: React.FC<Props> = ({ userProfile, onNavigate }) => {
         mediaUrls: selected.allowMedia === false ? [] : mediaUrl.split(',').map(x => x.trim()).filter(Boolean).slice(0, 6),
         ...(postType === 'poll' ? { poll: { question: title.trim(), options: opts } } : {})
       });
+      const cloudCommunity = await getCommunity(selected.id);
+      if (cloudCommunity) setSelected(cloudCommunity);
       setCommunityPosts(x => [p, ...x.filter(v => v.id !== p.id)]);
       resetComposer(); setPostForm(false);
-      setMessage(parentPostId ? 'Thread reply published and confirmed in Firebase.' : 'Community post published and confirmed in Firebase.');
+      setMessage(p.publishStatus === 'existing'
+        ? 'This post was already published. Showing the existing cloud copy.'
+        : (parentPostId ? 'Thread reply published and confirmed in Firebase.' : 'Community post published and confirmed in Firebase.'));
+      setError('');
       await refresh();
     } catch (e) { showError(e); }
     finally { setPosting(false); }

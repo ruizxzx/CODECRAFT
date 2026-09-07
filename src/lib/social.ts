@@ -22,10 +22,8 @@ const staffRole=(u:CommunityUser)=> (u.platformRole || (checkIsAdmin(auth.curren
 const dedupePosts=(items:CommunityFeedPost[])=>{ const seen=new Set<string>(); const sigs=new Set<string>(); return items.filter(p=>{ if(seen.has(p.id)) return false; seen.add(p.id); const sig=`${p.authorId}|${p.title.trim().toLowerCase()}|${p.content.trim()}|${Math.floor(new Date(p.createdAt||0).getTime()/60000)}`; if(sigs.has(sig)) return false; sigs.add(sig); return true; }); };
 
 
-const communityDedupeKey=(data:{communityId:string;authorId:string;title:string;content:string;postType:string})=>{
-  const raw=`${data.communityId}|${data.authorId}|${data.postType}|${data.title.trim().toLowerCase()}|${data.content.trim()}`; let h=2166136261;
-  for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619);} return (h>>>0).toString(36);
-};
+const hashText=(raw:string)=>{ let h=2166136261; for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619);} return (h>>>0).toString(36); };
+const communityDedupeKey=(data:{communityId:string;authorId:string;title:string;content:string;postType:string;parentPostId?:string})=> hashText(`${data.communityId}|${data.authorId}|${data.postType}|${data.parentPostId||''}|${data.title.trim().toLowerCase()}|${data.content.trim()}`);
 
 export async function isPlatformModerator(uid?:string):Promise<boolean>{
   if(!uid) return false;
@@ -54,9 +52,23 @@ export async function removePlatformModerator(uid:string):Promise<void>{
 
 export async function getCommunities():Promise<SocialCommunity[]> {
   let snap;
-  try { snap=await getDocs(query(collection(db,'communities'),limit(100))); }
+  try { snap=await getDocs(query(collection(db,'communities'),limit(200))); }
   catch { snap=await getDocs(collection(db,'communities')); }
-  const items=(snap.docs.map(map) as SocialCommunity[]).sort((a,b)=>(b.membersCount||0)-(a.membersCount||0));
+  const raw=(snap.docs.map(map) as SocialCommunity[]);
+  // Historical builds could create the same slug more than once. Do not delete
+  // those records here; collapse them deterministically in the public UI.
+  const unique = new Map<string, SocialCommunity>();
+  for (const c of raw) {
+    const key = (c.slug || c.id).toLowerCase();
+    const prev = unique.get(key);
+    if (!prev) unique.set(key,c);
+    else {
+      const prevScore = (prev.membersCount||0)*1000000 + (prev.postsCount||0)*1000 + new Date(prev.createdAt||0).getTime()/1e12;
+      const currScore = (c.membersCount||0)*1000000 + (c.postsCount||0)*1000 + new Date(c.createdAt||0).getTime()/1e12;
+      if (currScore > prevScore) unique.set(key,c);
+    }
+  }
+  const items=Array.from(unique.values()).sort((a,b)=>(b.membersCount||0)-(a.membersCount||0) || (b.postsCount||0)-(a.postsCount||0));
   return Promise.all(items.map(async c=>{
     if(c.ownerUsername) return c;
     try { const p=await profile(c.ownerId); if(p) return {...c,ownerUsername:p.username,ownerName:p.displayName,ownerAvatar:p.photoURL||''}; } catch {}
@@ -141,39 +153,82 @@ export async function recomputeCommunityCounters(cid:string){
 
 
 export async function getCommunityPosts(cid:string,sort:'new'|'hot'|'top'='new'){ const s=await getDocs(query(collection(db,'communities',cid,'posts'),limit(200))); const items=dedupePosts((s.docs.map(map) as CommunityFeedPost[]).filter(p=>!p.isArchived)); const rank=(a:CommunityFeedPost,b:CommunityFeedPost)=>{ if(!!b.isPinned!==!!a.isPinned) return b.isPinned?1:-1; if(sort==='top') return (b.score||0)-(a.score||0); if(sort==='hot') return ((b.score||0)*3 + new Date(b.createdAt||0).getTime()/86400000)-((a.score||0)*3 + new Date(a.createdAt||0).getTime()/86400000); return new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime(); }; return items.sort(rank); }
-export function subscribeCommunityFeed(cid:string,cb:(x:CommunityFeedPost[])=>void){ return onSnapshot(query(collection(db,'communities',cid,'posts'),orderBy('createdAt','desc'),limit(200)),s=>cb(dedupePosts((s.docs.map(map) as CommunityFeedPost[]).filter(p=>!p.isArchived))),err=>{console.warn('Community feed realtime subscription failed:',err);cb([]);}); }
-export async function createCommunityPost(cid:string,user:CommunityUser,title:string,content:string,options:{parentPostId?:string;postType?:'blog'|'discussion'|'question'|'link'|'poll'|'announcement';flair?:string;linkUrl?:string;mediaUrls?:string[];poll?:{question:string;options:string[]}}={} ){
+export function subscribeCommunityFeed(cid:string,cb:(x:CommunityFeedPost[])=>void){
+  // Avoid an orderBy so a fresh project does not depend on an index. Sort the
+  // cloud snapshot locally and keep a polling fallback if a listener is denied.
+  let active=true; let pollTimer:ReturnType<typeof setInterval>|null=null;
+  const load=async()=>{ try { const items=await getCommunityPosts(cid,'new'); if(active) cb(items); return true; } catch(err){ console.warn('Community feed fallback read failed:',err); if(active) cb([]); return false; } };
+  const q=query(collection(db,'communities',cid,'posts'),limit(200));
+  const unsub=onSnapshot(q,s=>{
+    const items=dedupePosts((s.docs.map(map) as CommunityFeedPost[]).filter(p=>!p.isArchived));
+    items.sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime());
+    cb(items);
+  },err=>{
+    console.warn('Community feed realtime subscription failed:',err);
+    void load();
+    if(!pollTimer) pollTimer=setInterval(()=>void load(),15000);
+  });
+  return ()=>{ active=false; unsub(); if(pollTimer) clearInterval(pollTimer); };
+}
+export type CommunityPublishResult = CommunityFeedPost & { publishStatus: 'created' | 'existing' };
+
+export async function createCommunityPost(cid:string,user:CommunityUser,title:string,content:string,options:{parentPostId?:string;postType?:'blog'|'discussion'|'question'|'link'|'poll'|'announcement';flair?:string;linkUrl?:string;mediaUrls?:string[];poll?:{question:string;options:string[]}}={} ):Promise<CommunityPublishResult>{
   const c=await getCommunity(cid); if(!c) throw new Error('Community not found.');
   if(c.isArchived || c.isLocked) throw new Error('This community is not accepting new posts.');
-  if(!(await isCommunityMember(cid,user.uid))){ if(c.ownerId===user.uid){ await setDoc(doc(db,'communities',cid,'members',user.uid),{uid:user.uid,username:user.username,role:'owner',createdAt:serverTimestamp(),updatedAt:serverTimestamp()}); } else throw new Error('Join the community first.'); }
+  const memberRef=doc(db,'communities',cid,'members',user.uid);
+  let memberSnap=await getDoc(memberRef);
+  if(!memberSnap.exists()){
+    if(c.ownerId===user.uid){
+      await setDoc(memberRef,{uid:user.uid,username:user.username,role:'owner',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+      memberSnap=await getDoc(memberRef);
+    } else throw new Error('Join the community first.');
+  }
   const postType=options.postType||c.defaultPostType||'discussion';
-  const dedupeKey=communityDedupeKey({communityId:cid,authorId:user.uid,postType,title,content});
+  const baseDedupeKey=communityDedupeKey({communityId:cid,authorId:user.uid,postType,title,content,parentPostId:options.parentPostId});
+  const bucket=Math.floor(Date.now()/120000);
+  const dedupeKey=`${baseDedupeKey}-${bucket}`;
   const existingSnap=await getDocs(query(collection(db,'communities',cid,'posts'),where('dedupeKey','==',dedupeKey),limit(5)));
   const existing=existingSnap.docs.find(d=>d.data()?.authorId===user.uid && !d.data()?.isArchived);
-  if(existing) return map(existing) as CommunityFeedPost;
-  const pid=id();
+  if(existing) return Object.assign(map(existing) as CommunityFeedPost,{publishStatus:'existing' as const});
+  const pid=`p_${hashText(`${dedupeKey}|${user.uid}`)}`;
   const cleanTitle=title.trim().slice(0,256); const cleanContent=content.trim().slice(0,100000);
   if(!cleanTitle || !cleanContent) throw new Error('Title and content are required.');
   if(options.parentPostId){ const parent=await getDoc(doc(db,'communities',cid,'posts',options.parentPostId)); if(!parent.exists()) throw new Error('Parent thread not found.'); if(parent.data()?.isLocked) throw new Error('This thread is locked.'); }
-  const data:any={communityId:cid,parentPostId:options.parentPostId||'',postType,flair:options.flair?.trim().slice(0,30)||'',linkUrl:options.linkUrl?.trim().slice(0,2000)||'',mediaUrls:Array.isArray(options.mediaUrls)?options.mediaUrls.slice(0,6):[],dedupeKey,title:cleanTitle,content:cleanContent,authorId:user.uid,authorUsername:user.username,authorName:user.displayName,authorAvatar:user.photoURL||'',authorPlatformRole:staffRole(user),score:0,commentsCount:0,isFeatured:false,isPinned:false,isLocked:false,isArchived:false,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
-  if(options.poll && postType==='poll') data.poll={question:String(options.poll.question||cleanTitle).slice(0,256),options:options.poll.options.map(x=>String(x).trim()).filter(Boolean).slice(0,8),votes:{}};
-  await runTransaction(db,async tx=>{
-    const communityRef=doc(db,'communities',cid); const memberRef=doc(db,'communities',cid,'members',user.uid); const postRef=doc(db,'communities',cid,'posts',pid);
-    const [communitySnap,memberSnap]=await Promise.all([tx.get(communityRef),tx.get(memberRef)]);
-    if(!communitySnap.exists()) throw new Error('Community not found.');
-    const cd:any=communitySnap.data();
-    if(cd.isArchived || cd.isLocked) throw new Error('This community is not accepting new posts.');
-    if(!memberSnap.exists()) throw new Error('Join the community first.');
-    tx.set(postRef,data); tx.update(communityRef,{postsCount:increment(1),updatedAt:serverTimestamp()});
-    if(options.parentPostId) tx.update(doc(db,'communities',cid,'posts',options.parentPostId),{commentsCount:increment(1),updatedAt:serverTimestamp()});
-  });
-  const createdSnap=await getDoc(doc(db,'communities',cid,'posts',pid));
+  const data:any={communityId:cid,parentPostId:options.parentPostId||'',postType,flair:options.flair?.trim().slice(0,30)||'',linkUrl:options.linkUrl?.trim().slice(0,2000)||'',mediaUrls:Array.isArray(options.mediaUrls)?options.mediaUrls.filter(Boolean).slice(0,6):[],dedupeKey,title:cleanTitle,content:cleanContent,authorId:user.uid,authorUsername:user.username,authorName:user.displayName,authorAvatar:user.photoURL||'',authorPlatformRole:staffRole(user),score:0,commentsCount:0,isFeatured:false,isPinned:false,isLocked:false,isArchived:false,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+  if(options.poll && postType==='poll'){
+    const pollOptions=options.poll.options.map(x=>String(x).trim()).filter(Boolean).slice(0,8);
+    if(pollOptions.length<2) throw new Error('A poll needs at least two options.');
+    data.poll={question:String(options.poll.question||cleanTitle).slice(0,256),options:pollOptions,votes:{}};
+  }
+  const postRef=doc(db,'communities',cid,'posts',pid);
+  try {
+    await setDoc(postRef,data,{merge:false});
+  } catch(err:any) {
+    // A deterministic document id makes double-clicks idempotent. If the same
+    // publication raced with this write, re-read the cloud document instead of
+    // presenting a false failure to the user.
+    const raced=await getDoc(postRef).catch(()=>null);
+    if(raced?.exists()) return Object.assign(map(raced) as CommunityFeedPost,{publishStatus:'existing' as const});
+    throw err;
+  }
+  const createdSnap=await getDoc(postRef);
   if(!createdSnap.exists()) throw new Error('Post was not confirmed in the cloud. Please refresh before retrying.');
-  return map(createdSnap) as CommunityFeedPost;
+  try { await updateDoc(doc(db,'communities',cid),{postsCount:increment(1),updatedAt:serverTimestamp()}); } catch(err) { console.warn('Community post counter sync deferred:',err); }
+  if(options.parentPostId){ try { await updateDoc(doc(db,'communities',cid,'posts',options.parentPostId),{commentsCount:increment(1),updatedAt:serverTimestamp()}); } catch(err) { console.warn('Thread counter sync deferred:',err); } }
+  return Object.assign(map(createdSnap) as CommunityFeedPost,{publishStatus:'created' as const});
 }
 async function canModerateCommunity(cid:string,uid:string){ if(isSocialAdmin()) return true; const c=await getCommunity(cid); if(c?.ownerId===uid) return true; const m=await getDoc(doc(db,'communities',cid,'members',uid)); return m.exists() && ['owner','moderator'].includes(m.data().role||'member'); }
 export async function updateCommunityPost(cid:string,pid:string,uid:string,data:Pick<CommunityFeedPost,'title'|'content'>){ const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) throw new Error('Post not found.'); if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot edit this post.'); await updateDoc(p.ref,{title:data.title.trim().slice(0,256),content:data.content.trim().slice(0,100000),editedAt:serverTimestamp(),updatedAt:serverTimestamp()}); }
-export async function deleteCommunityPost(cid:string,pid:string,uid:string){ const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) return; if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot delete this post.'); const votes=await getDocs(collection(db,'communities',cid,'posts',pid,'votes')); const b=writeBatch(db); votes.docs.forEach(v=>b.delete(v.ref)); b.delete(p.ref); await b.commit(); try{await updateDoc(doc(db,'communities',cid),{postsCount:increment(-1),updatedAt:serverTimestamp()});}catch{} }
+export async function deleteCommunityPost(cid:string,pid:string,uid:string){
+  const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) return;
+  if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot delete this post.');
+  const refs:any[]=[];
+  for(const sub of ['votes','pollVotes','comments','reposts','claps']){ try { const snap=await getDocs(collection(db,'communities',cid,'posts',pid,sub)); snap.docs.forEach(v=>refs.push(v.ref)); } catch {} }
+  refs.push(p.ref);
+  for(let i=0;i<refs.length;i+=400){ const b=writeBatch(db); refs.slice(i,i+400).forEach(r=>b.delete(r)); await b.commit(); }
+  const gone=await getDoc(p.ref); if(gone.exists()) throw new Error('Post deletion was not confirmed in the cloud.');
+  try{await updateDoc(doc(db,'communities',cid),{postsCount:increment(-1),updatedAt:serverTimestamp()});}catch(err){console.warn('Community delete counter sync deferred:',err);}
+}
 
 export async function moderateCommunityPost(cid:string,pid:string,uid:string,changes:{isPinned?:boolean;isLocked?:boolean;isArchived?:boolean;isFeatured?:boolean;flair?:string}){ if(!(await canModerateCommunity(cid,uid))) throw new Error('Moderator access required.'); const payload:any={updatedAt:serverTimestamp()}; Object.entries(changes).forEach(([k,v])=>payload[k]=v); await updateDoc(doc(db,'communities',cid,'posts',pid),payload); }
 

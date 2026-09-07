@@ -172,6 +172,11 @@ service cloud.firestore {
         );
       }
 
+      match /posts/{postId}/{nestedPath=**} {
+        allow read: if true;
+        allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || isCommunityModerator(communityId) || request.auth.uid == get(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)).data.authorId);
+      }
+
       match /posts/{postId} {
         allow read: if true;
         allow create: if isSignedIn()
