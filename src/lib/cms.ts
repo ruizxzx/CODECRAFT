@@ -339,7 +339,7 @@ export function subscribeArticles(callback: (articles: Article[]) => void): () =
           id: data.id || d.id,
           slug: data.slug || d.id
         } as Article;
-      }).filter(a => !deletedSlugs.has(a.slug));
+      }).filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
       // Sort by publishedAt desc
       cloudArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
       callback(mergeArticlesWithInitial(cloudArticles, deletedSlugs));
@@ -351,6 +351,13 @@ export function subscribeArticles(callback: (articles: Article[]) => void): () =
     console.warn("Real-time articles subscription failed, using local archive:", err);
     callback(INITIAL_ARTICLES);
   });
+}
+
+export async function fetchAllArticlesForAdmin(): Promise<Article[]> {
+  if (!checkIsAdmin(auth.currentUser?.email)) throw new Error('Master admin access required.');
+  const snap = await getDocs(collection(db, 'articles'));
+  return snap.docs.map(d => ({ ...d.data(), id: (d.data() as any).id || d.id, slug: (d.data() as any).slug || d.id } as Article))
+    .sort((a,b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime());
 }
 
 export async function fetchArticles(): Promise<{ articles: Article[]; source: 'firestore' | 'fallback' }> {
@@ -365,7 +372,7 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
           id: data.id || d.id,
           slug: data.slug || d.id
         } as Article;
-      }).filter(a => !deletedSlugs.has(a.slug));
+      }).filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
       cloudArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
       return {
         articles: mergeArticlesWithInitial(cloudArticles, deletedSlugs),
@@ -471,6 +478,16 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
   const baseSlug = String(post.title || 'community-blog').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70) || 'community-blog';
   let slug = `community-${baseSlug}`;
   let n = 2;
+  // Re-publishing an existing source restores the same main article instead of creating duplicates.
+  const existingSource = (await getDocs(query(collection(db,'articles'), where('sourcePostId','==',post.id), limit(10)))).docs.find(d => (d.data() as any).sourcePostId === post.id);
+  if (existingSource) {
+    slug = existingSource.id;
+    const existingArticle = existingSource.data() as any;
+    const restored = { ...existingArticle, id: existingSource.id, slug: existingSource.id, title: post.title, excerpt: post.excerpt || post.content.slice(0,240), coverImage: post.coverImage || '', coverImageAlt: post.coverImageAlt || post.title, category: post.category || 'Community', tags: Array.isArray(post.tags) ? post.tags : [], content: blocks, author: { name: post.authorName, role: 'Community Creator', avatar: post.authorAvatar, uid: post.authorId, username: post.authorUsername, isVerified: !!post.isVerified, verificationColor: post.verificationColor }, sourcePostId: post.id, sourceCommunityId: (post as any).communityId || undefined, isPublished: true, mainPublicationStatus: 'published', updatedAt: serverTimestamp() };
+    await setDoc(existingSource.ref, stripUndefinedDeep(restored), { merge: true });
+    try { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: slug, mainPublicationStatus: 'published', updatedAt: serverTimestamp() }); } catch {}
+    return { ...existingArticle, id: slug, slug, isPublished: true, mainPublicationStatus: 'published' } as Article;
+  }
   while ((await getDoc(doc(db,'articles',slug))).exists()) slug = `community-${baseSlug}-${n++}`;
   const blocks = Array.isArray(post.contentBlocks) && post.contentBlocks.length
     ? post.contentBlocks.map((b:any)=>({...b}))
@@ -490,7 +507,10 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
     featured: true,
     pinned: false,
     origin: 'community_blog',
+    isPublished: true,
+    mainPublicationStatus: 'published',
     sourcePostId: post.id,
+    sourceCommunityId: (post as any).communityId || undefined,
     collaborators: collaborateAsEditor ? [{uid:post.authorId,username:post.authorUsername,name:post.authorName,role:'Original Creator'}] : [],
     republishedBy: {uid: auth.currentUser?.uid || '', username: 'krishsarkar', name: 'Krish', avatar: auth.currentUser?.photoURL || DEFAULT_SITE_CONFIG.authorAvatarUrl},
     seriesId: (post as any).seriesId || undefined,
@@ -510,6 +530,30 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
   const saved = await saveArticle(article);
   { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: saved.slug, promotedAt: serverTimestamp(), promotedBy: auth.currentUser?.uid || '', updatedAt: serverTimestamp() }); }
   return saved;
+}
+
+export async function unpublishMainArticle(article: Article): Promise<void> {
+  if (!checkIsAdmin(auth.currentUser?.email)) throw new Error('Master admin access required.');
+  if (!article?.slug) throw new Error('Article slug is required.');
+  const articleRef = doc(db, 'articles', article.slug);
+  const existing = await getDoc(articleRef);
+  if (!existing.exists()) throw new Error('Main article was not found in Firebase.');
+  await updateDoc(articleRef, {
+    isPublished: false,
+    mainPublicationStatus: 'unpublished',
+    updatedAt: serverTimestamp(),
+    unpublishedAt: serverTimestamp(),
+    unpublishedBy: auth.currentUser?.uid || ''
+  });
+  const data = existing.data() as any;
+  if (data.sourcePostId) {
+    try {
+      const sourceRef = data.sourceCommunityId
+        ? doc(db, 'communities', data.sourceCommunityId, 'posts', data.sourcePostId)
+        : doc(db, 'posts', data.sourcePostId);
+      await updateDoc(sourceRef, { mainPublicationStatus: 'unpublished', updatedAt: serverTimestamp() });
+    } catch {}
+  }
 }
 
 export async function setArticleFeaturedStatus(

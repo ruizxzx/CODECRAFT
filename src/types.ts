@@ -44,6 +44,8 @@ export interface Article {
   sourcePostId?: string;
   origin?: 'admin' | 'community_blog' | 'community_post';
   promotedToArticleSlug?: string;
+  isPublished?: boolean;
+  mainPublicationStatus?: 'published' | 'unpublished';
   promotedAt?: string;
   promotedBy?: string;
   author: {
@@ -188,6 +190,8 @@ export interface CommunityPost {
   sourcePostId?: string;
   origin?: 'admin' | 'community_blog' | 'community_post';
   promotedToArticleSlug?: string;
+  isPublished?: boolean;
+  mainPublicationStatus?: 'published' | 'unpublished';
   promotedAt?: string;
   promotedBy?: string;
   clapsCount?: number; // legacy
