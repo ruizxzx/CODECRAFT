@@ -27,6 +27,7 @@ import { CommunityPostView } from './components/CommunityPostView';
 import { CommunityProfileView } from './components/CommunityProfileView';
 import { SavedView } from './components/SavedView';
 import { NotificationsView } from './components/NotificationsView';
+import { ExploreView } from './components/ExploreView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
@@ -281,6 +282,9 @@ export default function App() {
       } else if (hash === 'notifications') {
         setCurrentPage('notifications');
         setActiveArticleSlug(null);
+      } else if (hash === 'explore' || hash.startsWith('explore/')) {
+        setCurrentPage('explore');
+        setActiveArticleSlug(hash.startsWith('explore/') ? hash.replace('explore/', '') : null);
       } else if (hash === 'community') {
         setCurrentPage('community');
         setActiveArticleSlug(null);
@@ -319,6 +323,10 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('community_profile');
       window.location.hash = `@${param}`;
+    } else if (page === 'explore') {
+      setActiveArticleSlug(param || null);
+      setCurrentPage('explore');
+      window.location.hash = param ? `explore/${param.replace(/^#/, '')}` : 'explore';
     } else if (page === 'community' && param === 'new') {
       setActiveArticleSlug('new');
       setCurrentPage('community');
@@ -551,6 +559,10 @@ export default function App() {
 
             {currentPage === 'notifications' && (
               <NotificationsView userProfile={userProfile} onNavigate={navigateTo} />
+            )}
+
+            {currentPage === 'explore' && (
+              <ExploreView articles={articles} userAuth={userAuth} userProfile={userProfile} onNavigate={navigateTo} initialHashtag={activeArticleSlug || ''} />
             )}
 
             {currentPage === 'community' && (

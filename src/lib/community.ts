@@ -2,7 +2,7 @@ import { db, auth } from './firebase';
 import { 
   collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment, runTransaction
 } from 'firebase/firestore';
-import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, CarouselSlide, Notification } from '../types';
+import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, BookmarkCollection, CarouselSlide, Notification } from '../types';
 
 
 function mapDocDates(data: any) {
@@ -33,6 +33,10 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 function extractMentions(text: string): string[] {
   return Array.from(new Set((text.match(/@[a-zA-Z0-9_]{3,30}/g) || []).map(v => v.slice(1).toLowerCase())));
+}
+
+export function extractHashtags(text: string): string[] {
+  return Array.from(new Set((text.match(/#[a-zA-Z0-9_]{2,40}/g) || []).map(v => v.slice(1).toLowerCase())));
 }
 
 async function createNotification(userId: string, data: Omit<Notification, 'id' | 'createdAt' | 'read'>): Promise<void> {
@@ -78,11 +82,11 @@ export async function markNotificationsRead(userId: string): Promise<void> {
   await batch.commit();
 }
 
-export async function saveCommunityDraft(userId: string, data: { type: 'discussion' | 'blog'; title: string; content: string }): Promise<void> {
+export async function saveCommunityDraft(userId: string, data: { type: 'discussion' | 'blog'; title: string; content: string; mediaUrls?: string[] }): Promise<void> {
   await setDoc(doc(db, 'users', userId, 'drafts', 'community'), { ...data, updatedAt: serverTimestamp() });
 }
 
-export async function getCommunityDraft(userId: string): Promise<{ type: 'discussion' | 'blog'; title: string; content: string } | null> {
+export async function getCommunityDraft(userId: string): Promise<{ type: 'discussion' | 'blog'; title: string; content: string; mediaUrls?: string[] } | null> {
   const snap = await getDoc(doc(db, 'users', userId, 'drafts', 'community'));
   return snap.exists() ? snap.data() as any : null;
 }
@@ -367,6 +371,7 @@ export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 
     const postData = {
       ...data,
       mentionedUsernames: extractMentions(`${data.title} ${data.content}`),
+      hashtags: extractHashtags(`${data.title} ${data.content}`),
       upvotesCount: 0,
       downvotesCount: 0,
       commentsCount: 0,
@@ -525,7 +530,15 @@ export async function getPost(postId: string): Promise<CommunityPost | null> {
 export async function updatePost(postId: string, data: Partial<CommunityPost>) {
   const p = `posts/${postId}`;
   try {
-    await updateDoc(doc(db, 'posts', postId), { ...data, updatedAt: serverTimestamp() });
+    const patch: any = { ...data, editedAt: serverTimestamp(), updatedAt: serverTimestamp() };
+    if (typeof data.title === 'string' || typeof data.content === 'string') {
+      const current = await getPost(postId);
+      const title = typeof data.title === 'string' ? data.title : (current?.title || '');
+      const content = typeof data.content === 'string' ? data.content : (current?.content || '');
+      patch.mentionedUsernames = extractMentions(`${title} ${content}`);
+      patch.hashtags = extractHashtags(`${title} ${content}`);
+    }
+    await updateDoc(doc(db, 'posts', postId), patch);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, p);
     throw error;
@@ -929,6 +942,7 @@ export async function quoteRepost(postId: string, user: CommunityUser, quoteText
     authorId: user.uid, authorUsername: user.username, authorName: user.displayName,
     authorAvatar: user.photoURL || '', isVerified: !!user.isVerified,
     verificationColor: user.verificationColor || '#2196F3',
+    mediaUrls: original.mediaUrls || [], hashtags: original.hashtags || [],
     quoteText: text, quotedPostId: postId
   });
 
@@ -955,7 +969,9 @@ export async function getUserSaves(userId: string): Promise<UserSavedItem[]> {
         itemId: data.itemId,
         itemType: data.itemType,
         title: data.title,
-        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString())
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()),
+        collectionId: data.collectionId || undefined,
+        collectionName: data.collectionName || undefined
       };
     });
   } catch (error) {
@@ -992,7 +1008,9 @@ export async function toggleUserSaveInCloud(
   itemId: string,
   itemType: 'article' | 'post',
   isCurrentlySaved: boolean,
-  title?: string
+  title?: string,
+  collectionId?: string,
+  collectionName?: string
 ): Promise<boolean> {
   const saveId = `${itemType}_${itemId}`;
   const saveRef = doc(db, 'users', userId, 'saves', saveId);
@@ -1005,6 +1023,8 @@ export async function toggleUserSaveInCloud(
         itemId,
         itemType,
         title: title || '',
+        collectionId: collectionId || 'general',
+        collectionName: collectionName || 'General',
         createdAt: serverTimestamp()
       });
       return true;
@@ -1013,6 +1033,37 @@ export async function toggleUserSaveInCloud(
     console.error("Error toggling save in cloud:", error);
     throw error;
   }
+}
+
+export async function getBookmarkCollections(userId: string): Promise<BookmarkCollection[]> {
+  const snap = await getDocs(collection(db, 'users', userId, 'collections'));
+  return snap.docs.map(d => ({ id: d.id, ...mapDocDates(d.data()) } as BookmarkCollection))
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+export async function createBookmarkCollection(userId: string, name: string, description = ''): Promise<BookmarkCollection> {
+  const clean = name.trim().slice(0, 50);
+  if (!clean) throw new Error('Collection name is required.');
+  const id = generateId();
+  const now = new Date().toISOString();
+  await setDoc(doc(db, 'users', userId, 'collections', id), {
+    name: clean, description: description.trim().slice(0, 160), createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+  });
+  return { id, name: clean, description: description.trim().slice(0, 160), createdAt: now, updatedAt: now };
+}
+
+export async function updateSavedItemCollection(userId: string, itemId: string, itemType: 'article' | 'post', collectionId: string, collectionName: string): Promise<void> {
+  const saveId = `${itemType}_${itemId}`;
+  await updateDoc(doc(db, 'users', userId, 'saves', saveId), { collectionId, collectionName });
+}
+
+export async function deleteBookmarkCollection(userId: string, collectionId: string): Promise<void> {
+  if (collectionId === 'general') return;
+  const saves = await getDocs(query(collection(db, 'users', userId, 'saves'), where('collectionId', '==', collectionId)));
+  const batch = writeBatch(db);
+  saves.docs.forEach(d => batch.update(d.ref, { collectionId: 'general', collectionName: 'General' }));
+  batch.delete(doc(db, 'users', userId, 'collections', collectionId));
+  await batch.commit();
 }
 
 export async function getArticleLikeStatus(slug: string, userId: string): Promise<boolean> {

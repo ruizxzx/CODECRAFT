@@ -19,6 +19,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
   const [type, setType] = useState<'discussion' | 'blog'>(defaultType);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [mediaInput, setMediaInput] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [draftLoaded, setDraftLoaded] = useState(false);
@@ -30,6 +31,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
         setType(draft.type || defaultType);
         setTitle(draft.title || '');
         setContent(draft.content || '');
+        setMediaInput((draft.mediaUrls || []).join('\n'));
       }
     }).catch(() => {}).finally(() => { if (!cancelled) setDraftLoaded(true); });
     return () => { cancelled = true; };
@@ -38,10 +40,10 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
   useEffect(() => {
     if (!draftLoaded || (!title.trim() && !content.trim())) return;
     const timer = window.setTimeout(() => {
-      saveCommunityDraft(profile.uid, { type, title, content }).catch(() => {});
+      saveCommunityDraft(profile.uid, { type, title, content, mediaUrls: mediaInput.split('\n').map(v => v.trim()).filter(Boolean).slice(0, 6) }).catch(() => {});
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [draftLoaded, profile.uid, type, title, content]);
+  }, [draftLoaded, profile.uid, type, title, content, mediaInput]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +64,8 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
         authorName: profile.displayName || profile.username,
         authorAvatar: profile.photoURL || '',
         isVerified: !!profile.isVerified,
-        verificationColor: profile.verificationColor || '#2196F3'
+        verificationColor: profile.verificationColor || '#2196F3',
+        mediaUrls: mediaInput.split('\n').map(v => v.trim()).filter(Boolean).slice(0, 6)
       });
       await clearCommunityDraft(profile.uid).catch(() => {});
       onPublished(post);
@@ -191,6 +194,22 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
               {errorMessage}
             </div>
           )}
+
+          {/* Media URLs */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="font-mono text-xs font-bold uppercase">Media / Image URLs</label>
+              <span className="font-mono text-[11px] text-neutral-500">Up to 6 · one URL per line</span>
+            </div>
+            <textarea
+              value={mediaInput}
+              onChange={(e) => setMediaInput(e.target.value)}
+              placeholder="https://example.com/image.jpg
+https://example.com/diagram.png"
+              className="w-full px-4 py-3 border-2 border-black font-mono text-xs min-h-[100px] focus:outline-none focus:bg-neutral-50"
+            />
+            <p className="font-mono text-[10px] text-neutral-500">External image URLs only. OFFSCRPT does not upload files to Firebase Storage.</p>
+          </div>
 
           {/* Action Buttons */}
           <div className="pt-2 flex items-center justify-between border-t-2 border-black">

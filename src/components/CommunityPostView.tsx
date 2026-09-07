@@ -5,6 +5,7 @@ import { getPost, getComments, subscribeCommunityComments, addComment, toggleVot
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2, Share2, Pencil, X } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
+import { CommunityPostExtras } from './CommunityPostExtras';
 
 interface CommunityPostViewProps {
   postId: string;
@@ -328,6 +329,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
         <div className="font-sans text-lg leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-neutral-800 mb-12 min-w-0">
           {renderTextWithMentions(post.content)}
         </div>
+        <div className="mb-10"><CommunityPostExtras post={post} onHashtag={(tag) => onNavigate('explore', tag)} /></div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 pt-6 border-t-2 border-neutral-200 min-w-0">
           <div className="flex items-center space-x-2 shrink-0">

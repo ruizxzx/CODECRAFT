@@ -28,6 +28,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [photoUrlInput, setPhotoUrlInput] = useState('');
+  const [coverUrlInput, setCoverUrlInput] = useState('');
   const [bioInput, setBioInput] = useState('');
   const [themeInput, setThemeInput] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
@@ -78,6 +79,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         setBioInput(p.bio || '');
         setThemeInput(p.themeColor || '#000000');
         setPhotoUrlInput(p.photoURL || '');
+        setCoverUrlInput(p.coverImageUrl || '');
         // Load profile activity independently so one optional collection
         // (comments/upvotes/reposts/articles) cannot hide the user's posts.
         const results = await Promise.allSettled([
@@ -129,13 +131,12 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     if (!profile || !activeUser || activeUser.uid !== profile.uid) return;
     try {
       const nextPhotoURL = photoUrlInput.trim();
-      if (nextPhotoURL && !/^https?:\/\//i.test(nextPhotoURL)) {
-        alert('Profile picture must be a public http(s) image URL.');
-        return;
-      }
-      await updateCommunityProfile(profile.uid, { bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL });
+      const nextCoverURL = coverUrlInput.trim();
+      if (nextPhotoURL && !/^https?:\/\//i.test(nextPhotoURL)) { alert('Profile picture must be a public http(s) image URL.'); return; }
+      if (nextCoverURL && !/^https?:\/\//i.test(nextCoverURL)) { alert('Cover image must be a public http(s) image URL.'); return; }
+      await updateCommunityProfile(profile.uid, { bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL });
       try { await updateProfile(activeUser, { photoURL: nextPhotoURL || null }); } catch (authError) { console.warn('Firebase Auth avatar update skipped:', authError); }
-      const nextProfile = { ...profile, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, updatedAt: new Date().toISOString() };
+      const nextProfile = { ...profile, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, updatedAt: new Date().toISOString() };
       setProfile(nextProfile);
       await syncUserIdentityAcrossContent(activeUser.uid, { displayName: nextProfile.displayName, photoURL: nextPhotoURL, username: nextProfile.username });
       setIsEditing(false);
@@ -218,7 +219,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <button onClick={() => onNavigate('community')} className="flex items-center space-x-2 font-mono text-xs font-bold uppercase mb-8 hover:text-[var(--color-primary)]"><ArrowLeft className="w-4 h-4" /><span>Community Hub</span></button>
       <div className="bg-white border-4 border-black neo-shadow-lg overflow-hidden mb-8">
-        <div className="h-32 sm:h-48 w-full border-b-4 border-black" style={{ backgroundColor: profile.themeColor || '#000' }} />
+        <div className="h-32 sm:h-48 w-full border-b-4 border-black bg-cover bg-center" style={{ backgroundColor: profile.themeColor || '#000', backgroundImage: profile.coverImageUrl ? `url(${profile.coverImageUrl})` : undefined }} />
         <div className="px-6 sm:px-10 pb-8 relative">
           <div className="flex justify-between items-end -mt-16 mb-6">
             <div className="relative group">
@@ -234,7 +235,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
               {!isOwner && <button onClick={handleToggleFollow} disabled={isFollowLoading} className={`px-6 py-2 border-2 border-black font-mono text-xs font-bold uppercase flex items-center gap-2 ${isFollowing ? 'bg-neutral-200' : 'bg-[var(--color-primary)]'}`}>{isFollowLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <><UserMinus className="w-4 h-4" />Unfollow</> : <><UserPlus className="w-4 h-4" />Follow</>}</button>}
             </div>
           </div>
-          {isEditing ? <form onSubmit={handleSaveProfile} className="space-y-4 max-w-xl"><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Picture URL</label><input type="url" value={photoUrlInput} onChange={e => setPhotoUrlInput(e.target.value)} placeholder="https://example.com/your-profile-picture.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Paste a public image URL. No Firebase Storage is used.</p></div><textarea value={bioInput} onChange={e => setBioInput(e.target.value)} rows={4} maxLength={500} className="w-full px-3 py-2 border-2 border-black" /><div className="flex gap-2"><input type="color" value={themeInput} onChange={e => setThemeInput(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={themeInput} onChange={e => setThemeInput(e.target.value)} className="px-3 py-2 border-2 border-black font-mono" /></div><div className="flex gap-2"><button className="px-6 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-bold uppercase">Save</button><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2 bg-neutral-200 border-2 border-black font-mono text-xs font-bold uppercase">Cancel</button></div></form> : <div><h1 className="font-display font-black text-3xl sm:text-4xl uppercase flex items-center gap-2">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-6 h-6 shrink-0" /></h1><p className="font-mono text-sm text-neutral-500 mb-2">@{profile.username}</p>{profile.role && <p className="font-mono text-xs font-bold uppercase mb-4">{profile.role}</p>}{profile.bio && <p className="font-sans text-neutral-800 max-w-2xl text-sm leading-relaxed mb-6 whitespace-pre-wrap">{profile.bio}</p>}<div className="flex flex-wrap gap-3 font-mono text-xs">
+          {isEditing ? <form onSubmit={handleSaveProfile} className="space-y-4 max-w-xl"><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Picture URL</label><input type="url" value={photoUrlInput} onChange={e => setPhotoUrlInput(e.target.value)} placeholder="https://example.com/your-profile-picture.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Paste a public image URL. No Firebase Storage is used.</p></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Cover Image URL</label><input type="url" value={coverUrlInput} onChange={e => setCoverUrlInput(e.target.value)} placeholder="https://example.com/cover.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Optional public image URL. Your theme color remains the fallback.</p></div><textarea value={bioInput} onChange={e => setBioInput(e.target.value)} rows={4} maxLength={500} className="w-full px-3 py-2 border-2 border-black" /><div className="flex gap-2"><input type="color" value={themeInput} onChange={e => setThemeInput(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={themeInput} onChange={e => setThemeInput(e.target.value)} className="px-3 py-2 border-2 border-black font-mono" /></div><div className="flex gap-2"><button className="px-6 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-bold uppercase">Save</button><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2 bg-neutral-200 border-2 border-black font-mono text-xs font-bold uppercase">Cancel</button></div></form> : <div><h1 className="font-display font-black text-3xl sm:text-4xl uppercase flex items-center gap-2">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-6 h-6 shrink-0" /></h1><p className="font-mono text-sm text-neutral-500 mb-2">@{profile.username}</p>{profile.role && <p className="font-mono text-xs font-bold uppercase mb-4">{profile.role}</p>}{profile.bio && <p className="font-sans text-neutral-800 max-w-2xl text-sm leading-relaxed mb-6 whitespace-pre-wrap">{profile.bio}</p>}<div className="flex flex-wrap gap-3 font-mono text-xs">
             <button type="button" onClick={() => setRelationModal('followers')} className="underline underline-offset-4 hover:bg-[var(--color-primary)] px-1 py-0.5 font-bold">{profile.followersCount || 0} Followers</button>
             <button type="button" onClick={() => setRelationModal('following')} className="underline underline-offset-4 hover:bg-[var(--color-primary)] px-1 py-0.5 font-bold">{profile.followingCount || 0} Following</button>
           </div></div>}

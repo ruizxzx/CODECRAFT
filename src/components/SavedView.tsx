@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Article, PageView, CommunityPost, CommunityUser, SiteConfig } from '../types';
+import { Article, PageView, CommunityPost, CommunityUser, SiteConfig, BookmarkCollection, UserSavedItem } from '../types';
 import { ArticleCard } from './ArticleCard';
-import { Bookmark, ArrowRight, Trash2, CheckCircle2, Cloud, Sparkles, MessageSquare, ThumbsUp, LogIn } from 'lucide-react';
-import { getPost } from '../lib/community';
+import { Bookmark, ArrowRight, Trash2, CheckCircle2, MessageSquare, ThumbsUp, LogIn, FolderPlus, Folder } from 'lucide-react';
+import { getPost, getUserSaves, getBookmarkCollections, createBookmarkCollection, updateSavedItemCollection, deleteBookmarkCollection } from '../lib/community';
 import { loginWithGoogle } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -32,9 +32,27 @@ export const SavedView: React.FC<SavedViewProps> = ({
   const [savedPosts, setSavedPosts] = useState<CommunityPost[]>([]);
   const [loadingPosts, setLoadingPosts] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'dispatches' | 'community'>('all');
+  const [collections, setCollections] = useState<BookmarkCollection[]>([{ id: 'general', name: 'General', createdAt: '', updatedAt: '' }]);
+  const [cloudItems, setCloudItems] = useState<UserSavedItem[]>([]);
+  const [activeCollection, setActiveCollection] = useState('all');
+  const [showCollectionForm, setShowCollectionForm] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [movingId, setMovingId] = useState<string | null>(null);
 
   // Filter site articles
-  const savedArticles = articles.filter(a => savedSlugs.includes(a.slug));
+  const savedArticles = articles.filter(a => savedSlugs.includes(a.slug) && (activeCollection === 'all' || !userAuth || (cloudItems.find(i => i.itemId === a.slug && i.itemType === 'article')?.collectionId || 'general') === activeCollection));
+
+  useEffect(() => {
+    let active = true;
+    if (!userAuth) { setCloudItems([]); setCollections([{ id: 'general', name: 'General', createdAt: '', updatedAt: '' }]); return; }
+    Promise.all([getUserSaves(userAuth.uid), getBookmarkCollections(userAuth.uid).catch(() => [])]).then(([items, cols]) => {
+      if (!active) return;
+      setCloudItems(items);
+      setCollections([{ id: 'general', name: 'General', createdAt: '', updatedAt: '' }, ...(cols as BookmarkCollection[]).filter(c => c.id !== 'general')]);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [userAuth?.uid]);
+
 
   useEffect(() => {
     let isMounted = true;
@@ -46,7 +64,7 @@ export const SavedView: React.FC<SavedViewProps> = ({
       setLoadingPosts(true);
       try {
         const results = await Promise.all(
-          savedCommunityPostIds.map(id => getPost(id))
+          savedCommunityPostIds.filter(id => activeCollection === 'all' || !userAuth || (cloudItems.find(i => i.itemId === id && i.itemType === 'post')?.collectionId || 'general') === activeCollection).map(id => getPost(id))
         );
         if (isMounted) {
           setSavedPosts(results.filter((p): p is CommunityPost => p !== null));
@@ -60,7 +78,7 @@ export const SavedView: React.FC<SavedViewProps> = ({
 
     loadSavedCommunityPosts();
     return () => { isMounted = false; };
-  }, [savedCommunityPostIds]);
+  }, [savedCommunityPostIds, activeCollection, cloudItems, userAuth?.uid]);
 
   const totalSaved = savedArticles.length + savedPosts.length;
 
@@ -143,6 +161,17 @@ export const SavedView: React.FC<SavedViewProps> = ({
             Community Posts ({savedPosts.length})
           </button>
         </div>
+        <div className="mt-5 pt-5 border-t-2 border-black">
+          <div className="flex flex-wrap items-center gap-2">
+            <Folder className="w-4 h-4" />
+            <span className="font-mono text-xs font-black uppercase mr-1">Collections</span>
+            <button onClick={() => setActiveCollection('all')} className={`px-3 py-1.5 border-2 border-black font-mono text-[10px] font-bold uppercase ${activeCollection==='all'?'bg-black text-white':'bg-white'}`}>All</button>
+            {collections.map(c => <button key={c.id} onClick={() => setActiveCollection(c.id)} className={`px-3 py-1.5 border-2 border-black font-mono text-[10px] font-bold uppercase ${activeCollection===c.id?'bg-[var(--color-secondary)]':'bg-white hover:bg-neutral-100'}`}>{c.name}</button>)}
+            {userAuth && <button onClick={() => setShowCollectionForm(v=>!v)} className="px-3 py-1.5 bg-[var(--color-primary)] border-2 border-black font-mono text-[10px] font-black uppercase"><FolderPlus className="inline w-3.5 h-3.5 mr-1"/>New collection</button>}
+          </div>
+          {showCollectionForm && userAuth && <form onSubmit={async e => { e.preventDefault(); if (!newCollectionName.trim()) return; try { const c=await createBookmarkCollection(userAuth.uid,newCollectionName); setCollections(prev=>[...prev,c]); setNewCollectionName(''); setShowCollectionForm(false); setActiveCollection(c.id); } catch(err:any){ alert(err?.message || 'Could not create collection'); } }} className="flex gap-2 mt-3 max-w-lg"><input value={newCollectionName} onChange={e=>setNewCollectionName(e.target.value)} maxLength={50} placeholder="e.g. AI research" className="flex-1 border-2 border-black px-3 py-2 font-mono text-xs"/><button className="px-3 py-2 bg-black text-white border-2 border-black font-mono text-xs font-bold">CREATE</button></form>}
+          {userAuth && activeCollection !== 'all' && activeCollection !== 'general' && <button onClick={async()=>{if(!confirm('Delete this collection? Saved items will move to General.'))return; try{await deleteBookmarkCollection(userAuth.uid,activeCollection); setCollections(prev=>prev.filter(c=>c.id!==activeCollection)); setActiveCollection('all');}catch(e){alert('Could not delete collection.')}}} className="mt-2 font-mono text-[10px] font-bold uppercase underline">Delete collection</button>}
+        </div>
       </div>
 
       {/* Main Content Sections */}
@@ -194,14 +223,16 @@ export const SavedView: React.FC<SavedViewProps> = ({
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {savedArticles.map(article => (
-                    <ArticleCard
-                      key={article.id}
-                      article={article}
-                      onSelect={(slug) => onNavigate('article', slug)}
-                      isSaved={true}
-                      onToggleSave={onToggleSaveArticle}
-                      siteConfig={siteConfig}
-                    />
+                    <div key={article.id}>
+                      {userAuth && <div className="mb-2 flex items-center gap-2"><Folder className="w-3.5 h-3.5"/><select value={cloudItems.find(i=>i.itemId===article.slug && i.itemType==='article')?.collectionId || 'general'} disabled={movingId===`article_${article.slug}`} onChange={async e=>{const value=e.target.value; const col=collections.find(c=>c.id===value)||collections[0]; setMovingId(`article_${article.slug}`); try{await updateSavedItemCollection(userAuth.uid,article.slug,'article',col.id,col.name); setCloudItems(prev=>prev.map(i=>i.itemId===article.slug&&i.itemType==='article'?{...i,collectionId:col.id,collectionName:col.name}:i));}catch(err:any){alert(err?.message||'Could not move saved item');}finally{setMovingId(null);}}} className="border-2 border-black px-2 py-1 font-mono text-[10px] font-bold bg-white">{collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>}
+                      <ArticleCard
+                        article={article}
+                        onSelect={(slug) => onNavigate('article', slug)}
+                        isSaved={true}
+                        onToggleSave={onToggleSaveArticle}
+                        siteConfig={siteConfig}
+                      />
+                    </div>
                   ))}
                 </div>
               )}
@@ -242,13 +273,16 @@ export const SavedView: React.FC<SavedViewProps> = ({
                             {post.type === 'blog' ? 'Community Blog' : 'Discussion'}
                           </span>
                           
-                          <button
-                            onClick={() => onToggleSaveCommunityPost(post.id)}
-                            className="p-1.5 bg-neutral-100 hover:bg-red-100 border-2 border-black text-black hover:text-red-700 transition-colors"
-                            title="Remove from saved"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {userAuth && <select value={cloudItems.find(i=>i.itemId===post.id && i.itemType==='post')?.collectionId || 'general'} disabled={movingId===`post_${post.id}`} onChange={async e=>{const value=e.target.value; const col=collections.find(c=>c.id===value)||collections[0]; setMovingId(`post_${post.id}`); try{await updateSavedItemCollection(userAuth.uid,post.id,'post',col.id,col.name); setCloudItems(prev=>prev.map(i=>i.itemId===post.id&&i.itemType==='post'?{...i,collectionId:col.id,collectionName:col.name}:i));}catch(err:any){alert(err?.message||'Could not move saved item');}finally{setMovingId(null);}}} className="border-2 border-black px-1 py-1 font-mono text-[9px] font-bold bg-white max-w-[110px]">{collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>}
+                            <button
+                              onClick={() => onToggleSaveCommunityPost(post.id)}
+                              className="p-1.5 bg-neutral-100 hover:bg-red-100 border-2 border-black text-black hover:text-red-700 transition-colors"
+                              title="Remove from saved"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
 
                         <h3 

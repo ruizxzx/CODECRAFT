@@ -20,7 +20,8 @@ import {
   Settings,
   Plus,
   Smartphone,
-  Bell
+  Bell,
+  Compass
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -97,6 +98,7 @@ export const Header: React.FC<HeaderProps> = ({
     { label: 'Community', page: 'community', icon: Users },
     { label: 'Saved', page: 'saved', count: savedCount, icon: Bookmark },
     { label: 'Notifications', page: 'notifications', icon: Bell },
+    { label: 'Explore', page: 'explore', icon: Compass },
   ];
 
   const secondaryNavLinks = [

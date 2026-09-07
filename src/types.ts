@@ -87,6 +87,7 @@ export interface SiteConfig {
   
   // Extra Info
   aboutMeImageUrl?: string;
+  metaDescription?: string;
   customCategories?: string[];
   authorProfileUid?: string;
   authorProfileUsername?: string;
@@ -102,13 +103,14 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'notifications';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'notifications' | 'explore';
 
 export interface CommunityUser {
   uid: string;
   username: string;
   displayName: string;
   photoURL: string;
+  coverImageUrl?: string;
   bio: string;
   themeColor: string;
   isBlocked?: boolean;
@@ -145,6 +147,8 @@ export interface CommunityPost {
   quoteText?: string;
   quotedPostId?: string;
   mentionedUsernames?: string[];
+  hashtags?: string[];
+  mediaUrls?: string[];
 }
 
 export interface CommunityComment {
@@ -175,6 +179,16 @@ export interface UserSavedItem {
   itemType: 'article' | 'post';
   title?: string;
   createdAt: string;
+  collectionId?: string;
+  collectionName?: string;
+}
+
+export interface BookmarkCollection {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Notification {
