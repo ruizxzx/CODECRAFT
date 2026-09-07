@@ -332,12 +332,46 @@ export async function saveArticle(article: Article): Promise<Article> {
     throw new Error("Article must have a title and a valid slug.");
   }
   const articleDocRef = doc(db, 'articles', article.slug);
+  const existingSnap = await getDoc(articleDocRef);
+  const isNewArticle = !existingSnap.exists();
   const dataToSave = {
     ...article,
     updatedAt: serverTimestamp(),
     createdAt: (article as any).createdAt || serverTimestamp()
   };
   await setDoc(articleDocRef, dataToSave, { merge: true });
+
+  // Every registered OFFSCRPT user receives an in-app notification when the admin
+  // publishes a genuinely new article. Edits do not generate duplicate alerts.
+  if (isNewArticle && checkIsAdmin(auth.currentUser?.email)) {
+    try {
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const recipients = usersSnap.docs.map(d => d.id);
+      const actor = article.author;
+      for (let i = 0; i < recipients.length; i += 450) {
+        const batch = writeBatch(db);
+        recipients.slice(i, i + 450).forEach(userId => {
+          const notificationRef = doc(collection(db, 'users', userId, 'notifications'));
+          batch.set(notificationRef, {
+            type: 'article_published',
+            actorId: auth.currentUser!.uid,
+            actorUsername: actor.username || 'krishsarkar',
+            actorName: actor.name || 'Krish Sarkar',
+            actorAvatar: actor.avatar || '',
+            message: `published a new article: ${article.title}`.slice(0, 200),
+            targetType: 'article',
+            targetId: article.slug,
+            read: false,
+            createdAt: serverTimestamp()
+          });
+        });
+        await batch.commit();
+      }
+    } catch (notificationError) {
+      // Publishing must remain successful even if notification fan-out is unavailable.
+      console.warn('Article notification fan-out failed:', notificationError);
+    }
+  }
   return article;
 }
 

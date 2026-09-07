@@ -198,7 +198,7 @@ export interface BookmarkCollection {
 
 export interface Notification {
   id: string;
-  type: 'follow' | 'upvote' | 'comment' | 'reply' | 'mention' | 'repost' | 'verification';
+  type: 'follow' | 'upvote' | 'comment' | 'reply' | 'mention' | 'repost' | 'verification' | 'article_published';
   actorId: string;
   actorUsername: string;
   actorName: string;

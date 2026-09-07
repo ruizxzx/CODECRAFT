@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PageView, SiteConfig, CommunityUser } from '../types';
 import { auth, loginWithGoogle, logout, ADMIN_EMAILS } from '../lib/firebase';
+import { subscribeUnreadNotificationCount } from '../lib/community';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { 
   Menu, 
@@ -63,6 +64,15 @@ export const Header: React.FC<HeaderProps> = ({
   const [user, loading] = useAuthState(auth);
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setUnreadNotificationCount(0);
+      return;
+    }
+    return subscribeUnreadNotificationCount(user.uid, setUnreadNotificationCount);
+  }, [user?.uid]);
 
   useEffect(() => {
     const standalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
@@ -97,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
     { label: 'Blog', page: 'blog', icon: BookOpen },
     { label: 'Community', page: 'community', icon: Users },
     { label: 'Saved', page: 'saved', count: savedCount, icon: Bookmark },
-    { label: 'Notifications', page: 'notifications', icon: Bell },
+    { label: 'Notifications', page: 'notifications', count: unreadNotificationCount, icon: Bell },
     { label: 'Explore', page: 'explore', icon: Compass },
   ];
 
@@ -181,9 +191,9 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <Icon className="w-4 h-4 stroke-[2.5]" />
                   <span>{link.label}</span>
-                  {link.page === 'saved' && link.count !== undefined && link.count > 0 && (
-                    <span className="ml-1 px-1.5 py-0.2 bg-black text-[var(--color-primary)] text-[10px] font-mono font-bold border border-black">
-                      {link.count}
+                  {link.count !== undefined && link.count > 0 && (
+                    <span className={`ml-1 min-w-5 px-1.5 py-0.2 bg-black text-[var(--color-primary)] text-[10px] font-mono font-bold border border-black text-center ${link.page === 'notifications' ? 'animate-pulse' : ''}`}>
+                      {link.count > 99 ? '99+' : link.count}
                     </span>
                   )}
                 </button>
@@ -389,7 +399,7 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                     {link.count !== undefined && link.count > 0 && (
                       <span className="px-2 py-0.5 bg-black text-[var(--color-primary)] text-xs font-mono font-bold border border-black">
-                        {link.count}
+                        {link.count > 99 ? '99+' : link.count}
                       </span>
                     )}
                   </button>

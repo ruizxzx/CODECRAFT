@@ -45,6 +45,24 @@ async function createNotification(userId: string, data: Omit<Notification, 'id' 
   await setDoc(doc(db, 'users', userId, 'notifications', id), { ...data, read: false, createdAt: serverTimestamp() });
 }
 
+/** Subscribe to the number of unread notifications for the signed-in user. */
+export function subscribeUnreadNotificationCount(userId: string, callback: (count: number) => void): () => void {
+  if (!userId) {
+    callback(0);
+    return () => {};
+  }
+  const notificationsRef = collection(db, 'users', userId, 'notifications');
+  const q = query(notificationsRef, where('read', '==', false));
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.size),
+    (error) => {
+      console.warn('Unread notification subscription failed:', error);
+      callback(0);
+    }
+  );
+}
+
 async function notifyMentions(text: string, actor: CommunityUser, targetType: 'post' | 'comment', targetId: string): Promise<void> {
   const handles = extractMentions(text);
   if (!handles.length) return;
