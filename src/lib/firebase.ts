@@ -83,7 +83,7 @@ export const loginWithGoogle = async (): Promise<User | null> => {
     // 3. Unauthorized domain on Vercel or custom domain
     if (error?.code === 'auth/unauthorized-domain') {
       const hostname = typeof window !== 'undefined' ? window.location.hostname : 'current domain';
-      const msg = `Unauthorized domain: "${hostname}". Please add "${hostname}" and "krishficientblogx.vercel.app" to Firebase Console -> Authentication -> Settings -> Authorized Domains.`;
+      const msg = `Unauthorized domain: "${hostname}". Please add "${hostname}" and "offscrpt.vercel.app" to Firebase Console -> Authentication -> Settings -> Authorized Domains.`;
       console.error(msg);
       throw new Error(msg);
     }

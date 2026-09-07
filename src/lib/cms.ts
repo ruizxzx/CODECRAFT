@@ -1,6 +1,7 @@
 import { 
   collection, 
-    doc, 
+  collectionGroup,
+  doc, 
   getDoc, 
   getDocs, 
   setDoc, 
@@ -30,7 +31,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   manifestoAuthor: "Krish Sarkar",
   authorName: "Krish",
   authorRole: "Founder & Systems Architect",
-  authorAvatarUrl: "",
+  authorAvatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop",
   aboutMeTitle: "SYSTEMS ARCHITECT // SOFTWARE CRAFTSMAN",
   aboutMeBio: "I am a software engineer and systems architect specializing in high-performance web applications and distributed systems.\n\nOver the past decade, I have built infrastructure that scales to millions of users, designed resilient microservices, and obsessed over web performance metrics.",
   themePrimaryColor: "#FFD600",
@@ -166,6 +167,8 @@ export async function syncAdminAuthorProfile(author: {
     themeColor: '#FFD600',
     role: author.role || 'Founder & Systems Architect',
     isAuthor: true,
+    isVerified: true,
+    verificationColor: existingUser.exists() ? (existingUser.data()?.verificationColor || '#2196F3') : '#2196F3',
     followersCount: existingUser.exists() ? (existingUser.data()?.followersCount || 0) : 0,
     followingCount: existingUser.exists() ? (existingUser.data()?.followingCount || 0) : 0,
     createdAt: existingUser.exists() ? existingUser.data()?.createdAt : serverTimestamp(),
@@ -178,26 +181,9 @@ export async function syncAdminAuthorProfile(author: {
   // Keep the canonical admin identity synchronized across community content.
   const contentWrites: Array<{ ref: any; data: any }> = [];
   const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', uid)));
-  postsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: { authorName: profileData.displayName, authorAvatar: profileData.photoURL, authorUsername: username, updatedAt: serverTimestamp() } }));
-  // Do not use a collection-group authorId query here: it requires a
-  // COLLECTION_GROUP_ASC index. Read known comment parents and filter locally.
-  const [postCommentsParents, articleParents] = await Promise.all([
-    getDocs(collection(db, 'posts')),
-    getDocs(collection(db, 'articles'))
-  ]);
-  const postCommentSnaps = await Promise.all(
-    postCommentsParents.docs.map(postDoc => getDocs(collection(db, 'posts', postDoc.id, 'comments')))
-  );
-  const articleCommentSnaps = await Promise.all(
-    articleParents.docs.map(articleDoc => getDocs(collection(db, 'articles', articleDoc.id, 'comments')))
-  );
-  for (const snap of [...postCommentSnaps, ...articleCommentSnaps]) {
-    snap.docs.forEach(d => {
-      if (d.data().authorId === uid) {
-        contentWrites.push({ ref: d.ref, data: { authorName: profileData.displayName, authorAvatar: profileData.photoURL, authorUsername: username, updatedAt: serverTimestamp() } });
-      }
-    });
-  }
+  postsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: { authorName: profileData.displayName, authorAvatar: profileData.photoURL, authorUsername: username, isVerified: true, verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
+  const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', uid)));
+  commentsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: { authorName: profileData.displayName, authorAvatar: profileData.photoURL, authorUsername: username, isVerified: true, verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
   for (let i = 0; i < contentWrites.length; i += 450) {
     const contentBatch = writeBatch(db);
     contentWrites.slice(i, i + 450).forEach(w => contentBatch.update(w.ref, w.data));
@@ -373,6 +359,8 @@ export async function syncAuthorToAllCloudArticles(author: {
         name: author.name || 'Krish',
         role: author.role || 'Founder & Systems Architect',
         avatar: author.avatar || '',
+        isVerified: true,
+        verificationColor: '#2196F3',
         bio: author.bio || existing.author?.bio || ''
       },
       updatedAt: serverTimestamp()

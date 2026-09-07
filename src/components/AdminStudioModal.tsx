@@ -26,7 +26,8 @@ import {
   Move,
   Minus,
   Plus,
-  Trash
+  Trash,
+  BadgeCheck
 } from 'lucide-react';
 import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
 import { 
@@ -42,7 +43,9 @@ import {
   getCarouselSlides, 
   addCarouselSlide, 
   updateCarouselSlide, 
-  deleteCarouselSlide 
+  deleteCarouselSlide,
+  setUserVerificationByUsername,
+  getUserVerificationByUsername
 } from '../lib/community';
 
 interface AdminStudioModalProps {
@@ -57,18 +60,6 @@ interface AdminStudioModalProps {
   onUpdateBentoLinks: (links: BentoLink[]) => void;
 }
 
-
-interface AdminStudioModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onArticlePublished: (article: Article) => void;
-  articles: Article[];
-  onDeleteArticle: (slug: string) => void;
-  siteConfig: SiteConfig;
-  onUpdateSiteConfig: (config: SiteConfig) => void;
-  bentoLinks: BentoLink[];
-  onUpdateBentoLinks: (links: BentoLink[]) => void;
-}
 
 
 export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
@@ -350,6 +341,13 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configSuccess, setConfigSuccess] = useState(false);
 
+  // User verification controls
+  const [verificationHandle, setVerificationHandle] = useState('');
+  const [verificationColor, setVerificationColor] = useState('#2196F3');
+  const [verificationState, setVerificationState] = useState<'verified' | 'unverified' | null>(null);
+  const [isSavingVerification, setIsSavingVerification] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
+
   // Sync siteConfig prop with local state when siteConfig updates externally
   useEffect(() => {
     setLogoImageUrl(siteConfig.logoImageUrl || '');
@@ -381,6 +379,32 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setContactTelegram(siteConfig.contactTelegram || '');
     setCustomCategories(siteConfig.customCategories || []);
   }, [siteConfig]);
+
+  const handleSetVerification = async (verified: boolean) => {
+    if (!verificationHandle.trim()) { alert('Enter a user @handle.'); return; }
+    setIsSavingVerification(true);
+    setVerificationMessage(null);
+    try {
+      const updated = await setUserVerificationByUsername(verificationHandle, verified, verificationColor);
+      setVerificationHandle(updated.username);
+      setVerificationColor(updated.verificationColor || '#2196F3');
+      setVerificationState(verified ? 'verified' : 'unverified');
+      setVerificationMessage(verified ? `@${updated.username} is now verified.` : `Verification removed from @${updated.username}.`);
+    } catch (err: any) {
+      alert('Verification update failed: ' + (err?.message || 'Permission denied'));
+    } finally { setIsSavingVerification(false); }
+  };
+
+  const handleLookupVerification = async () => {
+    if (!verificationHandle.trim()) return;
+    try {
+      const result = await getUserVerificationByUsername(verificationHandle);
+      if (!result) { setVerificationMessage('User not found.'); return; }
+      setVerificationColor(result.verificationColor || '#2196F3');
+      setVerificationState(result.isVerified ? 'verified' : 'unverified');
+      setVerificationMessage(result.isVerified ? 'User is currently verified.' : 'User is currently unverified.');
+    } catch (err: any) { alert(err?.message || 'Lookup failed'); }
+  };
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -649,7 +673,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
           username: authorProfile.username,
           name: authorName || siteConfig.authorName || 'Krish',
           role: authorRole || siteConfig.authorRole || 'Founder & Systems Architect',
-          avatar: authorAvatarUrl || siteConfig.authorAvatarUrl || '',
+          avatar: authorAvatarUrl || siteConfig.authorAvatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop',
+          isVerified: true,
+          verificationColor: '#2196F3',
           bio: manifestoText || aboutMeBio || siteConfig.manifestoText || 'Writing about distributed systems, modern web runtimes, and engineering craft.'
         },
         content: (contentBlocks.length ? contentBlocks : [{ type: 'paragraph' as const, content: newExcerpt }]).map(block => ({ ...block }))
@@ -1024,7 +1050,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       <label className="font-mono text-xs font-bold uppercase text-black">Author Picture (Avatar)</label>
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         <img 
-                          src={authorAvatarUrl || ''} 
+                          src={authorAvatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop'} 
                           alt="Author Preview" 
                           className="w-16 h-16 border-2 border-black object-cover bg-white shrink-0 neo-shadow-sm"
                         />
@@ -1077,6 +1103,34 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           <span>{syncAuthorSuccess}</span>
                         </div>
                       )}
+                    </div>
+                  </div>
+
+
+                  {/* USER VERIFICATION */}
+                  <div className="space-y-4 p-4 bg-white border-2 border-black">
+                    <div className="flex items-center justify-between border-b-2 border-black pb-2">
+                      <div>
+                        <h4 className="font-display font-black text-lg uppercase">Issue Verification Badge</h4>
+                        <p className="font-mono text-xs text-neutral-600">Verify any registered account by @handle. The badge and selected color sync through Firestore to the profile, posts and comments.</p>
+                      </div>
+                      <BadgeCheck className="w-7 h-7" style={{ color: verificationColor, fill: verificationColor }} />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
+                      <div className="space-y-1">
+                        <label className="font-mono text-xs font-bold uppercase">User Handle (without @)</label>
+                        <input value={verificationHandle} onChange={e => setVerificationHandle(e.target.value.replace(/^@/, ''))} onBlur={handleLookupVerification} placeholder="krishsarkar" className="w-full px-3 py-2 border-2 border-black font-mono" />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="color" value={verificationColor} onChange={e => setVerificationColor(e.target.value)} className="w-12 h-10 border-2 border-black" />
+                        <input value={verificationColor} onChange={e => setVerificationColor(e.target.value)} className="w-28 px-3 py-2 border-2 border-black font-mono uppercase text-xs" />
+                      </div>
+                    </div>
+                    {verificationState && <div className="font-mono text-[10px] uppercase">Current status: <b>{verificationState}</b></div>}
+                    {verificationMessage && <div className="px-3 py-2 border-2 border-black bg-neutral-50 font-mono text-xs">{verificationMessage}</div>}
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" disabled={isSavingVerification} onClick={() => handleSetVerification(true)} className="px-5 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-black uppercase flex items-center gap-2"><BadgeCheck className="w-4 h-4" /> Verify User</button>
+                      <button type="button" disabled={isSavingVerification} onClick={() => handleSetVerification(false)} className="px-5 py-2 bg-white border-2 border-black text-red-600 font-mono text-xs font-black uppercase">Remove Verification</button>
                     </div>
                   </div>
 

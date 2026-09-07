@@ -33,6 +33,8 @@ service cloud.firestore {
         && data.get('followingCount', 0) is number
         && data.get('role', '') is string
         && data.get('isAuthor', false) is bool
+        && data.get('isVerified', false) is bool
+        && data.get('verificationColor', '#2196F3') is string && data.get('verificationColor', '#2196F3').matches('^#[0-9a-fA-F]{6}$')
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
     }
@@ -54,8 +56,14 @@ service cloud.firestore {
         && incoming().username == existing().username
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().get('isBlocked', false) == existing().get('isBlocked', false))
+        && incoming().get('isBlocked', false) == existing().get('isBlocked', false)
+        && incoming().get('isVerified', false) == existing().get('isVerified', false)
+        && incoming().get('verificationColor', '#2196F3') == existing().get('verificationColor', '#2196F3')
+        && incoming().get('isAuthor', false) == existing().get('isAuthor', false)
+        && incoming().get('role', '') == existing().get('role', ''))
+        || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'bio', 'themeColor', 'role', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'updatedAt']))
+        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt']))
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))
         || (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']));
 
@@ -127,6 +135,8 @@ service cloud.firestore {
         && data.authorUsername is string && data.authorUsername.size() <= 32
         && data.get('authorName', '') is string && data.get('authorName', '').size() <= 64
         && data.get('authorAvatar', '') is string && data.get('authorAvatar', '').size() <= 2048
+        && data.get('isVerified', false) is bool
+        && data.get('verificationColor', '#2196F3') is string && data.get('verificationColor', '#2196F3').matches('^#[0-9a-fA-F]{6}$')
         && data.upvotesCount is number
         && data.downvotesCount is number
         && data.commentsCount is number
@@ -156,7 +166,8 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && (
           (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'updatedAt']))
-          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'updatedAt']))
+          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'isVerified', 'verificationColor', 'updatedAt']))
+          || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['repostsCount', 'updatedAt']))
@@ -172,6 +183,8 @@ service cloud.firestore {
             && data.authorUsername is string && data.authorUsername.size() <= 32
             && data.get('authorName', '') is string && data.get('authorName', '').size() <= 64
             && data.get('authorAvatar', '') is string && data.get('authorAvatar', '').size() <= 2048
+            && data.get('isVerified', false) is bool
+            && data.get('verificationColor', '#2196F3') is string && data.get('verificationColor', '#2196F3').matches('^#[0-9a-fA-F]{6}$')
             && data.content is string && data.content.size() <= 5000
             && data.createdAt is timestamp
             && data.updatedAt is timestamp;
@@ -187,12 +200,12 @@ service cloud.firestore {
           && incoming().updatedAt == request.time;
         allow update: if isSignedIn()
           && isValidComment(incoming())
-          && request.auth.uid == existing().authorId
+          && (request.auth.uid == existing().authorId || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])))
           && incoming().authorId == existing().authorId
           && incoming().postId == existing().postId
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
-          && (incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']) || incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'updatedAt']));
+          && (incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']) || incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'isVerified', 'verificationColor', 'updatedAt']) || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])));
         allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
       }
 
@@ -203,7 +216,7 @@ service cloud.firestore {
           && incoming().postId == postId
           && incoming().userId == request.auth.uid
           && incoming().type in ['up', 'down'];
-        allow delete: if isSignedIn() && request.auth.uid == userId;
+        allow delete: if isSignedIn() && (request.auth.uid == userId || get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid || isAdmin());
       }
 
       match /claps/{userId} {
@@ -212,13 +225,13 @@ service cloud.firestore {
           && userId == request.auth.uid
           && incoming().postId == postId
           && incoming().userId == request.auth.uid;
-        allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+        allow delete: if isSignedIn() && (request.auth.uid == userId || get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid || isAdmin());
       }
 
       match /reposts/{userId} {
         allow read: if true;
         allow create: if isSignedIn() && userId == request.auth.uid && incoming().userId == request.auth.uid;
-        allow delete: if isSignedIn() && userId == request.auth.uid;
+        allow delete: if isSignedIn() && (userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid || isAdmin());
       }
     }
     
@@ -264,9 +277,9 @@ service cloud.firestore {
           && incoming().content is string
           && incoming().content.size() <= 2000;
         allow update: if isSignedIn()
-          && request.auth.uid == existing().authorId
+          && (request.auth.uid == existing().authorId || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])))
           && incoming().authorId == existing().authorId
-          && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'updatedAt', 'content']);
+          && (incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'updatedAt', 'content']) || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])));
         allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
       }
     }

@@ -89,14 +89,8 @@ export const UniqueHandleModal: React.FC<UniqueHandleModalProps> = ({
       onProfileCreated(profile);
       onClose();
     } catch (err: any) {
-      console.error('Failed to claim community handle:', err);
-      const raw = err?.message || 'Unable to create your community profile.';
-      let message = raw;
-      try {
-        const parsed = JSON.parse(raw);
-        message = parsed?.error || raw;
-      } catch { /* keep original message */ }
-      setErrorMessage(message.length > 220 ? message.slice(0, 220) + '…' : message);
+      console.error(err);
+      setErrorMessage('Failed to claim handle. It may have been claimed by someone else.');
     } finally {
       setIsSubmitting(false);
     }

@@ -1,3 +1,4 @@
+import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
 import { getCommunityProfile, getPosts, subscribeCommunityPosts, deletePost, toggleRepost, getUserRepostStatus } from '../lib/community';
@@ -233,7 +234,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                   </div>
                 )}
                 <div className="overflow-hidden">
-                  <div className="font-bold font-display leading-tight truncate">{profile.displayName}</div>
+                  <div className="font-bold font-display leading-tight truncate">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-4 h-4 inline-block ml-1 align-middle" /></div>
                   <button 
                     onClick={() => onNavigate('community_profile', profile.username)}
                     className="font-mono text-xs font-bold text-neutral-600 hover:text-[var(--color-primary)] hover:underline block truncate"
@@ -424,7 +425,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                             @
                           </div>
                         )}
-                        <span className="font-bold text-black">@{post.authorUsername}</span>
+                        <span className="font-bold text-black inline-flex items-center gap-1">@{post.authorUsername}<VerifiedBadge verified={post.isVerified} color={post.verificationColor} className="w-3.5 h-3.5" /></span>
                       </button>
                       <span className="text-neutral-400">&bull;</span>
                       <span className="text-neutral-500">{formatDisplayDate(post.createdAt)}</span>

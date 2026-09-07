@@ -39,7 +39,9 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
         authorId: profile.uid,
         authorUsername: profile.username,
         authorName: profile.displayName || profile.username,
-        authorAvatar: profile.photoURL || ''
+        authorAvatar: profile.photoURL || '',
+        isVerified: !!profile.isVerified,
+        verificationColor: profile.verificationColor || '#2196F3'
       });
       onPublished(post);
     } catch (error) {

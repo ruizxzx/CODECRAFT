@@ -1,3 +1,4 @@
+import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { Article, SiteConfig } from '../types';
 import { 
@@ -222,7 +223,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             />
             <div>
               <div className="font-display font-black text-base text-black flex items-center space-x-1.5">
-                <span>{siteConfig.authorName || article.author.name}</span>
+                <span className="inline-flex items-center gap-1">{siteConfig.authorName || article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
                 <span className="text-[11px] font-mono font-bold bg-[var(--color-success)] text-black px-1.5 py-0.2 border-2 border-black">
                   AUTHOR
                 </span>

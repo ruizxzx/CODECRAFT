@@ -1,3 +1,4 @@
+import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityPost, CommunityComment, PageView, CommunityUser } from '../types';
 import { getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
@@ -245,7 +246,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
               onClick={() => onNavigate('community_profile', post.authorUsername)}
               className="font-display font-black text-lg hover:underline"
             >
-              {post.authorName || `@${post.authorUsername}`}
+              <span className="inline-flex items-center gap-1">{post.authorName || `@${post.authorUsername}`}<VerifiedBadge verified={post.isVerified} color={post.verificationColor} className="w-4 h-4" /></span>
             </button>
             <div className="font-mono text-xs text-neutral-500">
               @{post.authorUsername} &bull; {formatDisplayDate(post.createdAt)}
@@ -343,7 +344,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
                 </button>
                 <div className="font-mono text-xs">
                   <button onClick={() => onNavigate('community_profile', c.authorUsername)} className="font-bold hover:underline text-black">
-                    {c.authorName || `@${c.authorUsername}`}
+                    <span className="inline-flex items-center gap-1">{c.authorName || `@${c.authorUsername}`}<VerifiedBadge verified={c.isVerified} color={c.verificationColor} className="w-3.5 h-3.5" /></span>
                   </button>
                   <span className="text-neutral-500 ml-2">{formatDisplayDate(c.createdAt)}</span>
                 </div>

@@ -29,7 +29,7 @@ import { SavedView } from './components/SavedView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { getCommunityProfile, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
-import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles } from './lib/cms';
+import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
 
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
@@ -43,14 +43,12 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
 
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
-  const [siteConfigReady, setSiteConfigReady] = useState(false);
   const [bentoLinks, setBentoLinks] = useState<BentoLink[]>(DEFAULT_BENTO_LINKS);
 
   // Real-time Firestore Subscriptions for Cloud CMS Data
   useEffect(() => {
     const unsubConfig = subscribeSiteConfig((config) => {
       setSiteConfig(config);
-      setSiteConfigReady(true);
     });
     const unsubBento = subscribeBentoLinks((links) => {
       setBentoLinks(links);
@@ -107,7 +105,6 @@ export default function App() {
 
   // Sync auth state & cloud saved items
   useEffect(() => {
-    if (!siteConfigReady) return;
     const unsub = auth.onAuthStateChanged(async (user) => {
       setUserAuth(user);
       if (user) {
@@ -115,18 +112,22 @@ export default function App() {
         try {
           let prof = await getCommunityProfile(user.uid);
           if (checkIsAdmin(user.email)) {
+            // Read the current cloud config here instead of using the stale value
+            // captured by this auth listener. This prevents an old default from
+            // overwriting a freshly edited author name/avatar on sign-in.
+            const cloudConfig = await getSiteConfig();
             const synced = await syncAdminAuthorProfile({
-              name: siteConfig.authorName || user.displayName || 'Krish Sarkar',
-              role: siteConfig.authorRole || 'Founder & Systems Architect',
-              avatar: siteConfig.authorAvatarUrl || user.photoURL || '',
-              bio: siteConfig.aboutMeBio || siteConfig.manifestoText || ''
+              name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
+              role: cloudConfig.authorRole || 'Founder & Systems Architect',
+              avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
+              bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || ''
             });
             try {
               await syncAuthorToAllCloudArticles({
-                name: siteConfig.authorName || user.displayName || 'Krish Sarkar',
-                role: siteConfig.authorRole || 'Founder & Systems Architect',
-                avatar: siteConfig.authorAvatarUrl || user.photoURL || '',
-                bio: siteConfig.aboutMeBio || siteConfig.manifestoText || '',
+                name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
+                role: cloudConfig.authorRole || 'Founder & Systems Architect',
+                avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
+                bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || '',
                 uid: synced.uid,
                 username: synced.username
               });
@@ -177,7 +178,7 @@ export default function App() {
       }
     });
     return () => unsub();
-  }, [siteConfigReady, siteConfig.authorName, siteConfig.authorRole, siteConfig.authorAvatarUrl, siteConfig.aboutMeBio, siteConfig.manifestoText]);
+  }, []);
 
   // Dynamic theme colors synced to global site configuration
   useEffect(() => {

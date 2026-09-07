@@ -1,3 +1,4 @@
+import { VerifiedBadge } from './VerifiedBadge';
 import React from 'react';
 import { Article, Category, SiteConfig } from '../types';
 import { Clock, Calendar, Bookmark, ArrowUpRight, Sparkles } from 'lucide-react';
@@ -132,7 +133,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
                 />
                 <div>
                   <div className="font-display font-black text-xs text-black">
-                    {siteConfig?.authorName || article.author.name}
+                    <span className="inline-flex items-center gap-1">{siteConfig?.authorName || article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
                   </div>
                   <div className="font-mono text-[10px] text-neutral-500">
                     {siteConfig?.authorRole || "KRISHFICIENT Lead"}
@@ -236,7 +237,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
             className="w-6 h-6 border border-black object-cover"
           />
           <span className="font-display font-bold text-xs text-neutral-900">
-            {siteConfig?.authorName || article.author.name}
+            <span className="inline-flex items-center gap-1">{siteConfig?.authorName || article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
           </span>
         </div>
 

@@ -1,6 +1,6 @@
 import { db, auth } from './firebase';
 import { 
-  collection, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment
+  collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment
 } from 'firebase/firestore';
 import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, CarouselSlide } from '../types';
 
@@ -75,7 +75,7 @@ export async function createCommunityProfile(data: Omit<CommunityUser, 'createdA
   batch.set(usernameRef, { uid });
 
   const userRef = doc(db, 'users', uid);
-  const userData = { ...data, username, role: data.role || '', isAuthor: !!data.isAuthor, followersCount: 0, followingCount: 0, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+  const userData = { ...data, username, role: data.role || '', isAuthor: !!data.isAuthor, isVerified: !!data.isVerified, verificationColor: data.verificationColor || '#2196F3', followersCount: 0, followingCount: 0, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
   batch.set(userRef, userData);
 
   try {
@@ -458,11 +458,13 @@ export async function deletePost(postId: string) {
     const commentsSnap = await getDocs(collection(db, 'posts', postId, 'comments'));
     const votesSnap = await getDocs(collection(db, 'posts', postId, 'votes'));
     const clapsSnap = await getDocs(collection(db, 'posts', postId, 'claps'));
+    const repostsSnap = await getDocs(collection(db, 'posts', postId, 'reposts'));
 
     const batch = writeBatch(db);
     commentsSnap.docs.forEach(d => batch.delete(d.ref));
     votesSnap.docs.forEach(d => batch.delete(d.ref));
     clapsSnap.docs.forEach(d => batch.delete(d.ref));
+    repostsSnap.docs.forEach(d => batch.delete(d.ref));
     batch.delete(postRef);
 
     await batch.commit();
@@ -485,6 +487,43 @@ export async function deleteComment(postId: string, commentId: string) {
     handleFirestoreError(error, OperationType.DELETE, `posts/${postId}/comments/${commentId}`);
     throw error;
   }
+}
+
+export async function setUserVerificationByUsername(usernameInput: string, isVerified: boolean, verificationColor: string): Promise<CommunityUser> {
+  const admin = auth.currentUser;
+  if (!admin || !admin.email) throw new Error('You must be signed in as an admin.');
+  const cleanUsername = usernameInput.replace(/^@/, '').trim().toLowerCase();
+  if (!cleanUsername) throw new Error('Enter a valid @handle.');
+  const profile = await getProfileByUsername(cleanUsername);
+  if (!profile) throw new Error(`No user found for @${cleanUsername}.`);
+  const color = /^#[0-9a-fA-F]{6}$/.test(verificationColor) ? verificationColor : '#2196F3';
+
+  // Update the canonical profile first, then denormalized author fields used by
+  // feeds/comments/articles so the badge is visible without per-card reads.
+  await updateDoc(doc(db, 'users', profile.uid), {
+    isVerified,
+    verificationColor: color,
+    updatedAt: serverTimestamp()
+  });
+
+  const writes: Array<{ref: any; data: any}> = [];
+  const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', profile.uid)));
+  postsSnap.docs.forEach(d => writes.push({ref: d.ref, data: {isVerified, verificationColor: color, updatedAt: serverTimestamp()}}));
+  const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', profile.uid)));
+  commentsSnap.docs.forEach(d => writes.push({ref: d.ref, data: {isVerified, verificationColor: color, updatedAt: serverTimestamp()}}));
+  for (let i = 0; i < writes.length; i += 450) {
+    const batch = writeBatch(db);
+    writes.slice(i, i + 450).forEach(w => batch.update(w.ref, w.data));
+    await batch.commit();
+  }
+
+  return {...profile, isVerified, verificationColor: color, updatedAt: new Date().toISOString()};
+}
+
+export async function getUserVerificationByUsername(usernameInput: string): Promise<Pick<CommunityUser, 'isVerified'|'verificationColor'> | null> {
+  const profile = await getProfileByUsername(usernameInput.replace(/^@/, '').trim().toLowerCase());
+  if (!profile) return null;
+  return { isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3' };
 }
 
 export async function blockUser(uid: string, isBlocked: boolean) {
@@ -564,56 +603,12 @@ export async function getUserRepostedPosts(userId: string): Promise<CommunityPos
   return posts.filter(Boolean) as CommunityPost[];
 }
 
-async function getCommentsAuthoredByUserWithoutCollectionGroup(userId: string): Promise<Array<{ ref: any; data: any }>> {
-  const results: Array<{ ref: any; data: any }> = [];
-
-  // Deliberately avoid collectionGroup(... where authorId == ...) here.
-  // That query requires a COLLECTION_GROUP_ASC index and breaks profile save/claim
-  // on projects where that index has not been created. We instead read the known
-  // parent collections and filter the small comment documents client-side.
-  const [postsSnap, articlesSnap] = await Promise.all([
-    getDocs(collection(db, 'posts')),
-    getDocs(collection(db, 'articles'))
-  ]);
-
-  const postCommentReads = postsSnap.docs.map(postDoc =>
-    getDocs(collection(db, 'posts', postDoc.id, 'comments'))
-  );
-  const articleCommentReads = articlesSnap.docs.map(articleDoc =>
-    getDocs(collection(db, 'articles', articleDoc.id, 'comments'))
-  );
-
-  const [postComments, articleComments] = await Promise.all([
-    Promise.all(postCommentReads),
-    Promise.all(articleCommentReads)
-  ]);
-
-  for (const snap of [...postComments, ...articleComments]) {
-    for (const commentDoc of snap.docs) {
-      if (commentDoc.data().authorId === userId) {
-        results.push({ ref: commentDoc.ref, data: commentDoc.data() });
-      }
-    }
-  }
-  return results;
-}
-
-export async function syncUserIdentityAcrossContent(userId: string, profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username'>): Promise<void> {
+export async function syncUserIdentityAcrossContent(userId: string, profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username' | 'isVerified' | 'verificationColor'>): Promise<void> {
   const writes: Array<{ ref: any; data: any }> = [];
-  const identity = {
-    authorName: profile.displayName || '',
-    authorAvatar: profile.photoURL || '',
-    authorUsername: profile.username || '',
-    updatedAt: serverTimestamp()
-  };
-
   const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
-  postsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: identity }));
-
-  const comments = await getCommentsAuthoredByUserWithoutCollectionGroup(userId);
-  comments.forEach(c => writes.push({ ref: c.ref, data: identity }));
-
-
+  postsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
+  const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
+  commentsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
   for (let i = 0; i < writes.length; i += 450) {
     const batch = writeBatch(db);
     writes.slice(i, i + 450).forEach(w => batch.update(w.ref, w.data));
@@ -622,19 +617,13 @@ export async function syncUserIdentityAcrossContent(userId: string, profile: Pic
 }
 
 export async function getUserComments(userId: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {
-  const comments = await getCommentsAuthoredByUserWithoutCollectionGroup(userId);
-  return comments.map(({ ref, data }) => {
-    const path = ref.path.split('/');
+  const snap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
+  return snap.docs.map(d => {
+    const data = d.data();
+    const path = d.ref.path.split('/');
     const postId = path[0] === 'posts' ? path[1] : undefined;
     const articleSlug = path[0] === 'articles' ? path[1] : undefined;
-    return {
-      id: ref.id,
-      content: data.content || '',
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()),
-      postId,
-      articleSlug,
-      authorName: data.authorName || 'Architect'
-    };
+    return { id: d.id, content: data.content || '', createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()), postId, articleSlug, authorName: data.authorName || 'Architect' };
   }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 

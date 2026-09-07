@@ -1,3 +1,4 @@
+import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Send, Clock, Trash2, LogIn } from 'lucide-react';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
@@ -67,6 +68,8 @@ export const CommentsSection: React.FC<CommentsSectionProps> = ({ articleSlug })
         authorName: profile?.displayName || currentUser.displayName || currentUser.email?.split('@')[0] || 'Architect',
         authorAvatar: profile?.photoURL || currentUser.photoURL || '',
         authorUsername: profile?.username || currentUser.email?.split('@')[0] || '',
+        isVerified: !!profile?.isVerified,
+        verificationColor: profile?.verificationColor || '#2196F3',
         content: newComment.trim()
       });
       setNewComment('');
@@ -206,7 +209,7 @@ export const CommentsSection: React.FC<CommentsSectionProps> = ({ articleSlug })
                     )}
                     <div>
                       <span className="font-display font-black text-sm uppercase text-black">
-                        {comment.authorName}
+                        <span className="inline-flex items-center gap-1">{comment.authorName}<VerifiedBadge verified={comment.isVerified} color={comment.verificationColor} className="w-3.5 h-3.5" /></span>
                       </span>
                       {comment.authorUsername && (
                         <span className="text-neutral-500 font-mono text-xs ml-1.5">

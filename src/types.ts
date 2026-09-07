@@ -41,6 +41,8 @@ export interface Article {
     bio: string;
     uid?: string;
     username?: string;
+    isVerified?: boolean;
+    verificationColor?: string;
   };
   content: ArticleContentBlock[];
   viewsCount?: number;
@@ -114,6 +116,8 @@ export interface CommunityUser {
   followingCount?: number;
   role?: string;
   isAuthor?: boolean;
+  isVerified?: boolean;
+  verificationColor?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -127,6 +131,8 @@ export interface CommunityPost {
   authorUsername: string;
   authorName: string;
   authorAvatar: string;
+  isVerified?: boolean;
+  verificationColor?: string;
   clapsCount?: number; // legacy
   upvotesCount: number;
   downvotesCount: number;
@@ -174,6 +180,8 @@ export interface ArticleComment {
   authorName: string;
   authorAvatar?: string;
   authorUsername?: string;
+  isVerified?: boolean;
+  verificationColor?: string;
   content: string;
   createdAt: string;
 }
