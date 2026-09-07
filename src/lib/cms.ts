@@ -11,7 +11,8 @@ import {
   serverTimestamp,
   Timestamp 
 } from 'firebase/firestore';
-import { db, auth, checkIsAdmin } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage, auth, checkIsAdmin } from './firebase';
 import { deletePost } from './community';
 import { Article, SiteConfig, BentoLink, ArticleComment } from '../types';
 import { INITIAL_ARTICLES } from '../data/articles';
@@ -431,14 +432,6 @@ export async function subscribeNewsletter(email: string): Promise<{ status: 'suc
   const subDocRef = doc(db, 'newsletter_subscribers', docId);
 
   try {
-    const snap = await getDoc(subDocRef);
-    if (snap.exists()) {
-      return {
-        status: 'already_subscribed',
-        message: 'This email address is already subscribed to KRISHFICIENT dispatches.'
-      };
-    }
-
     await setDoc(subDocRef, {
       email: cleanEmail,
       subscribedAt: serverTimestamp(),
@@ -452,6 +445,15 @@ export async function subscribeNewsletter(email: string): Promise<{ status: 'suc
       message: 'You are successfully subscribed to KRISHFICIENT architectural dispatches.'
     };
   } catch (error: any) {
+    // Subscriber documents are intentionally not publicly readable. A write to
+    // an existing deterministic document is denied, which safely indicates an
+    // existing subscription without exposing the address or subscriber list.
+    if (error?.code === 'permission-denied') {
+      return {
+        status: 'already_subscribed',
+        message: 'This email address is already subscribed to KRISHFICIENT dispatches.'
+      };
+    }
     console.error("Failed to persist newsletter subscriber:", error);
     throw new Error(error.message || "Failed to register subscription. Please try again.");
   }
@@ -494,4 +496,13 @@ export async function getNewsletterSubscribers(): Promise<NewsletterSubscriber[]
     console.warn("Could not load newsletter subscribers (admin privileges required):", error);
     return [];
   }
+}
+
+// Firebase Storage is optional. The CMS also accepts direct image URLs.
+export async function uploadImageToStorage(file: File, folder = 'editorial'): Promise<string> {
+  const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const path = `${folder}/${Date.now()}_${cleanName}`;
+  const storageRef = ref(storage, path);
+  const uploadResult = await uploadBytes(storageRef, file);
+  return getDownloadURL(uploadResult.ref);
 }

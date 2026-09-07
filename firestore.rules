@@ -11,9 +11,11 @@ service cloud.firestore {
     function existing() { return resource.data; }
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
     
-    // Hardcoded admin emails and UID fallback
+    // Google-authenticated owners only. This is enforced by Firestore itself;
+    // the client-side admin UI check is only a convenience, not authorization.
     function isAdmin() { 
       return isSignedIn() && (
+        request.auth.token.get('email_verified', false) == true &&
         request.auth.token.get('email', '') in ['ruizxzxz@gmail.com', 'krishsarkar456@gmail.com']
       ); 
     }
@@ -91,6 +93,13 @@ service cloud.firestore {
         && incoming().keys().hasAll(["uid"]) && incoming().keys().size() == 1
         && incoming().uid is string && incoming().uid == request.auth.uid
         && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    // Private resume point for an authenticated reader. This is deliberately
+    // separate from a community profile, so Google accounts do not need to
+    // claim a username before Continue Reading works.
+    match /reading_progress/{userId} {
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
 
     // POST VALIDATION

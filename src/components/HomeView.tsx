@@ -32,6 +32,7 @@ interface HomeViewProps {
   onToggleSave: (slug: string) => void;
   onSelectCategory: (cat: string) => void;
   siteConfig: SiteConfig;
+  continueReadingArticle: Article | null;
 }
 
 const CarouselComponent: React.FC<{ slides: CarouselSlide[] }> = ({ slides }) => {
@@ -140,6 +141,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onToggleSave,
   onSelectCategory,
   siteConfig,
+  continueReadingArticle,
 }) => {
   const [featuredCommunityPosts, setFeaturedCommunityPosts] = useState<CommunityPost[]>([]);
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([]);
@@ -213,6 +215,29 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
       {/* 1.5 Carousel Section */}
       {carouselSlides.length > 0 && <CarouselComponent slides={carouselSlides} />}
+
+      {/* Signed-in reader resume point */}
+      {continueReadingArticle && (
+        <section className="border-b-4 border-black bg-[var(--color-primary)]">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 font-mono text-[11px] font-black uppercase tracking-widest text-black mb-1">
+                <BookOpen className="w-4 h-4" />
+                Continue Reading
+              </div>
+              <p className="font-display font-black text-lg sm:text-2xl uppercase tracking-tight text-black truncate">
+                {continueReadingArticle.title}
+              </p>
+            </div>
+            <button
+              onClick={() => onSelectArticle(continueReadingArticle.slug)}
+              className="shrink-0 px-5 py-3 bg-black text-white border-2 border-black neo-shadow-sm hover:bg-white hover:text-black font-display font-black text-xs uppercase flex items-center gap-2 transition-colors"
+            >
+              Resume Post <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* 2. High Density Main Split: 2/3 Featured Column & 1/3 Dispatch Updates / Newsletter */}
       {featuredArticle && (

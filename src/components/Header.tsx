@@ -90,30 +90,30 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <>
-      {/* Sticky Top Header - Rock solid, never glitches, never overlaps bottom content */}
+      {/* Purposefully limited top navigation: key reader actions stay visible. */}
       <header className="sticky top-0 z-50 w-full bg-white border-b-4 border-black neo-shadow-sm select-none">
-        <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-1.5 sm:gap-4">
+        <div className="max-w-screen-2xl mx-auto px-3 sm:px-6 lg:px-8 h-[4.5rem] sm:h-[5.5rem] flex items-center justify-between gap-3 sm:gap-6">
           
           {/* Brand / Logo */}
           <div className="flex items-center space-x-2 shrink-0 min-w-0">
             <button
               onClick={() => handleNavClick('home')}
-              className="flex items-center space-x-2 group text-left focus:outline-none p-1 border-2 border-black neo-shadow-sm hover:bg-[var(--color-primary)] transition-all active:translate-x-0.5 active:translate-y-0.5 max-w-[190px] xs:max-w-none truncate"
+              className="flex items-center space-x-2 group text-left focus:outline-none p-1.5 border-2 border-black neo-shadow-sm hover:bg-[var(--color-primary)] transition-all active:translate-x-0.5 active:translate-y-0.5 min-w-0"
               title="Return to Homepage"
             >
               {siteConfig.logoImageUrl ? (
                 <img 
                   src={siteConfig.logoImageUrl} 
                   alt={siteConfig.logoPart1 || 'Logo'} 
-                  className="w-7 h-7 sm:w-9 sm:h-9 object-cover border border-black bg-neutral-100 shrink-0" 
+                  className="w-8 h-8 sm:w-10 sm:h-10 object-cover border border-black bg-neutral-100 shrink-0" 
                 />
               ) : (
-                <div className="w-7 h-7 sm:w-9 sm:h-9 bg-black text-[var(--color-primary)] flex items-center justify-center font-display font-black text-base sm:text-lg border border-black group-hover:bg-white group-hover:text-black transition-colors shrink-0">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-black text-[var(--color-primary)] flex items-center justify-center font-display font-black text-base sm:text-xl border border-black group-hover:bg-white group-hover:text-black transition-colors shrink-0">
                   {(siteConfig.logoPart1 || 'K').charAt(0)}
                 </div>
               )}
               <div className="flex flex-col pr-1 min-w-0">
-                <span className="font-display font-black text-base sm:text-2xl tracking-tighter leading-none text-black truncate">
+                <span className="font-display font-black text-lg sm:text-2xl tracking-tighter leading-none text-black whitespace-nowrap">
                   {siteConfig.logoPart1 || 'KRISH'}<span className="text-[var(--color-accent)]">{siteConfig.logoPart2 || 'FICIENT'}</span>
                 </span>
                 <span className="font-mono text-[9px] sm:text-[10px] uppercase font-bold text-neutral-500 tracking-wider hidden xs:block">
@@ -124,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden md:flex items-center space-x-1 lg:space-x-2">
+          <nav className="hidden lg:flex items-center space-x-1">
             {mainNavLinks.map((link) => {
               const isActive = currentPage === link.page;
               const Icon = link.icon;
@@ -132,7 +132,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <button
                   key={link.page}
                   onClick={() => handleNavClick(link.page as PageView)}
-                  className={`px-3 py-2 lg:px-4 lg:py-2.5 flex items-center space-x-1.5 font-display font-black text-xs uppercase transition-all box-border ${
+                  className={`px-3 py-2.5 flex items-center space-x-1.5 font-display font-black text-xs uppercase transition-all box-border ${
                     isActive 
                       ? 'bg-[var(--color-primary)] text-black border-2 border-black neo-shadow-sm' 
                       : 'border-2 border-transparent text-neutral-800 hover:text-black hover:border-black hover:bg-neutral-100'
@@ -148,18 +148,6 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               );
             })}
-
-            {/* Extra desktop links */}
-            <button
-              onClick={() => handleNavClick('about')}
-              className={`px-3 py-2 font-display font-black text-xs uppercase transition-all ${
-                currentPage === 'about'
-                  ? 'bg-[var(--color-primary)] text-black border-2 border-black neo-shadow-sm'
-                  : 'border-2 border-transparent text-neutral-800 hover:text-black hover:border-black hover:bg-neutral-100'
-              }`}
-            >
-              About
-            </button>
           </nav>
 
           {/* Right Action Controls */}
@@ -177,18 +165,6 @@ export const Header: React.FC<HeaderProps> = ({
                 ⌘K
               </kbd>
             </button>
-
-            {/* Admin Studio Trigger (Available for admins or anyone with handler) */}
-            {onOpenCms && (
-              <button
-                onClick={onOpenCms}
-                className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-black text-[var(--color-primary)] border-2 border-black neo-shadow-sm hover:bg-[var(--color-primary)] hover:text-black active:translate-x-0.5 active:translate-y-0.5 transition-all flex items-center space-x-1.5 font-mono text-xs font-bold uppercase"
-                title="Open Admin Studio CMS"
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span className="hidden xl:inline">ADMIN</span>
-              </button>
-            )}
 
             {/* User Profile / Auth Button (Desktop) */}
             <div className="hidden sm:flex items-center">

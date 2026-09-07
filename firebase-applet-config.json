@@ -4,7 +4,9 @@
   "apiKey": "AIzaSyC1_eau-5rsMTreEzCNmTsn2FGcSa448ug",
   "authDomain": "krishficient-portfolio.firebaseapp.com",
   "firestoreDatabaseId": "(default)",
+  "storageBucket": "krishficient-portfolio.firebasestorage.app",
   "messagingSenderId": "46384387176",
-  "measurementId": "G-N7KC7KBCLW",
+  "measurementId": "",
+  "oAuthClientId": "",
   "recaptchaSiteKey": ""
 }

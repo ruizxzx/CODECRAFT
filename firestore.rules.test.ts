@@ -92,14 +92,14 @@ describe('Admin Moderation and Deletion Security Rules', () => {
   };
 
   it('Admin (ruizxzxz@gmail.com) deletes another user (bob) post -> MUST succeed', async () => {
-    const adminDb = testEnv.authenticatedContext('admin1', { email: 'ruizxzxz@gmail.com' }).firestore();
+    const adminDb = testEnv.authenticatedContext('admin1', { email: 'ruizxzxz@gmail.com', email_verified: true }).firestore();
     const setupDb = testEnv.authenticatedContext('bob', { email: 'bob@example.com' }).firestore();
     await setupDb.collection('posts').doc('post1').set(postData);
     await assertSucceeds(adminDb.collection('posts').doc('post1').delete());
   });
 
   it('Admin (krishsarkar456@gmail.com) deletes another user (bob) comment -> MUST succeed', async () => {
-    const adminDb = testEnv.authenticatedContext('admin2', { email: 'krishsarkar456@gmail.com' }).firestore();
+    const adminDb = testEnv.authenticatedContext('admin2', { email: 'krishsarkar456@gmail.com', email_verified: true }).firestore();
     const setupDb = testEnv.authenticatedContext('bob', { email: 'bob@example.com' }).firestore();
     await setupDb.collection('posts').doc('post1').set(postData);
     await setupDb.collection('posts').doc('post1').collection('comments').doc('c1').set(commentData);
@@ -107,13 +107,13 @@ describe('Admin Moderation and Deletion Security Rules', () => {
   });
 
   it('Admin deletes their own post -> MUST succeed', async () => {
-    const adminDb = testEnv.authenticatedContext('admin1', { email: 'ruizxzxz@gmail.com' }).firestore();
+    const adminDb = testEnv.authenticatedContext('admin1', { email: 'ruizxzxz@gmail.com', email_verified: true }).firestore();
     await adminDb.collection('posts').doc('post1').set({ ...postData, authorId: 'admin1' });
     await assertSucceeds(adminDb.collection('posts').doc('post1').delete());
   });
 
   it('Admin deletes their own comment -> MUST succeed', async () => {
-    const adminDb = testEnv.authenticatedContext('admin1', { email: 'ruizxzxz@gmail.com' }).firestore();
+    const adminDb = testEnv.authenticatedContext('admin1', { email: 'ruizxzxz@gmail.com', email_verified: true }).firestore();
     await adminDb.collection('posts').doc('post1').set({ ...postData, authorId: 'admin1' });
     await adminDb.collection('posts').doc('post1').collection('comments').doc('c1').set({ ...commentData, authorId: 'admin1' });
     await assertSucceeds(adminDb.collection('posts').doc('post1').collection('comments').doc('c1').delete());
@@ -145,5 +145,33 @@ describe('Admin Moderation and Deletion Security Rules', () => {
     const unauthDb = testEnv.unauthenticatedContext().firestore();
     await bobDb.collection('posts').doc('post1').set(postData);
     await assertFails(unauthDb.collection('posts').doc('post1').delete());
+  });
+});
+
+describe('CMS authorization', () => {
+  const admin = () => testEnv.authenticatedContext('admin1', {
+    email: 'ruizxzxz@gmail.com', email_verified: true
+  }).firestore();
+  const visitor = () => testEnv.authenticatedContext('visitor', {
+    email: 'visitor@example.com', email_verified: true
+  }).firestore();
+
+  it('allows a verified owner to create, update, and delete carousel slides', async () => {
+    const slide = admin().collection('carousel_slides').doc('slide-1');
+    await assertSucceeds(slide.set({ title: 'Launch', imageUrl: 'https://example.com/slide.jpg', order: 0 }));
+    await assertSucceeds(slide.update({ title: 'Updated launch' }));
+    await assertSucceeds(slide.delete());
+  });
+
+  it('does not grant carousel or site configuration writes to regular users', async () => {
+    await assertFails(visitor().collection('carousel_slides').doc('slide-1').set({ title: 'Nope', imageUrl: 'https://example.com/x.jpg', order: 0 }));
+    await assertFails(visitor().collection('siteConfig').doc('global').set({ heroHeadline: 'Nope' }));
+  });
+
+  it('allows verified owners to save other CMS documents', async () => {
+    await assertSucceeds(admin().collection('siteConfig').doc('global').set({ heroHeadline: 'Hello' }));
+    await assertSucceeds(admin().collection('bento').doc('global').set({ links: [] }));
+    await assertSucceeds(admin().collection('articles').doc('article-1').set({ title: 'Article' }));
+    await assertSucceeds(admin().collection('deleted_articles').doc('article-1').set({ slug: 'article-1' }));
   });
 });

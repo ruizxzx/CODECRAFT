@@ -27,6 +27,7 @@ import {
   deleteArticle, 
   saveSiteConfig, 
   saveBentoLinks, 
+  uploadImageToStorage,
   setArticleFeaturedStatus,
   syncAuthorToAllCloudArticles
 } from '../lib/cms';
@@ -112,12 +113,14 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [newSlideTitle, setNewSlideTitle] = useState('');
   const [newSlideImageUrl, setNewSlideImageUrl] = useState('');
   const [newSlideLinkUrl, setNewSlideLinkUrl] = useState('');
+  const [isUploadingSlideImage, setIsUploadingSlideImage] = useState(false);
 
   // Carousel Editing State
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
   const [editSlideTitle, setEditSlideTitle] = useState('');
   const [editSlideImageUrl, setEditSlideImageUrl] = useState('');
   const [editSlideLinkUrl, setEditSlideLinkUrl] = useState('');
+  const [isUploadingEditSlideImage, setIsUploadingEditSlideImage] = useState(false);
   const [isSavingSlide, setIsSavingSlide] = useState(false);
 
   // Deletion & Message States (No window.alert or window.confirm which fail in iframes)
@@ -250,8 +253,20 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     }
   };
 
-  const handleEditSlideUpload = () => {
-    setCarouselErrorMessage('Firebase Storage is disabled. Paste an image URL instead.');
+  const handleEditSlideUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingEditSlideImage(true);
+    setCarouselErrorMessage(null);
+    try {
+      const url = await uploadImageToStorage(file, 'carousel');
+      setEditSlideImageUrl(url);
+    } catch (err: any) {
+      console.error("Slide edit upload failed:", err);
+      setCarouselErrorMessage("Failed to upload slide image: " + (err.message || "Upload error"));
+    } finally {
+      setIsUploadingEditSlideImage(false);
+    }
   };
 
   const executeDeleteSlide = async (id: string) => {
@@ -441,14 +456,27 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
 
   // Author avatar upload & cloud sync state
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isSyncingAuthor, setIsSyncingAuthor] = useState(false);
   const [syncAuthorSuccess, setSyncAuthorSuccess] = useState<string | null>(null);
   const [togglingFeaturedSlug, setTogglingFeaturedSlug] = useState<string | null>(null);
 
-  const handleAvatarUpload = () => {
-    alert('Firebase Storage is disabled. Paste an image URL instead.');
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingAvatar(true);
+    try {
+      const url = await uploadImageToStorage(file, 'avatars');
+      setAuthorAvatarUrl(url);
+    } catch (err: any) {
+      console.error("Failed to upload avatar image:", err);
+      alert("Avatar upload failed: " + (err.message || 'Permission denied'));
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const handleSyncAuthorToArticles = async () => {
@@ -693,12 +721,34 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   };
 
   // Image Upload Handlers
-  const handleCoverUpload = () => {
-    alert('Firebase Storage is disabled. Paste an image URL instead.');
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingCover(true);
+    try {
+      const url = await uploadImageToStorage(file, 'covers');
+      setNewCoverImage(url);
+    } catch (err: any) {
+      console.error("Cover upload failed:", err);
+      alert("Failed to upload image to Firebase Storage: " + (err.message || "Error"));
+    } finally {
+      setIsUploadingCover(false);
+    }
   };
 
-  const handleSlideUpload = () => {
-    alert('Firebase Storage is disabled. Paste an image URL instead.');
+  const handleSlideUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingSlideImage(true);
+    try {
+      const url = await uploadImageToStorage(file, 'carousel');
+      setNewSlideImageUrl(url);
+    } catch (err: any) {
+      console.error("Slide upload failed:", err);
+      alert("Failed to upload slide image: " + (err.message || "Error"));
+    } finally {
+      setIsUploadingSlideImage(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -941,7 +991,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Avatar Preview and URL */}
+                    {/* Avatar Preview and URL / Upload */}
                     <div className="space-y-2">
                       <label className="font-mono text-xs font-bold uppercase text-black">Author Picture (Avatar)</label>
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -959,11 +1009,18 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                             placeholder="https://images.unsplash.com/..."
                           />
                           <div className="flex items-center gap-2">
-                            <button type="button" onClick={handleAvatarUpload} className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white border-2 border-black font-display font-black text-xs uppercase hover:bg-neutral-100 active:translate-x-0.5 active:translate-y-0.5 transition-all">
+                            <label className="cursor-pointer inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white border-2 border-black font-display font-black text-xs uppercase hover:bg-neutral-100 active:translate-x-0.5 active:translate-y-0.5 transition-all">
                               <Upload className="w-3.5 h-3.5" />
-                              <span>URL ONLY</span>
-                            </button>
-                            <span className="font-mono text-[10px] text-neutral-500">Paste a direct image URL</span>
+                              <span>{isUploadingAvatar ? 'UPLOADING...' : 'UPLOAD PICTURE'}</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={handleAvatarUpload} 
+                                disabled={isUploadingAvatar}
+                                className="hidden" 
+                              />
+                            </label>
+                            <span className="font-mono text-[10px] text-neutral-500">JPG, PNG, WebP</span>
                           </div>
                         </div>
                       </div>
@@ -1184,7 +1241,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       />
                     </div>
 
-                    {/* Cover Image Input (URL) */}
+                    {/* Cover Image Input with Storage Upload Option */}
                     <div className="space-y-2 border-2 border-black p-3 bg-neutral-50">
                       <label className="font-mono text-xs font-bold uppercase text-black block">
                         Cover Image
@@ -1197,10 +1254,17 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           placeholder="https://images.unsplash.com/..."
                           className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs bg-white"
                         />
-                        <button type="button" onClick={handleCoverUpload} className="px-4 py-2 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-[var(--color-primary)] hover:text-black transition-colors flex items-center space-x-1">
+                        <label className="cursor-pointer px-4 py-2 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-[var(--color-primary)] hover:text-black transition-colors flex items-center space-x-1">
                           <Upload className="w-3.5 h-3.5" />
-                          <span>URL ONLY</span>
-                        </button>
+                          <span>{isUploadingCover ? 'UPLOADING...' : 'UPLOAD'}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            onChange={handleCoverUpload} 
+                            className="hidden" 
+                            disabled={isUploadingCover}
+                          />
+                        </label>
                       </div>
 
                       {newCoverImage && (
@@ -1594,19 +1658,26 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         </div>
 
                         <div>
-                          <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Image URL</label>
+                          <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Image (Upload or Direct URL)</label>
                           <div className="flex gap-2">
                             <input 
                               type="url" 
                               value={newSlideImageUrl}
                               onChange={(e) => setNewSlideImageUrl(e.target.value)}
-                              placeholder="https://images.unsplash.com/..."
+                              placeholder="https://images.unsplash.com/... or upload"
                               className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm"
                             />
-                            <button type="button" onClick={handleSlideUpload} className="px-4 py-2 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-[var(--color-primary)] hover:text-black transition-colors flex items-center space-x-1.5 shrink-0">
+                            <label className="cursor-pointer px-4 py-2 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-[var(--color-primary)] hover:text-black transition-colors flex items-center space-x-1.5 shrink-0">
                               <Upload className="w-3.5 h-3.5" />
-                              <span>URL ONLY</span>
-                            </button>
+                              <span>{isUploadingSlideImage ? 'UPLOADING...' : 'UPLOAD FILE'}</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                onChange={handleSlideUpload} 
+                                className="hidden" 
+                                disabled={isUploadingSlideImage}
+                              />
+                            </label>
                           </div>
                         </div>
 
@@ -1718,7 +1789,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                     </div>
 
                                     <div>
-                                      <label className="font-mono text-xs font-bold uppercase block mb-1">Image URL</label>
+                                      <label className="font-mono text-xs font-bold uppercase block mb-1">Image URL / Upload</label>
                                       <div className="flex gap-2">
                                         <input 
                                           type="url" 
@@ -1727,10 +1798,17 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                           placeholder="https://..."
                                           className="flex-1 px-3 py-2 border-2 border-black font-sans text-sm"
                                         />
-                                        <button type="button" onClick={handleEditSlideUpload} className="px-3 py-2 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-[var(--color-primary)] hover:text-black transition-colors flex items-center space-x-1 shrink-0">
+                                        <label className="cursor-pointer px-3 py-2 bg-black text-white font-mono text-xs font-bold uppercase hover:bg-[var(--color-primary)] hover:text-black transition-colors flex items-center space-x-1 shrink-0">
                                           <Upload className="w-3.5 h-3.5" />
-                                          <span>URL ONLY</span>
-                                        </button>
+                                          <span>{isUploadingEditSlideImage ? 'UPLOADING...' : 'REPLACE FILE'}</span>
+                                          <input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            onChange={handleEditSlideUpload} 
+                                            className="hidden" 
+                                            disabled={isUploadingEditSlideImage}
+                                          />
+                                        </label>
                                       </div>
                                     </div>
 

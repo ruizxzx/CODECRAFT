@@ -28,7 +28,7 @@ import { CommunityProfileView } from './components/CommunityProfileView';
 import { SavedView } from './components/SavedView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth } from './lib/firebase';
-import { getCommunityProfile, getUserSaves, toggleUserSaveInCloud } from './lib/community';
+import { getCommunityProfile, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress } from './lib/community';
 import { Loader2 } from 'lucide-react';
 
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
@@ -99,6 +99,7 @@ export default function App() {
 
   const [userAuth, setUserAuth] = useState(auth.currentUser);
   const [userProfile, setUserProfile] = useState<CommunityUser | null>(null);
+  const [continueReadingSlug, setContinueReadingSlug] = useState<string | null>(null);
   const [isHandleModalOpen, setIsHandleModalOpen] = useState(false);
 
   // Sync auth state & cloud saved items
@@ -136,8 +137,16 @@ export default function App() {
         } catch (e) {
           console.error("Error loading cloud saves:", e);
         }
+
+        try {
+          const progress = await getReadingProgress(user.uid);
+          setContinueReadingSlug(progress?.articleSlug || null);
+        } catch (e) {
+          console.error("Error loading reading progress:", e);
+        }
       } else {
         setUserProfile(null);
+        setContinueReadingSlug(null);
       }
     });
     return () => unsub();
@@ -315,6 +324,14 @@ export default function App() {
 
   const activeArticle = articles.find((a) => a.slug === activeArticleSlug);
 
+  useEffect(() => {
+    if (userAuth && currentPage === 'article' && activeArticle) {
+      saveReadingProgress(userAuth.uid, activeArticle)
+        .then(() => setContinueReadingSlug(activeArticle.slug))
+        .catch((error) => console.warn('Could not save reading progress:', error));
+    }
+  }, [userAuth, currentPage, activeArticle?.slug]);
+
   return (
     <div className="min-h-screen flex flex-col bg-white text-black font-sans selection:bg-[var(--color-primary)] selection:text-black">
       {/* Top Header */}
@@ -358,6 +375,7 @@ export default function App() {
                   navigateTo('blog');
                 }}
                 siteConfig={siteConfig}
+                continueReadingArticle={articles.find((article) => article.slug === continueReadingSlug) || null}
               />
             )}
 

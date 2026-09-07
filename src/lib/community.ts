@@ -552,6 +552,29 @@ export async function getUserSaves(userId: string): Promise<UserSavedItem[]> {
   }
 }
 
+export interface ReadingProgress {
+  articleSlug: string;
+  articleTitle: string;
+}
+
+/** Stores one private, per-account resume point. */
+export async function saveReadingProgress(userId: string, article: { slug: string; title: string }): Promise<void> {
+  await setDoc(doc(db, 'reading_progress', userId), {
+    articleSlug: article.slug,
+    articleTitle: article.title,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function getReadingProgress(userId: string): Promise<ReadingProgress | null> {
+  const snapshot = await getDoc(doc(db, 'reading_progress', userId));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  return typeof data.articleSlug === 'string' && typeof data.articleTitle === 'string'
+    ? { articleSlug: data.articleSlug, articleTitle: data.articleTitle }
+    : null;
+}
+
 export async function toggleUserSaveInCloud(
   userId: string,
   itemId: string,
@@ -609,4 +632,3 @@ export async function toggleArticleLike(slug: string, userId: string, isCurrentl
     throw error;
   }
 }
-
