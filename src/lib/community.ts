@@ -723,6 +723,51 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
   }
 }
 
+export interface ProfileListEntry {
+  uid: string;
+  username: string;
+  displayName: string;
+  photoURL: string;
+  isVerified?: boolean;
+  verificationColor?: string;
+}
+
+async function getProfileList(userId: string, relation: 'followers' | 'following'): Promise<ProfileListEntry[]> {
+  const snap = await getDocs(collection(db, 'users', userId, relation));
+  const entries = await Promise.all(snap.docs.map(async (d) => {
+    const data = d.data() as any;
+    const targetUid = data.uid || d.id;
+    const profile = await getCommunityProfile(targetUid);
+    if (profile) {
+      return {
+        uid: profile.uid,
+        username: profile.username,
+        displayName: profile.displayName,
+        photoURL: profile.photoURL || '',
+        isVerified: !!profile.isVerified,
+        verificationColor: profile.verificationColor || '#2196F3'
+      };
+    }
+    return {
+      uid: targetUid,
+      username: data.username || targetUid,
+      displayName: data.displayName || data.username || targetUid,
+      photoURL: data.photoURL || '',
+      isVerified: !!data.isVerified,
+      verificationColor: data.verificationColor || '#2196F3'
+    };
+  }));
+  return entries.sort((a, b) => a.username.localeCompare(b.username));
+}
+
+export async function getUserFollowers(userId: string): Promise<ProfileListEntry[]> {
+  return getProfileList(userId, 'followers');
+}
+
+export async function getUserFollowing(userId: string): Promise<ProfileListEntry[]> {
+  return getProfileList(userId, 'following');
+}
+
 export async function getUserUpvotedPosts(userId: string): Promise<CommunityPost[]> {
   const snap = await getDocs(query(collection(db, 'users', userId, 'upvotes'), orderBy('createdAt', 'desc')));
   const posts = await Promise.all(snap.docs.map(d => getPost(d.id)));

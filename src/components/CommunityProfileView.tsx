@@ -1,7 +1,7 @@
 import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
-import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments } from '../lib/community';
+import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments, getUserFollowers, getUserFollowing, ProfileListEntry } from '../lib/community';
 import { auth, checkIsAdmin } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
@@ -32,8 +32,35 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [isFollowing, setIsFollowing] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [userAuth, setUserAuth] = useState(auth.currentUser);
+  const [relationModal, setRelationModal] = useState<'followers' | 'following' | null>(null);
+  const [relationUsers, setRelationUsers] = useState<ProfileListEntry[]>([]);
+  const [relationLoading, setRelationLoading] = useState(false);
 
   useEffect(() => auth.onAuthStateChanged(setUserAuth), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadRelation = async () => {
+      if (!relationModal || !profile?.uid) {
+        setRelationUsers([]);
+        return;
+      }
+      setRelationLoading(true);
+      try {
+        const users = relationModal === 'followers'
+          ? await getUserFollowers(profile.uid)
+          : await getUserFollowing(profile.uid);
+        if (!cancelled) setRelationUsers(users);
+      } catch (error) {
+        console.error(`Failed to load ${relationModal}:`, error);
+        if (!cancelled) setRelationUsers([]);
+      } finally {
+        if (!cancelled) setRelationLoading(false);
+      }
+    };
+    loadRelation();
+    return () => { cancelled = true; };
+  }, [relationModal, profile?.uid]);
   const activeUser = auth.currentUser || userAuth;
   const isOwner = !!activeUser && !!profile && activeUser.uid === profile.uid;
   const isAdmin = checkIsAdmin(activeUser?.email);
@@ -206,7 +233,10 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
               {!isOwner && <button onClick={handleToggleFollow} disabled={isFollowLoading} className={`px-6 py-2 border-2 border-black font-mono text-xs font-bold uppercase flex items-center gap-2 ${isFollowing ? 'bg-neutral-200' : 'bg-[var(--color-primary)]'}`}>{isFollowLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <><UserMinus className="w-4 h-4" />Unfollow</> : <><UserPlus className="w-4 h-4" />Follow</>}</button>}
             </div>
           </div>
-          {isEditing ? <form onSubmit={handleSaveProfile} className="space-y-4 max-w-xl"><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Picture URL</label><input type="url" value={photoUrlInput} onChange={e => setPhotoUrlInput(e.target.value)} placeholder="https://example.com/your-profile-picture.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Paste a public image URL. No Firebase Storage is used.</p></div><textarea value={bioInput} onChange={e => setBioInput(e.target.value)} rows={4} maxLength={500} className="w-full px-3 py-2 border-2 border-black" /><div className="flex gap-2"><input type="color" value={themeInput} onChange={e => setThemeInput(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={themeInput} onChange={e => setThemeInput(e.target.value)} className="px-3 py-2 border-2 border-black font-mono" /></div><div className="flex gap-2"><button className="px-6 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-bold uppercase">Save</button><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2 bg-neutral-200 border-2 border-black font-mono text-xs font-bold uppercase">Cancel</button></div></form> : <div><h1 className="font-display font-black text-3xl sm:text-4xl uppercase flex items-center gap-2">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-6 h-6 shrink-0" /></h1><p className="font-mono text-sm text-neutral-500 mb-2">@{profile.username}</p>{profile.role && <p className="font-mono text-xs font-bold uppercase mb-4">{profile.role}</p>}{profile.bio && <p className="font-sans text-neutral-800 max-w-2xl text-sm leading-relaxed mb-6 whitespace-pre-wrap">{profile.bio}</p>}<div className="flex flex-wrap gap-4 font-mono text-xs"><span>{profile.followersCount || 0} Followers</span><span>{profile.followingCount || 0} Following</span></div></div>}
+          {isEditing ? <form onSubmit={handleSaveProfile} className="space-y-4 max-w-xl"><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Picture URL</label><input type="url" value={photoUrlInput} onChange={e => setPhotoUrlInput(e.target.value)} placeholder="https://example.com/your-profile-picture.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Paste a public image URL. No Firebase Storage is used.</p></div><textarea value={bioInput} onChange={e => setBioInput(e.target.value)} rows={4} maxLength={500} className="w-full px-3 py-2 border-2 border-black" /><div className="flex gap-2"><input type="color" value={themeInput} onChange={e => setThemeInput(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={themeInput} onChange={e => setThemeInput(e.target.value)} className="px-3 py-2 border-2 border-black font-mono" /></div><div className="flex gap-2"><button className="px-6 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-bold uppercase">Save</button><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2 bg-neutral-200 border-2 border-black font-mono text-xs font-bold uppercase">Cancel</button></div></form> : <div><h1 className="font-display font-black text-3xl sm:text-4xl uppercase flex items-center gap-2">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-6 h-6 shrink-0" /></h1><p className="font-mono text-sm text-neutral-500 mb-2">@{profile.username}</p>{profile.role && <p className="font-mono text-xs font-bold uppercase mb-4">{profile.role}</p>}{profile.bio && <p className="font-sans text-neutral-800 max-w-2xl text-sm leading-relaxed mb-6 whitespace-pre-wrap">{profile.bio}</p>}<div className="flex flex-wrap gap-3 font-mono text-xs">
+            <button type="button" onClick={() => setRelationModal('followers')} className="underline underline-offset-4 hover:bg-[var(--color-primary)] px-1 py-0.5 font-bold">{profile.followersCount || 0} Followers</button>
+            <button type="button" onClick={() => setRelationModal('following')} className="underline underline-offset-4 hover:bg-[var(--color-primary)] px-1 py-0.5 font-bold">{profile.followingCount || 0} Following</button>
+          </div></div>}
         </div>
       </div>
 
@@ -218,6 +248,37 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
               {profile.photoURL ? <img src={profile.photoURL} alt="" className="w-5 h-5 rounded-full border border-black object-cover" /> : null}
               <span>@{profile.username}</span><VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-3.5 h-3.5" />
             </div><p className="font-sans text-sm">{c.content}</p><div className="mt-3 font-mono text-[10px] text-neutral-500">{new Date(c.createdAt).toLocaleString()}</div></div>)}</div> : <div className="space-y-6">{activeTab === 'articles' ? (articles.length ? articles.map(article => <div key={article.slug} onClick={() => onNavigate('article', article.slug)} className="bg-white border-4 border-black p-5 cursor-pointer neo-shadow-sm hover:-translate-y-1 transition-all"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">MAIN ARTICLE • {article.category}</div><h3 className="font-display font-black text-xl uppercase">{article.title}</h3><p className="mt-2 text-sm text-neutral-600">{article.excerpt}</p></div>) : <p className="font-mono text-sm text-neutral-500">No main articles yet.</p>) : activeTab === 'posts' ? (posts.length ? posts.map(p => renderPost(p)) : <p className="font-mono text-sm text-neutral-500">No community posts yet.</p>) : activeTab === 'upvotes' ? (upvotedPosts.length ? upvotedPosts.map(p => renderPost(p, 'UPVOTED')) : <p className="font-mono text-sm text-neutral-500">No upvoted posts yet.</p>) : (repostedPosts.length ? repostedPosts.map(p => renderPost(p, 'REPOST')) : <p className="font-mono text-sm text-neutral-500">No reposts yet.</p>)}</div>}
+
+      {relationModal && (
+        <div className="fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={relationModal === 'followers' ? 'Followers' : 'Following'} onClick={() => setRelationModal(null)}>
+          <div className="w-full max-w-lg max-h-[80vh] bg-white border-4 border-black neo-shadow-lg flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b-4 border-black bg-[var(--color-primary)]">
+              <h2 className="font-display font-black text-xl uppercase">{relationModal === 'followers' ? 'Followers' : 'Following'} ({relationUsers.length})</h2>
+              <button type="button" onClick={() => setRelationModal(null)} className="px-3 py-1 bg-white border-2 border-black font-display font-black" aria-label="Close">×</button>
+            </div>
+            <div className="overflow-y-auto p-3 space-y-2">
+              {relationLoading ? (
+                <div className="py-10 text-center font-mono text-xs uppercase">Loading...</div>
+              ) : relationUsers.length === 0 ? (
+                <div className="py-10 text-center font-mono text-xs text-neutral-500 uppercase">No {relationModal} yet.</div>
+              ) : relationUsers.map(user => (
+                <button
+                  key={user.uid}
+                  type="button"
+                  onClick={() => { setRelationModal(null); onNavigate('community_profile', user.username); }}
+                  className="w-full flex items-center gap-3 p-3 border-2 border-black bg-white hover:bg-[var(--color-secondary)] text-left"
+                >
+                  {user.photoURL ? <img src={user.photoURL} alt="" className="w-11 h-11 rounded-full border-2 border-black object-cover shrink-0" /> : <div className="w-11 h-11 rounded-full border-2 border-black bg-neutral-200 shrink-0 flex items-center justify-center font-display font-black">{(user.displayName || user.username).charAt(0).toUpperCase()}</div>}
+                  <span className="min-w-0 flex-1">
+                    <span className="font-display font-black uppercase text-sm flex items-center gap-1 truncate">{user.displayName}<VerifiedBadge verified={user.isVerified} color={user.verificationColor} className="w-4 h-4" /></span>
+                    <span className="font-mono text-[10px] text-neutral-500 truncate block">@{user.username}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
