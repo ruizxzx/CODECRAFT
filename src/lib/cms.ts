@@ -505,6 +505,8 @@ export async function addArticleComment(
     authorName: string;
     authorAvatar?: string;
     authorUsername?: string;
+    isVerified?: boolean;
+    verificationColor?: string;
     content: string;
   }
 ): Promise<ArticleComment> {

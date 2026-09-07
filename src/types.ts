@@ -205,7 +205,7 @@ export interface Notification {
   actorName: string;
   actorAvatar?: string;
   message: string;
-  targetType?: 'post' | 'comment' | 'profile' | 'article' | 'question';
+  targetType?: 'post' | 'comment' | 'profile' | 'article' | 'question' | 'report';
   targetId?: string;
   read: boolean;
   createdAt: string;

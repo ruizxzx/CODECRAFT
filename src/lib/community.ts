@@ -1,4 +1,4 @@
-import { db, auth } from './firebase';
+import { db, auth, checkIsAdmin } from './firebase';
 import { 
   collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment, runTransaction
 } from 'firebase/firestore';
@@ -45,22 +45,23 @@ async function createNotification(userId: string, data: Omit<Notification, 'id' 
   await setDoc(doc(db, 'users', userId, 'notifications', id), { ...data, read: false, createdAt: serverTimestamp() });
 }
 
-/** Subscribe to the number of unread notifications for the signed-in user. */
+async function createAdminNotification(data: any): Promise<void> {
+  if (!auth.currentUser || !data?.actorId) return;
+  try { await setDoc(doc(collection(db, 'admin_notifications')), { ...data, read: false, createdAt: serverTimestamp() }); }
+  catch (e) { console.warn('Admin notification creation failed:', e); }
+}
+
+/** Subscribe to unread notifications for the signed-in user, including admin moderation alerts. */
 export function subscribeUnreadNotificationCount(userId: string, callback: (count: number) => void): () => void {
-  if (!userId) {
-    callback(0);
-    return () => {};
+  if (!userId) { callback(0); return () => {}; }
+  let userCount = 0; let adminCount = 0;
+  const emit = () => callback(userCount + adminCount);
+  const unsubUser = onSnapshot(query(collection(db, 'users', userId, 'notifications'), where('read', '==', false)), snap => { userCount = snap.size; emit(); }, err => { console.warn('Unread notification subscription failed:', err); userCount = 0; emit(); });
+  let unsubAdmin = () => {};
+  if (checkIsAdmin(auth.currentUser?.email)) {
+    unsubAdmin = onSnapshot(query(collection(db, 'admin_notifications'), where('read', '==', false)), snap => { adminCount = snap.size; emit(); }, err => { console.warn('Admin notification subscription failed:', err); adminCount = 0; emit(); });
   }
-  const notificationsRef = collection(db, 'users', userId, 'notifications');
-  const q = query(notificationsRef, where('read', '==', false));
-  return onSnapshot(
-    q,
-    (snap) => callback(snap.size),
-    (error) => {
-      console.warn('Unread notification subscription failed:', error);
-      callback(0);
-    }
-  );
+  return () => { unsubUser(); unsubAdmin(); };
 }
 
 async function notifyMentions(text: string, actor: CommunityUser, targetType: 'post' | 'comment', targetId: string): Promise<void> {
@@ -89,15 +90,28 @@ async function notifyMentions(text: string, actor: CommunityUser, targetType: 'p
 
 export async function getUserNotifications(userId: string): Promise<Notification[]> {
   const snap = await getDocs(query(collection(db, 'users', userId, 'notifications'), orderBy('createdAt', 'desc'), limit(100)));
-  return snap.docs.map(d => ({ id: d.id, ...mapDocDates(d.data()) } as Notification));
+  const items = snap.docs.map(d => ({ id: d.id, ...mapDocDates(d.data()) } as Notification));
+  if (checkIsAdmin(auth.currentUser?.email)) {
+    try {
+      const adminSnap = await getDocs(query(collection(db, 'admin_notifications'), orderBy('createdAt', 'desc'), limit(100)));
+      const adminItems = adminSnap.docs.map(d => ({ id: `admin:${d.id}`, ...mapDocDates(d.data()) } as Notification));
+      return [...items, ...adminItems].sort((a,b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()).slice(0,100);
+    } catch (e) { console.warn('Admin notifications load failed:', e); }
+  }
+  return items;
 }
 
 export async function markNotificationsRead(userId: string): Promise<void> {
-  const snap = await getDocs(query(collection(db, 'users', userId, 'notifications'), where('read', '==', false), limit(100)));
-  if (snap.empty) return;
   const batch = writeBatch(db);
+  const snap = await getDocs(query(collection(db, 'users', userId, 'notifications'), where('read', '==', false), limit(100)));
   snap.docs.forEach(d => batch.update(d.ref, { read: true }));
-  await batch.commit();
+  if (checkIsAdmin(auth.currentUser?.email)) {
+    try {
+      const adminSnap = await getDocs(query(collection(db, 'admin_notifications'), where('read', '==', false), limit(100)));
+      adminSnap.docs.forEach(d => batch.update(d.ref, { read: true }));
+    } catch (e) { console.warn('Admin notifications mark-read failed:', e); }
+  }
+  if (snap.size > 0 || checkIsAdmin(auth.currentUser?.email)) await batch.commit();
 }
 
 export async function saveCommunityDraft(userId: string, data: { type: 'discussion' | 'blog'; title: string; content: string; mediaUrls?: string[] }): Promise<void> {
@@ -584,8 +598,10 @@ export async function getPost(postId: string): Promise<CommunityPost | null> {
 export async function updatePost(postId: string, data: Partial<CommunityPost>) {
   const p = `posts/${postId}`;
   try {
-    const patch: any = { ...data, editedAt: serverTimestamp(), updatedAt: serverTimestamp() };
-    if (typeof data.title === 'string' || typeof data.content === 'string') {
+    const patch: any = { ...data, updatedAt: serverTimestamp() };
+    const isContentEdit = typeof data.title === 'string' || typeof data.content === 'string';
+    if (isContentEdit) patch.editedAt = serverTimestamp();
+    if (isContentEdit) {
       const current = await getPost(postId);
       const title = typeof data.title === 'string' ? data.title : (current?.title || '');
       const content = typeof data.content === 'string' ? data.content : (current?.content || '');

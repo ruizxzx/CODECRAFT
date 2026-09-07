@@ -170,7 +170,7 @@ service cloud.firestore {
         match /votes/{userId} {
           allow read: if true;
           allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().uid == request.auth.uid && incoming().type in ['up','down'];
-          allow delete: if isSignedIn() && request.auth.uid == userId;
+          allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isCommunityModerator(communityId));
         }
       }
     }
@@ -220,6 +220,16 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow read: if isAdmin();
       allow create: if isSignedIn() && incoming().reporterId == request.auth.uid && validText(incoming().reason,500) && incoming().status == 'open';
+      allow update, delete: if isAdmin();
+    }
+
+    match /admin_notifications/{notificationId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn()
+        && incoming().actorId == request.auth.uid
+        && incoming().message is string && incoming().message.size() <= 500
+        && incoming().read is bool
+        && incoming().createdAt is timestamp;
       allow update, delete: if isAdmin();
     }
 

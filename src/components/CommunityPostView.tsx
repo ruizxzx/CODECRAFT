@@ -1,6 +1,7 @@
 import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityPost, CommunityComment, PageView, CommunityUser } from '../types';
+import { reportContent } from '../lib/social';
 import { getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2, Share2, Pencil, X } from 'lucide-react';
@@ -228,6 +229,14 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     setIsSubmitting(false);
   };
 
+  const handleReport = async () => {
+    if (!profile || !post) { alert('Sign in to report this post.'); return; }
+    const reason = window.prompt('Reason for report?') || '';
+    if (!reason.trim()) return;
+    try { await reportContent(profile, 'post', post.id, reason); alert('Report submitted to moderators.'); }
+    catch (e:any) { alert(e?.message || 'Failed to submit report.'); }
+  };
+
   const handleToggleFeature = async () => {
     if (!post) return;
     try {
@@ -279,6 +288,9 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
               <Star className="w-3.5 h-3.5" />
               <span>{post.isFeatured ? 'Featured' : 'Feature'}</span>
             </button>
+          )}
+          {profile && !isAdmin && (
+            <button onClick={handleReport} className="flex items-center space-x-1.5 px-3 py-1 border-2 border-black font-mono text-xs font-black uppercase bg-white hover:bg-neutral-100">REPORT</button>
           )}
         </div>
         

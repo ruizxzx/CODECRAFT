@@ -15,13 +15,20 @@ export interface SocialQuestion { id:string; title:string; details:string; autho
 export interface SocialAnswer { id:string; questionId:string; content:string; authorId:string; authorUsername:string; authorName:string; authorAvatar:string; upvotesCount:number; downvotesCount:number; isBest:boolean; createdAt:string; updatedAt:string; }
 export interface SocialTopic { id:string; name:string; slug:string; description:string; followersCount:number; createdAt:string; updatedAt?:string; createdBy?:string; creatorUsername?:string; }
 export interface SocialMessage { id:string; senderId:string; senderUsername:string; senderName:string; senderAvatar:string; recipientId:string; content:string; read:boolean; createdAt:string; }
-export interface SocialReport { id:string; reporterId:string; reporterUsername?:string; targetType:string; targetId:string; reason:string; status:string; createdAt:string; }
+export interface SocialReport { id:string; reporterId:string; reporterUsername?:string; targetType:string; targetId:string; reason:string; status:string; createdAt:string; resolvedBy?:string; resolvedAt?:string; response?:string; }
 
 export const isSocialAdmin = () => checkIsAdmin(auth.currentUser?.email);
 
 export async function getCommunities():Promise<SocialCommunity[]> {
-  try { const s=await getDocs(query(collection(db,'communities'),orderBy('membersCount','desc'),limit(100))); return s.docs.map(map) as SocialCommunity[]; }
-  catch { const s=await getDocs(query(collection(db,'communities'),limit(100))); return s.docs.map(map) as SocialCommunity[]; }
+  let snap;
+  try { snap=await getDocs(query(collection(db,'communities'),orderBy('membersCount','desc'),limit(100))); }
+  catch { snap=await getDocs(query(collection(db,'communities'),limit(100))); }
+  const items=snap.docs.map(map) as SocialCommunity[];
+  return Promise.all(items.map(async c=>{
+    if(c.ownerUsername) return c;
+    try { const p=await profile(c.ownerId); if(p) return {...c,ownerUsername:p.username,ownerName:p.displayName,ownerAvatar:p.photoURL||''}; } catch {}
+    return c;
+  }));
 }
 
 export async function getCommunity(communityId:string):Promise<SocialCommunity|null>{ const s=await getDoc(doc(db,'communities',communityId)); return s.exists()?map(s) as SocialCommunity:null; }
@@ -48,11 +55,12 @@ export async function updateCommunity(communityId:string, userId:string, data:Pa
 export async function deleteCommunity(communityId:string,userId:string){
   const c=await getCommunity(communityId); if(!c) return;
   if(c.ownerId!==userId && !isSocialAdmin()) throw new Error('Only the community creator or an admin can delete this community.');
-  const b=writeBatch(db);
-  const members=await getDocs(collection(db,'communities',communityId,'members')); members.docs.forEach(d=>b.delete(d.ref));
+  const refs:any[]=[];
+  const members=await getDocs(collection(db,'communities',communityId,'members')); members.docs.forEach(d=>refs.push(d.ref));
   const posts=await getDocs(collection(db,'communities',communityId,'posts'));
-  for(const post of posts.docs){ const votes=await getDocs(collection(db,'communities',communityId,'posts',post.id,'votes')); votes.docs.forEach(v=>b.delete(v.ref)); b.delete(post.ref); }
-  b.delete(doc(db,'communities',communityId)); await b.commit();
+  for(const post of posts.docs){ const votes=await getDocs(collection(db,'communities',communityId,'posts',post.id,'votes')); votes.docs.forEach(v=>refs.push(v.ref)); refs.push(post.ref); }
+  refs.push(doc(db,'communities',communityId));
+  for(let i=0;i<refs.length;i+=450){ const b=writeBatch(db); refs.slice(i,i+450).forEach((r:any)=>b.delete(r)); await b.commit(); }
 }
 
 export async function getCommunityMembers(cid:string){ const s=await getDocs(collection(db,'communities',cid,'members')); return s.docs.map(d=>({id:d.id,...d.data()})) as Array<{id:string;uid:string;username:string;role:string;createdAt:any}>; }
@@ -88,8 +96,9 @@ export async function createCommunityPost(cid:string,user:CommunityUser,title:st
   try { await updateDoc(doc(db,'communities',cid),{postsCount:increment(1),updatedAt:serverTimestamp()}); } catch { /* post creation remains successful even if an older ruleset blocks the counter update */ }
   return {...data,id:pid,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as CommunityFeedPost;
 }
-export async function updateCommunityPost(cid:string,pid:string,uid:string,data:Pick<CommunityFeedPost,'title'|'content'>){ const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) throw new Error('Post not found.'); if(p.data().authorId!==uid && !isSocialAdmin() && (await getCommunity(cid))?.ownerId!==uid) throw new Error('You cannot edit this post.'); await updateDoc(p.ref,{title:data.title.trim().slice(0,256),content:data.content.trim().slice(0,100000),editedAt:serverTimestamp(),updatedAt:serverTimestamp()}); }
-export async function deleteCommunityPost(cid:string,pid:string,uid:string){ const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) return; if(p.data().authorId!==uid && !isSocialAdmin() && (await getCommunity(cid))?.ownerId!==uid) throw new Error('You cannot delete this post.'); const votes=await getDocs(collection(db,'communities',cid,'posts',pid,'votes')); const b=writeBatch(db); votes.docs.forEach(v=>b.delete(v.ref)); b.delete(p.ref); await b.commit(); try{await updateDoc(doc(db,'communities',cid),{postsCount:increment(-1),updatedAt:serverTimestamp()});}catch{} }
+async function canModerateCommunity(cid:string,uid:string){ if(isSocialAdmin()) return true; const c=await getCommunity(cid); if(c?.ownerId===uid) return true; const m=await getDoc(doc(db,'communities',cid,'members',uid)); return m.exists() && ['owner','moderator'].includes(m.data().role||'member'); }
+export async function updateCommunityPost(cid:string,pid:string,uid:string,data:Pick<CommunityFeedPost,'title'|'content'>){ const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) throw new Error('Post not found.'); if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot edit this post.'); await updateDoc(p.ref,{title:data.title.trim().slice(0,256),content:data.content.trim().slice(0,100000),editedAt:serverTimestamp(),updatedAt:serverTimestamp()}); }
+export async function deleteCommunityPost(cid:string,pid:string,uid:string){ const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) return; if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot delete this post.'); const votes=await getDocs(collection(db,'communities',cid,'posts',pid,'votes')); const b=writeBatch(db); votes.docs.forEach(v=>b.delete(v.ref)); b.delete(p.ref); await b.commit(); try{await updateDoc(doc(db,'communities',cid),{postsCount:increment(-1),updatedAt:serverTimestamp()});}catch{} }
 export async function voteCommunityPost(cid:string,pid:string,uid:string,type:'up'|'down'){ const ref=doc(db,'communities',cid,'posts',pid,'votes',uid); const existing=await getDoc(ref); const post=doc(db,'communities',cid,'posts',pid); const b=writeBatch(db); if(existing.exists()&&existing.data().type===type){b.delete(ref);b.update(post,{score:increment(type==='up'?-1:1),updatedAt:serverTimestamp()});}else{const prev=existing.exists()?existing.data().type:null; const delta=prev ? (prev==='up' ? (type==='up'?0:-2) : (type==='down' ? 0 : 2)) : (type==='up'?1:-1); b.set(ref,{type,uid,createdAt:serverTimestamp()}); b.update(post,{score:increment(delta),updatedAt:serverTimestamp()});}await b.commit();}
 
 export async function getQuestions(){ const s=await getDocs(query(collection(db,'questions'),orderBy('createdAt','desc'),limit(100))); return s.docs.map(map) as SocialQuestion[]; }
@@ -114,9 +123,26 @@ export async function sendMessage(user:CommunityUser,recipient:CommunityUser,con
 export async function deleteMessage(mid:string,uid:string){const m=await getDoc(doc(db,'messages',mid));if(!m.exists())return;if(m.data().senderId!==uid&&!isSocialAdmin())throw new Error('You cannot delete this message.');await deleteDoc(m.ref);}
 export function subscribeMessages(uid:string,cb:(m:SocialMessage[])=>void){ return onSnapshot(query(collection(db,'messages'),where('participants','array-contains',uid),limit(200)),s=>cb(s.docs.map(map) as SocialMessage[]),()=>cb([])); }
 
-export async function reportContent(user:CommunityUser,targetType:string,targetId:string,reason:string){ const rid=id(); await setDoc(doc(db,'reports',rid),{reporterId:user.uid,reporterUsername:user.username,targetType,targetId,reason:reason.slice(0,500),status:'open',createdAt:serverTimestamp()}); }
+export async function reportContent(user:CommunityUser,targetType:string,targetId:string,reason:string){
+  const rid=id();
+  await setDoc(doc(db,'reports',rid),{reporterId:user.uid,reporterUsername:user.username,targetType,targetId,reason:reason.slice(0,500),status:'open',createdAt:serverTimestamp()});
+  if(!isSocialAdmin()) { try { await setDoc(doc(db,'admin_notifications',id()),{type:'message',actorId:user.uid,actorUsername:user.username,actorName:user.displayName,actorAvatar:user.photoURL||'',message:'reported '+targetType+': '+reason.slice(0,120),targetType:'report',targetId:rid,read:false,createdAt:serverTimestamp()}); } catch(e) { console.warn('Admin report notification failed:',e); } }
+}
 export async function getReports():Promise<SocialReport[]> { const s=await getDocs(query(collection(db,'reports'),orderBy('createdAt','desc'),limit(200))); return s.docs.map(map) as SocialReport[]; }
-export async function resolveReport(reportId:string,uid:string,status:'resolved'|'dismissed'){ if(!isSocialAdmin()) throw new Error('Admin access required.'); await updateDoc(doc(db,'reports',reportId),{status,resolvedBy:uid,resolvedAt:serverTimestamp()}); }
+export async function resolveReport(reportId:string,uid:string,status:'resolved'|'dismissed',response=''){
+  if(!isSocialAdmin()) throw new Error('Admin access required.');
+  const reportRef=doc(db,'reports',reportId); const report=await getDoc(reportRef);
+  if(!report.exists()) throw new Error('Report not found.');
+  const data:any=report.data();
+  await updateDoc(reportRef,{status,resolvedBy:uid,resolvedAt:serverTimestamp(),response:response.trim().slice(0,1000)});
+  if(data.reporterId && data.reporterId!==uid){
+    const actor=await profile(uid);
+    if(actor) await notify(data.reporterId,{type:'message',actorId:uid,actorUsername:actor.username,actorName:actor.displayName,actorAvatar:actor.photoURL||'',message:response.trim().slice(0,180) || ('Your report was '+status+'.'),targetType:'report',targetId:reportId});
+  }
+}
+
+export async function getCommunityPostForModeration(cid:string,pid:string):Promise<CommunityFeedPost|null>{ const s=await getDoc(doc(db,'communities',cid,'posts',pid)); return s.exists()?map(s) as CommunityFeedPost:null; }
+export async function getQuestionForModeration(qid:string):Promise<SocialQuestion|null>{ const s=await getDoc(doc(db,'questions',qid)); return s.exists()?map(s) as SocialQuestion:null; }
 export async function muteUser(uid:string,targetUid:string){ await setDoc(doc(db,'users',uid,'mutes',targetUid),{uid:targetUid,createdAt:serverTimestamp()}); }
 export async function unmuteUser(uid:string,targetUid:string){ await deleteDoc(doc(db,'users',uid,'mutes',targetUid)); }
 export async function getUserMutes(uid:string){ const s=await getDocs(collection(db,'users',uid,'mutes')); return s.docs.map(d=>d.id); }
