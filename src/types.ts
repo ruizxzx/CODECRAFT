@@ -111,6 +111,11 @@ export interface CommunityUser {
   displayName: string;
   photoURL: string;
   coverImageUrl?: string;
+  websiteUrl?: string;
+  location?: string;
+  socialX?: string;
+  socialGithub?: string;
+  socialTelegram?: string;
   bio: string;
   themeColor: string;
   isBlocked?: boolean;

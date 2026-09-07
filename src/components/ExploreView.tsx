@@ -52,7 +52,21 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
     return articles.filter(a => a.title.toLowerCase().includes(needle)||a.excerpt.toLowerCase().includes(needle)||a.category.toLowerCase().includes(needle)||a.tags.some(t=>t.toLowerCase().includes(needle))).slice(0,8);
   }, [articles, query]);
 
+  const editorArticles = articles.filter(a => a.featured || a.pinned).slice(0, 4);
+  const editorPosts = posts.filter(p => p.isFeatured).slice(0, 4);
+
   return <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-14 space-y-8">
+      {(editorArticles.length > 0 || editorPosts.length > 0) && <section className="mb-10 bg-black text-white border-4 border-black neo-shadow-lg p-5 sm:p-7">
+        <div className="flex items-center justify-between gap-4 mb-5">
+          <div><div className="font-mono text-[10px] uppercase tracking-widest text-[var(--color-primary)]">EDITORIAL</div><h2 className="font-display font-black text-2xl sm:text-3xl uppercase">Editor's Picks</h2></div>
+          <span className="font-mono text-[9px] border border-white px-2 py-1 uppercase">Curated</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {editorArticles.map(a => <button key={`ea-${a.slug}`} onClick={() => onNavigate('article', a.slug)} className="text-left p-4 border-2 border-white hover:bg-[var(--color-primary)] hover:text-black transition-colors"><span className="font-mono text-[9px] uppercase">ARTICLE • {a.category}</span><span className="block font-display font-black text-lg uppercase mt-1">{a.title}</span></button>)}
+          {editorPosts.map(p => <button key={`ep-${p.id}`} onClick={() => onNavigate('community_post', p.id)} className="text-left p-4 border-2 border-white hover:bg-[var(--color-secondary)] hover:text-black transition-colors"><span className="font-mono text-[9px] uppercase">COMMUNITY • @{p.authorUsername}</span><span className="block font-display font-black text-lg uppercase mt-1">{p.title}</span></button>)}
+        </div>
+      </section>}
+
     <div className="bg-black text-white border-4 border-black neo-shadow p-6 sm:p-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-5">
         <div>

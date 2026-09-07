@@ -611,6 +611,7 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         articles={articles}
         onSelectArticle={(slug) => navigateTo('article', slug)}
+        onNavigate={navigateTo}
         siteConfig={siteConfig}
       />
 

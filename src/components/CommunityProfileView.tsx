@@ -7,7 +7,7 @@ import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
 import { syncUserIdentityAcrossContent } from '../lib/community';
 import { formatDisplayDate } from '../lib/dateUtils';
-import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText, Camera } from 'lucide-react';
+import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText, Camera, Link as LinkIcon, MapPin, Search as SearchIcon } from 'lucide-react';
 
 interface CommunityProfileViewProps {
   username: string;
@@ -27,8 +27,14 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [displayNameInput, setDisplayNameInput] = useState('');
   const [photoUrlInput, setPhotoUrlInput] = useState('');
   const [coverUrlInput, setCoverUrlInput] = useState('');
+  const [websiteInput, setWebsiteInput] = useState('');
+  const [locationInput, setLocationInput] = useState('');
+  const [socialXInput, setSocialXInput] = useState('');
+  const [socialGithubInput, setSocialGithubInput] = useState('');
+  const [socialTelegramInput, setSocialTelegramInput] = useState('');
   const [bioInput, setBioInput] = useState('');
   const [themeInput, setThemeInput] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
@@ -37,6 +43,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [relationModal, setRelationModal] = useState<'followers' | 'following' | null>(null);
   const [relationUsers, setRelationUsers] = useState<ProfileListEntry[]>([]);
   const [relationLoading, setRelationLoading] = useState(false);
+  const [relationSearch, setRelationSearch] = useState('');
 
   useEffect(() => auth.onAuthStateChanged(setUserAuth), []);
 
@@ -63,6 +70,12 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     loadRelation();
     return () => { cancelled = true; };
   }, [relationModal, profile?.uid]);
+
+  useEffect(() => { setRelationSearch(''); }, [relationModal]);
+  const visibleRelationUsers = relationUsers.filter(user => {
+    const q = relationSearch.trim().toLowerCase().replace(/^@/, '');
+    return !q || user.username.toLowerCase().includes(q) || user.displayName.toLowerCase().includes(q);
+  });
   const activeUser = auth.currentUser || userAuth;
   const isOwner = !!activeUser && !!profile && activeUser.uid === profile.uid;
   const isAdmin = checkIsAdmin(activeUser?.email);
@@ -76,10 +89,16 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         if (cancelled) return;
         setProfile(p);
         if (!p) return;
+        setDisplayNameInput(p.displayName || '');
         setBioInput(p.bio || '');
         setThemeInput(p.themeColor || '#000000');
         setPhotoUrlInput(p.photoURL || '');
         setCoverUrlInput(p.coverImageUrl || '');
+        setWebsiteInput(p.websiteUrl || '');
+        setLocationInput(p.location || '');
+        setSocialXInput(p.socialX || '');
+        setSocialGithubInput(p.socialGithub || '');
+        setSocialTelegramInput(p.socialTelegram || '');
         // Load profile activity independently so one optional collection
         // (comments/upvotes/reposts/articles) cannot hide the user's posts.
         const results = await Promise.allSettled([
@@ -134,9 +153,18 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       const nextCoverURL = coverUrlInput.trim();
       if (nextPhotoURL && !/^https?:\/\//i.test(nextPhotoURL)) { alert('Profile picture must be a public http(s) image URL.'); return; }
       if (nextCoverURL && !/^https?:\/\//i.test(nextCoverURL)) { alert('Cover image must be a public http(s) image URL.'); return; }
-      await updateCommunityProfile(profile.uid, { bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL });
-      try { await updateProfile(activeUser, { photoURL: nextPhotoURL || null }); } catch (authError) { console.warn('Firebase Auth avatar update skipped:', authError); }
-      const nextProfile = { ...profile, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, updatedAt: new Date().toISOString() };
+      const nextWebsite = websiteInput.trim();
+      const nextX = socialXInput.trim();
+      const nextGithub = socialGithubInput.trim();
+      const nextTelegram = socialTelegramInput.trim();
+      for (const [label, value] of [['Website', nextWebsite], ['X', nextX], ['GitHub', nextGithub], ['Telegram', nextTelegram]] as const) {
+        if (value && !/^https?:\/\//i.test(value)) { alert(`${label} URL must start with http:// or https://`); return; }
+      }
+      const nextDisplayName = displayNameInput.trim() || profile.username;
+      if (nextDisplayName.length > 64) { alert('Display name must be 64 characters or less.'); return; }
+      await updateCommunityProfile(profile.uid, { displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram });
+      try { await updateProfile(activeUser, { displayName: nextDisplayName, photoURL: nextPhotoURL || null }); } catch (authError) { console.warn('Firebase Auth avatar update skipped:', authError); }
+      const nextProfile = { ...profile, displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, updatedAt: new Date().toISOString() };
       setProfile(nextProfile);
       await syncUserIdentityAcrossContent(activeUser.uid, { displayName: nextProfile.displayName, photoURL: nextPhotoURL, username: nextProfile.username });
       setIsEditing(false);
@@ -235,7 +263,22 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
               {!isOwner && <button onClick={handleToggleFollow} disabled={isFollowLoading} className={`px-6 py-2 border-2 border-black font-mono text-xs font-bold uppercase flex items-center gap-2 ${isFollowing ? 'bg-neutral-200' : 'bg-[var(--color-primary)]'}`}>{isFollowLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <><UserMinus className="w-4 h-4" />Unfollow</> : <><UserPlus className="w-4 h-4" />Follow</>}</button>}
             </div>
           </div>
-          {isEditing ? <form onSubmit={handleSaveProfile} className="space-y-4 max-w-xl"><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Picture URL</label><input type="url" value={photoUrlInput} onChange={e => setPhotoUrlInput(e.target.value)} placeholder="https://example.com/your-profile-picture.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Paste a public image URL. No Firebase Storage is used.</p></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Cover Image URL</label><input type="url" value={coverUrlInput} onChange={e => setCoverUrlInput(e.target.value)} placeholder="https://example.com/cover.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Optional public image URL. Your theme color remains the fallback.</p></div><textarea value={bioInput} onChange={e => setBioInput(e.target.value)} rows={4} maxLength={500} className="w-full px-3 py-2 border-2 border-black" /><div className="flex gap-2"><input type="color" value={themeInput} onChange={e => setThemeInput(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={themeInput} onChange={e => setThemeInput(e.target.value)} className="px-3 py-2 border-2 border-black font-mono" /></div><div className="flex gap-2"><button className="px-6 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-bold uppercase">Save</button><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2 bg-neutral-200 border-2 border-black font-mono text-xs font-bold uppercase">Cancel</button></div></form> : <div><h1 className="font-display font-black text-3xl sm:text-4xl uppercase flex items-center gap-2">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-6 h-6 shrink-0" /></h1><p className="font-mono text-sm text-neutral-500 mb-2">@{profile.username}</p>{profile.role && <p className="font-mono text-xs font-bold uppercase mb-4">{profile.role}</p>}{profile.bio && <p className="font-sans text-neutral-800 max-w-2xl text-sm leading-relaxed mb-6 whitespace-pre-wrap">{profile.bio}</p>}<div className="flex flex-wrap gap-3 font-mono text-xs">
+          {isEditing ? <form onSubmit={handleSaveProfile} className="space-y-4 max-w-xl"><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Display Name</label><input value={displayNameInput} onChange={e => setDisplayNameInput(e.target.value)} maxLength={64} className="w-full px-3 py-2 border-2 border-black font-display font-bold text-sm" /></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Picture URL</label><input type="url" value={photoUrlInput} onChange={e => setPhotoUrlInput(e.target.value)} placeholder="https://example.com/your-profile-picture.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Paste a public image URL. No Firebase Storage is used.</p></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Cover Image URL</label><input type="url" value={coverUrlInput} onChange={e => setCoverUrlInput(e.target.value)} placeholder="https://example.com/cover.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Optional public image URL. Your theme color remains the fallback.</p></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input type="url" value={websiteInput} onChange={e => setWebsiteInput(e.target.value)} placeholder="Website URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
+            <input value={locationInput} onChange={e => setLocationInput(e.target.value)} maxLength={100} placeholder="Location" className="px-3 py-2 border-2 border-black font-mono text-xs" />
+            <input type="url" value={socialXInput} onChange={e => setSocialXInput(e.target.value)} placeholder="X profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
+            <input type="url" value={socialGithubInput} onChange={e => setSocialGithubInput(e.target.value)} placeholder="GitHub profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
+            <input type="url" value={socialTelegramInput} onChange={e => setSocialTelegramInput(e.target.value)} placeholder="Telegram profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs sm:col-span-2" />
+          </div>
+          <textarea value={bioInput} onChange={e => setBioInput(e.target.value)} rows={4} maxLength={500} placeholder="Bio" className="w-full px-3 py-2 border-2 border-black" /><div className="flex gap-2"><input type="color" value={themeInput} onChange={e => setThemeInput(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={themeInput} onChange={e => setThemeInput(e.target.value)} className="px-3 py-2 border-2 border-black font-mono" /></div><div className="flex gap-2"><button className="px-6 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-bold uppercase">Save</button><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2 bg-neutral-200 border-2 border-black font-mono text-xs font-bold uppercase">Cancel</button></div></form> : <div><h1 className="font-display font-black text-3xl sm:text-4xl uppercase flex items-center gap-2">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-6 h-6 shrink-0" /></h1><p className="font-mono text-sm text-neutral-500 mb-2">@{profile.username}</p>{profile.role && <p className="font-mono text-xs font-bold uppercase mb-4">{profile.role}</p>}{profile.bio && <p className="font-sans text-neutral-800 max-w-2xl text-sm leading-relaxed mb-4 whitespace-pre-wrap">{profile.bio}</p>}
+            {(profile.websiteUrl || profile.location || profile.socialX || profile.socialGithub || profile.socialTelegram) && <div className="flex flex-wrap items-center gap-2 mb-5 font-mono text-[10px] font-bold uppercase">
+              {profile.location && <span className="inline-flex items-center gap-1 px-2 py-1 border-2 border-black bg-neutral-100"><MapPin className="w-3 h-3" />{profile.location}</span>}
+              {profile.websiteUrl && <a href={profile.websiteUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 px-2 py-1 border-2 border-black bg-[var(--color-secondary)] hover:bg-[var(--color-primary)]"><LinkIcon className="w-3 h-3" />Website</a>}
+              {profile.socialX && <a href={profile.socialX} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="px-2 py-1 border-2 border-black bg-white hover:bg-[var(--color-primary)]">X</a>}
+              {profile.socialGithub && <a href={profile.socialGithub} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="px-2 py-1 border-2 border-black bg-white hover:bg-[var(--color-primary)]">GitHub</a>}
+              {profile.socialTelegram && <a href={profile.socialTelegram} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="px-2 py-1 border-2 border-black bg-white hover:bg-[var(--color-primary)]">Telegram</a>}
+            </div>}
+            <div className="flex flex-wrap gap-3 font-mono text-xs">
             <button type="button" onClick={() => setRelationModal('followers')} className="underline underline-offset-4 hover:bg-[var(--color-primary)] px-1 py-0.5 font-bold">{profile.followersCount || 0} Followers</button>
             <button type="button" onClick={() => setRelationModal('following')} className="underline underline-offset-4 hover:bg-[var(--color-primary)] px-1 py-0.5 font-bold">{profile.followingCount || 0} Following</button>
           </div></div>}
@@ -258,12 +301,18 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
               <h2 className="font-display font-black text-xl uppercase">{relationModal === 'followers' ? 'Followers' : 'Following'} ({relationUsers.length})</h2>
               <button type="button" onClick={() => setRelationModal(null)} className="px-3 py-1 bg-white border-2 border-black font-display font-black" aria-label="Close">×</button>
             </div>
+            <div className="p-3 border-b-2 border-black bg-neutral-50">
+              <div className="flex items-center gap-2 border-2 border-black bg-white px-3 py-2">
+                <SearchIcon className="w-4 h-4" />
+                <input value={relationSearch} onChange={e => setRelationSearch(e.target.value)} placeholder="Search by @handle or name" className="w-full outline-none font-mono text-xs" />
+              </div>
+            </div>
             <div className="overflow-y-auto p-3 space-y-2">
               {relationLoading ? (
                 <div className="py-10 text-center font-mono text-xs uppercase">Loading...</div>
               ) : relationUsers.length === 0 ? (
                 <div className="py-10 text-center font-mono text-xs text-neutral-500 uppercase">No {relationModal} yet.</div>
-              ) : relationUsers.map(user => (
+              ) : visibleRelationUsers.map(user => (
                 <button
                   key={user.uid}
                   type="button"
@@ -277,6 +326,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
                   </span>
                 </button>
               ))}
+              {!relationLoading && relationUsers.length > 0 && visibleRelationUsers.length === 0 && <div className="py-10 text-center font-mono text-xs text-neutral-500 uppercase">No matching profiles.</div>}
             </div>
           </div>
         </div>

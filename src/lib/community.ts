@@ -144,6 +144,38 @@ async function chooseAvailableUsername(base: string): Promise<string> {
  * available handle is selected from the Google display name/email, so users
  * never have to manually claim a handle just to enter the site.
  */
+export async function getAllCommunityUsers(): Promise<CommunityUser[]> {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    return snap.docs.map(d => mapDocDates(d.data()) as CommunityUser)
+      .filter(u => !!u?.username)
+      .sort((a, b) => a.username.localeCompare(b.username));
+  } catch (error) {
+    console.warn('Failed to load community users:', error);
+    return [];
+  }
+}
+
+export async function getAllCommentsForSearch(): Promise<Array<{ id: string; content: string; authorId: string; authorUsername: string; authorName: string; postId?: string; articleSlug?: string; createdAt: string }>> {
+  try {
+    const snap = await getDocs(collectionGroup(db, 'comments'));
+    return snap.docs.map(d => {
+      const data: any = d.data();
+      const path = d.ref.path.split('/');
+      return {
+        id: d.id, content: data.content || '', authorId: data.authorId || '',
+        authorUsername: data.authorUsername || '', authorName: data.authorName || '',
+        postId: path[0] === 'posts' ? path[1] : undefined,
+        articleSlug: path[0] === 'articles' ? path[1] : undefined,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString())
+      };
+    });
+  } catch (error) {
+    console.warn('Failed to load comments for search:', error);
+    return [];
+  }
+}
+
 export async function ensureCommunityProfileForUser(user: import('firebase/auth').User): Promise<CommunityUser> {
   if (!auth.currentUser || auth.currentUser.uid !== user.uid) throw new Error('Must be logged in');
 

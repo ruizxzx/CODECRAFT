@@ -1,152 +1,93 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Article, SiteConfig } from '../types';
-import { Search, X, ArrowUpRight, Sparkles, Hash } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Article, CommunityPost, CommunityUser, SiteConfig } from '../types';
+import { getAllCommunityUsers, getAllCommentsForSearch, getPosts, extractHashtags } from '../lib/community';
+import { Search, X, ArrowUpRight, User, Hash, MessageSquare, FileText, Loader2 } from 'lucide-react';
+import { VerifiedBadge } from './VerifiedBadge';
 
 interface SearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   articles: Article[];
   onSelectArticle: (slug: string) => void;
+  onNavigate: (page: any, param?: string) => void;
   siteConfig: SiteConfig;
 }
 
-export const SearchModal: React.FC<SearchModalProps> = ({
-  isOpen,
-  onClose,
-  articles,
-  onSelectArticle,
-  siteConfig,
-}) => {
+type SearchTab = 'all' | 'articles' | 'posts' | 'people' | 'hashtags' | 'comments';
+
+export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, articles, onSelectArticle, onNavigate, siteConfig }) => {
   const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
   const [query, setQuery] = useState('');
+  const [tab, setTab] = useState<SearchTab>('all');
+  const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [users, setUsers] = useState<CommunityUser[]>([]);
+  const [comments, setComments] = useState<Awaited<ReturnType<typeof getAllCommentsForSearch>>>([]);
+  const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 50);
-    } else {
-      setQuery('');
-    }
+    if (!isOpen) { setQuery(''); setTab('all'); return; }
+    setTimeout(() => inputRef.current?.focus(), 50);
+    let active = true;
+    setLoading(true);
+    Promise.all([getPosts(), getAllCommunityUsers(), getAllCommentsForSearch()]).then(([p, u, c]) => {
+      if (!active) return;
+      setPosts(p); setUsers(u); setComments(c);
+    }).finally(() => active && setLoading(false));
+    return () => { active = false; };
   }, [isOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        // Toggle search modal
-        if (isOpen) onClose();
-      }
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (isOpen) onClose(); }
+      if (e.key === 'Escape' && isOpen) onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const q = query.trim().toLowerCase();
+  const normalized = q.replace(/^[@#]/, '');
+  const matchingArticles = useMemo(() => articles.filter(a => !q || [a.title,a.excerpt,a.category,...(a.tags||[])].some(v => String(v).toLowerCase().includes(normalized))), [articles,q,normalized]);
+  const matchingPosts = useMemo(() => posts.filter(p => !q || [p.title,p.content,p.authorUsername,p.authorName,...(p.hashtags||[]),...extractHashtags(`${p.title} ${p.content}`)].some(v => String(v).toLowerCase().includes(normalized))), [posts,q,normalized]);
+  const matchingUsers = useMemo(() => users.filter(u => !q || u.username.toLowerCase().includes(normalized) || u.displayName.toLowerCase().includes(normalized) || (u.bio||'').toLowerCase().includes(normalized)), [users,q,normalized]);
+  const matchingTags = useMemo(() => {
+    const map = new Map<string,number>();
+    posts.forEach(p => (p.hashtags || extractHashtags(`${p.title} ${p.content}`)).forEach(tag => map.set(tag,(map.get(tag)||0)+1)));
+    return [...map.entries()].filter(([tag]) => !q || tag.includes(normalized)).sort((a,b)=>b[1]-a[1]);
+  }, [posts,q,normalized]);
+  const matchingComments = useMemo(() => comments.filter(c => !q || c.content.toLowerCase().includes(normalized) || c.authorUsername.toLowerCase().includes(normalized) || c.authorName.toLowerCase().includes(normalized)), [comments,q,normalized]);
+
+  const counts = { articles: matchingArticles.length, posts: matchingPosts.length, people: matchingUsers.length, hashtags: matchingTags.length, comments: matchingComments.length };
+  const sections = tab === 'all' ? (['articles','posts','people','hashtags','comments'] as SearchTab[]) : [tab];
+
   if (!isOpen) return null;
+  const tabButton = (id: SearchTab, label: string, count?: number) => <button onClick={() => setTab(id)} className={`px-2.5 py-1.5 border-2 border-black font-mono text-[9px] font-black uppercase ${tab===id ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}>{label}{count !== undefined ? ` ${count}` : ''}</button>;
 
-  const filtered = query.trim() === ''
-    ? articles.slice(0, 4)
-    : articles.filter((art) => {
-        const q = query.toLowerCase();
-        return (
-          art.title.toLowerCase().includes(q) ||
-          art.excerpt.toLowerCase().includes(q) ||
-          art.category.toLowerCase().includes(q) ||
-          art.tags.some((t) => t.toLowerCase().includes(q))
-        );
-      });
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/70 backdrop-blur-xs">
-      <div 
-        className="w-full max-w-2xl bg-white border-4 border-black neo-shadow-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150"
-      >
-        {/* Search Input Bar */}
-        <div className="flex items-center px-4 py-3.5 border-b-4 border-black bg-white">
-          <Search className="w-5 h-5 text-black stroke-[3] mr-3 shrink-0" />
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search articles, tags, system designs, AI..."
-            className="w-full font-display font-bold text-lg sm:text-xl text-black placeholder-neutral-400 focus:outline-none bg-transparent"
-          />
-          {query && (
-            <button 
-              onClick={() => setQuery('')}
-              className="p-1 hover:bg-neutral-100 border-2 border-black mr-2"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-          <button
-            onClick={onClose}
-            className="px-2.5 py-1 bg-neutral-200 neo-border-2 font-mono text-xs font-bold hover:bg-[var(--color-primary)] transition-colors"
-          >
-            ESC
-          </button>
-        </div>
-
-        {/* Search Results Area */}
-        <div className="max-h-[60vh] overflow-y-auto p-4 space-y-2.5">
-          <div className="flex items-center justify-between text-xs font-mono font-bold text-neutral-500 px-1 mb-2">
-            <span>{query ? `RESULTS (${filtered.length})` : 'POPULAR DISPATCHES'}</span>
-            <span>PRESS ENTER TO VIEW</span>
-          </div>
-
-          {filtered.length === 0 ? (
-            <div className="text-center py-10 neo-border-2 border-dashed bg-white p-6">
-              <p className="font-display font-black text-xl text-black mb-1">
-                No matching dispatches found
-              </p>
-              <p className="font-sans text-sm text-neutral-600">
-                Try searching for keywords like "Vite", "AI", "Database", or "TypeScript".
-              </p>
-            </div>
-          ) : (
-            filtered.map((art) => (
-              <div
-                key={art.id}
-                onClick={() => {
-                  onSelectArticle(art.slug);
-                  onClose();
-                }}
-                className="group p-3.5 bg-white neo-border-2 neo-shadow-sm hover:bg-[var(--color-primary)] hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all cursor-pointer flex items-start justify-between"
-              >
-                <div className="space-y-1 pr-3">
-                  <div className="flex items-center space-x-2">
-                    <span className="px-2 py-0.5 bg-black text-white text-[10px] font-mono font-bold uppercase">
-                      {art.category}
-                    </span>
-                    <span className="text-[11px] font-mono text-neutral-500">
-                      {art.readingTimeMinutes} min read
-                    </span>
-                  </div>
-                  <h4 className="font-display font-black text-base text-black group-hover:text-black leading-snug">
-                    {art.title}
-                  </h4>
-                  <p className="font-sans text-xs text-neutral-600 line-clamp-1">
-                    {art.excerpt}
-                  </p>
-                </div>
-                <ArrowUpRight className="w-5 h-5 text-black stroke-[2.5] shrink-0 mt-1 opacity-60 group-hover:opacity-100" />
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Footer shortcuts */}
-        <div className="px-4 py-2.5 bg-neutral-100 border-t-4 border-black flex items-center justify-between text-[11px] font-mono text-neutral-600">
-          <div className="flex items-center space-x-3">
-            <span>Navigate: Click or Tab</span>
-            <span>Close: [Esc]</span>
-          </div>
-          <span className="font-bold text-black">{brandName} DISPATCHES</span>
-        </div>
+  return <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24 px-4 bg-black/70 backdrop-blur-xs">
+    <div className="w-full max-w-3xl bg-white border-4 border-black neo-shadow-lg overflow-hidden">
+      <div className="flex items-center px-4 py-3.5 border-b-4 border-black">
+        <Search className="w-5 h-5 stroke-[3] mr-3 shrink-0" />
+        <input ref={inputRef} value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search everything: articles, posts, people, #hashtags, comments..." className="w-full font-display font-bold text-lg sm:text-xl outline-none" />
+        {query && <button onClick={()=>setQuery('')} className="p-1 border-2 border-black mr-2"><X className="w-4 h-4" /></button>}
+        <button onClick={onClose} className="px-2.5 py-1 bg-neutral-200 border-2 border-black font-mono text-xs font-bold">ESC</button>
       </div>
+      <div className="px-4 py-3 border-b-2 border-black flex flex-wrap gap-2">
+        {tabButton('all','All')} {tabButton('articles','Articles',counts.articles)} {tabButton('posts','Posts',counts.posts)} {tabButton('people','People',counts.people)} {tabButton('hashtags','Tags',counts.hashtags)} {tabButton('comments','Comments',counts.comments)}
+      </div>
+      <div className="max-h-[65vh] overflow-y-auto p-4 space-y-5">
+        {loading && <div className="flex items-center gap-2 font-mono text-xs uppercase"><Loader2 className="w-4 h-4 animate-spin"/>Indexing community search...</div>}
+        {!q && <div className="bg-neutral-50 border-2 border-dashed border-black p-4 font-mono text-xs uppercase">Search across the complete public OFFSCRPT index.</div>}
+        {sections.map(section => {
+          if (section==='articles') return <section key={section}><h3 className="font-display font-black text-sm uppercase border-b-2 border-black pb-2 mb-2 flex items-center gap-2"><FileText className="w-4 h-4"/> Articles ({counts.articles})</h3><div className="space-y-2">{matchingArticles.slice(0,8).map(a=><button key={a.id} onClick={()=>{onSelectArticle(a.slug);onClose();}} className="w-full text-left p-3 border-2 border-black hover:bg-[var(--color-primary)] flex justify-between gap-3"><span><span className="font-mono text-[9px] uppercase">{a.category}</span><span className="block font-display font-black">{a.title}</span><span className="block text-xs text-neutral-600 line-clamp-1">{a.excerpt}</span></span><ArrowUpRight className="w-4 h-4 shrink-0"/></button>)}</div></section>;
+          if (section==='posts') return <section key={section}><h3 className="font-display font-black text-sm uppercase border-b-2 border-black pb-2 mb-2 flex items-center gap-2"><MessageSquare className="w-4 h-4"/> Community Posts ({counts.posts})</h3><div className="space-y-2">{matchingPosts.slice(0,8).map(p=><button key={p.id} onClick={()=>{onNavigate('community_post',p.id);onClose();}} className="w-full text-left p-3 border-2 border-black hover:bg-[var(--color-secondary)]"><span className="font-mono text-[9px] uppercase">@{p.authorUsername}</span><span className="block font-display font-black">{p.title}</span><span className="block text-xs text-neutral-600 line-clamp-1">{p.content}</span></button>)}</div></section>;
+          if (section==='people') return <section key={section}><h3 className="font-display font-black text-sm uppercase border-b-2 border-black pb-2 mb-2 flex items-center gap-2"><User className="w-4 h-4"/> People ({counts.people})</h3><div className="space-y-2">{matchingUsers.slice(0,10).map(u=><button key={u.uid} onClick={()=>{onNavigate('community_profile',u.username);onClose();}} className="w-full text-left p-3 border-2 border-black hover:bg-[var(--color-accent)] flex items-center gap-3">{u.photoURL?<img src={u.photoURL} className="w-9 h-9 rounded-full border-2 border-black object-cover"/>:<div className="w-9 h-9 rounded-full border-2 border-black flex items-center justify-center font-black">{u.displayName.charAt(0)}</div>}<span><span className="font-display font-black uppercase flex items-center gap-1">{u.displayName}<VerifiedBadge verified={u.isVerified} color={u.verificationColor} className="w-4 h-4"/></span><span className="font-mono text-[10px] text-neutral-500">@{u.username}</span></span></button>)}</div></section>;
+          if (section==='hashtags') return <section key={section}><h3 className="font-display font-black text-sm uppercase border-b-2 border-black pb-2 mb-2 flex items-center gap-2"><Hash className="w-4 h-4"/> Hashtags ({counts.hashtags})</h3><div className="flex flex-wrap gap-2">{matchingTags.slice(0,20).map(([tag,count])=><button key={tag} onClick={()=>{onNavigate('explore',tag);onClose();}} className="px-3 py-2 border-2 border-black bg-white hover:bg-[var(--color-primary)] font-mono text-xs font-black">#{tag} <span className="text-neutral-500">({count})</span></button>)}</div></section>;
+          return <section key={section}><h3 className="font-display font-black text-sm uppercase border-b-2 border-black pb-2 mb-2 flex items-center gap-2"><MessageSquare className="w-4 h-4"/> Comments ({counts.comments})</h3><div className="space-y-2">{matchingComments.slice(0,8).map(c=><button key={`${c.id}-${c.postId||c.articleSlug}`} onClick={()=>{c.postId?onNavigate('community_post',c.postId):c.articleSlug?onNavigate('article',c.articleSlug):null;onClose();}} className="w-full text-left p-3 border-2 border-black hover:bg-neutral-100"><span className="font-mono text-[9px] uppercase text-neutral-500">@{c.authorUsername}</span><span className="block text-sm line-clamp-2">{c.content}</span></button>)}</div></section>;
+        })}
+        {q && !sections.some(section => ({articles:counts.articles,posts:counts.posts,people:counts.people,hashtags:counts.hashtags,comments:counts.comments}[section]||0)>0) && <div className="text-center py-12 border-2 border-dashed border-black"><p className="font-display font-black text-xl uppercase">No matches</p><p className="font-mono text-xs text-neutral-500 mt-2">Try a different keyword, @handle, or #hashtag.</p></div>}
+      </div>
+      <div className="px-4 py-2.5 bg-neutral-100 border-t-4 border-black flex items-center justify-between text-[10px] font-mono text-neutral-600"><span>GLOBAL SEARCH INDEX</span><span className="font-bold text-black">{brandName}</span></div>
     </div>
-  );
+  </div>;
 };
