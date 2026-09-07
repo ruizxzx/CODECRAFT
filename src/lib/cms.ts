@@ -164,7 +164,7 @@ export async function syncAdminAuthorProfile(author: {
     themeColor: '#FFD600',
     role: author.role || 'Founder & Systems Architect',
     isAuthor: true,
-    isVerified: true,
+    isVerified: existingUser.exists() ? !!existingUser.data()?.isVerified : true,
     verificationColor: existingUser.exists() ? (existingUser.data()?.verificationColor || '#2196F3') : '#2196F3',
     followersCount: existingUser.exists() ? (existingUser.data()?.followersCount || 0) : 0,
     followingCount: existingUser.exists() ? (existingUser.data()?.followingCount || 0) : 0,
@@ -187,13 +187,22 @@ export async function syncAdminAuthorProfile(author: {
   const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', uid)));
   postsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: {
     authorName: profileData.displayName, authorAvatar: profileData.photoURL,
-    authorUsername: username, isVerified: true,
+    authorUsername: username, isVerified: !!profileData.isVerified,
     verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp()
   }}));
-  const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', uid)));
+  // Avoid making critical admin saves depend on a collection-group index. The
+  // filtered query is preferred, but older deployments may not have the index yet.
+  let commentsSnap;
+  try {
+    commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', uid)));
+  } catch (indexError) {
+    console.warn('Comments author index unavailable; falling back to a cloud scan:', indexError);
+    const allComments = await getDocs(collectionGroup(db, 'comments'));
+    commentsSnap = { docs: allComments.docs.filter(d => d.data()?.authorId === uid) } as any;
+  }
   commentsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: {
     authorName: profileData.displayName, authorAvatar: profileData.photoURL,
-    authorUsername: username, isVerified: true,
+    authorUsername: username, isVerified: !!profileData.isVerified,
     verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp()
   }}));
   for (let i = 0; i < contentWrites.length; i += 450) {

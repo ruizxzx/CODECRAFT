@@ -1,62 +1,27 @@
-# KRISHFICIENT Firebase Production Deployment
+# Firebase deployment
 
-## Firebase project
-- Project: `krishficient-portfolio`
-- Firestore database: `(default)`
-- Google Authentication: required
-- Firebase Storage: not used
-
-## Vercel environment variables
-Set these for the production deployment:
-
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_STORAGE_BUCKET`
-- `VITE_FIREBASE_MESSAGING_SENDER_ID`
-- `VITE_FIREBASE_APP_ID`
-
-The application uses the default Firestore database and does not require `VITE_FIREBASE_DATABASE_ID`.
+This project uses the `krishficient-portfolio` Firebase project and Firestore `(default)` database.
 
 ## Firestore rules
-Deploy the repository `firestore.rules` to the `(default)` Firestore database before testing CMS writes, profiles, upvotes, or reposts.
 
-## Author profile
-When an authorized admin signs in, the app creates/synchronizes the canonical author profile:
+Deploy the included rules to the production project:
 
-- Username: `@krishsarkar`
-- Profile document: `users/<admin-auth-uid>`
+```bash
+firebase use krishficient-portfolio
+firebase deploy --only firestore:rules
+```
 
-The admin profile is linked into site configuration and every new/synchronized main article stores the author's UID and username.
+## Firestore indexes
 
-## Community data
-- User profiles: `users/<uid>`
-- Upvotes: `users/<uid>/upvotes/<postId>`
-- Reposts: `users/<uid>/reposts/<postId>` and `posts/<postId>/reposts/<uid>`
-- Community posts: `posts/<postId>`
-- Community comments: `posts/<postId>/comments/<commentId>`
-- Article comments: `articles/<slug>/comments/<commentId>`
+The project includes `firestore.indexes.json` with the recommended collection-group index for `comments.authorId`:
 
-## Custom categories
-Admin-created categories are stored in `siteConfig/global.customCategories` and are immediately available in the article editor and public Blog category filter.
+```bash
+firebase use krishficient-portfolio
+firebase deploy --only firestore:indexes
+```
 
-## Images
-Image fields use public HTTPS image URLs stored in Firestore. No Firebase Storage bucket or storage rules are required.
+The app also contains a fallback cloud scan for this query, so a missing index no longer blocks core admin configuration or article publishing. The index is still recommended for efficient profile-comment queries as the site grows.
 
-## Profile synchronization
-Deploy `firestore.rules`. Users can update their profile image by pasting a public image URL. Profile changes propagate to their existing community posts and comments.
+## Vercel
 
-## Production Firestore rules — offscrpt.vercel.app
-
-The production app uses Firebase project `krishficient-portfolio` and Firestore `(default)`. The `firestore.rules` file in this repository must be published to that database.
-
-### Firebase Console
-1. Open Firebase Console → `krishficient-portfolio` → Firestore Database → Rules.
-2. Replace the deployed rules with this repository's `firestore.rules`.
-3. Click **Publish**.
-4. Sign out/in on `https://offscrpt.vercel.app` and test admin deletion.
-
-### Why this is required
-Admin post deletion is a batch operation that removes the post's comments, votes, claps, repost records, and then the post. The rules explicitly allow the post author or an admin to remove those nested records. If an older ruleset is still deployed, Firestore will return `Missing or insufficient permissions` even though the frontend is correct.
-
-Verification badges are also protected server-side: normal users cannot self-verify; only an authenticated admin can change `isVerified` and `verificationColor`.
+Set the Firebase `VITE_*` variables for the production deployment. No Firebase Storage variable or Storage setup is required by this project.

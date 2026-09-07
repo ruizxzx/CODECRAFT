@@ -410,12 +410,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     e.preventDefault();
     setIsSavingConfig(true);
     try {
-      const authorProfile = await syncAdminAuthorProfile({
-        name: authorName,
-        role: authorRole,
-        avatar: authorAvatarUrl,
-        bio: aboutMeBio || manifestoText
-      });
+      // Resolve the author identity, but never let a secondary denormalized
+      // content-sync failure prevent the core site configuration from saving.
+      let authorProfile = { uid: siteConfig.authorProfileUid || '', username: siteConfig.authorProfileUsername || 'krishsarkar' };
+      try {
+        authorProfile = await syncAdminAuthorProfile({
+          name: authorName,
+          role: authorRole,
+          avatar: authorAvatarUrl,
+          bio: aboutMeBio || manifestoText
+        });
+      } catch (authorSyncError) {
+        console.warn('Author profile/content sync deferred; saving site config anyway:', authorSyncError);
+      }
       const updated: SiteConfig = {
         logoImageUrl,
         logoPart1,
@@ -638,12 +645,23 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setPublishError(null);
 
     try {
-      const authorProfile = await syncAdminAuthorProfile({
-        name: authorName || siteConfig.authorName || 'Krish Sarkar',
-        role: authorRole || siteConfig.authorRole || 'Founder & Systems Architect',
-        avatar: authorAvatarUrl || siteConfig.authorAvatarUrl || '',
-        bio: manifestoText || aboutMeBio || siteConfig.aboutMeBio || ''
-      });
+      // Author synchronization is secondary to publishing. If a legacy
+      // collection-group index or denormalized-content sync is unavailable,
+      // the article must still be writable to Firestore.
+      let authorProfile = {
+        uid: siteConfig.authorProfileUid || auth.currentUser?.uid || '',
+        username: siteConfig.authorProfileUsername || 'krishsarkar'
+      };
+      try {
+        authorProfile = await syncAdminAuthorProfile({
+          name: authorName || siteConfig.authorName || 'Krish Sarkar',
+          role: authorRole || siteConfig.authorRole || 'Founder & Systems Architect',
+          avatar: authorAvatarUrl || siteConfig.authorAvatarUrl || '',
+          bio: manifestoText || aboutMeBio || siteConfig.aboutMeBio || ''
+        });
+      } catch (authorSyncError) {
+        console.warn('Author sync deferred while publishing article:', authorSyncError);
+      }
       const slug = editingArticleSlug || newTitle
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')

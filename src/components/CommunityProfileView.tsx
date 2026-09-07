@@ -50,7 +50,9 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         setBioInput(p.bio || '');
         setThemeInput(p.themeColor || '#000000');
         setPhotoUrlInput(p.photoURL || '');
-        const [allArticles, userPosts, ups, reps, userComments] = await Promise.all([
+        // Load profile activity independently so one optional collection
+        // (comments/upvotes/reposts/articles) cannot hide the user's posts.
+        const results = await Promise.allSettled([
           fetchArticles(),
           getUserPosts(p.uid, p.username),
           getUserUpvotedPosts(p.uid),
@@ -58,11 +60,29 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
           getUserComments(p.uid)
         ]);
         if (cancelled) return;
-        setArticles(allArticles.articles.filter((a: any) => a.author?.uid === p.uid || a.author?.username === p.username));
-        setPosts(userPosts);
-        setUpvotedPosts(ups);
-        setRepostedPosts(reps);
-        setComments(userComments);
+
+        const [articleResult, postsResult, upvotesResult, repostsResult, commentsResult] = results;
+        if (articleResult.status === 'fulfilled') {
+          const allArticles = articleResult.value;
+          const articleList = Array.isArray((allArticles as any)?.articles) ? (allArticles as any).articles : (Array.isArray(allArticles) ? allArticles : []);
+          setArticles(articleList.filter((a: any) =>
+            a.author?.uid === p.uid ||
+            a.author?.id === p.uid ||
+            a.author?.username?.toLowerCase() === p.username.toLowerCase() ||
+            a.author?.name === p.displayName
+          ));
+        } else {
+          console.warn('Profile articles failed to load:', articleResult.reason);
+          setArticles([]);
+        }
+        if (postsResult.status === 'fulfilled') setPosts(postsResult.value);
+        else { console.warn('Profile posts failed to load:', postsResult.reason); setPosts([]); }
+        if (upvotesResult.status === 'fulfilled') setUpvotedPosts(upvotesResult.value);
+        else { console.warn('Profile upvotes failed to load:', upvotesResult.reason); setUpvotedPosts([]); }
+        if (repostsResult.status === 'fulfilled') setRepostedPosts(repostsResult.value);
+        else { console.warn('Profile reposts failed to load:', repostsResult.reason); setRepostedPosts([]); }
+        if (commentsResult.status === 'fulfilled') setComments(commentsResult.value);
+        else { console.warn('Profile comments failed to load:', commentsResult.reason); setComments([]); }
         if (auth.currentUser && auth.currentUser.uid !== p.uid) {
           setIsFollowing(await checkIsFollowing(auth.currentUser.uid, p.uid));
         } else setIsFollowing(false);
@@ -142,6 +162,10 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
           <button onClick={(e) => handleDeletePost(post.id, e)} className="p-1.5 bg-red-100 text-red-700 border-2 border-black" title="Delete post"><Trash className="w-3.5 h-3.5" /></button>
         )}
       </div>
+      <div className="flex items-center gap-2 mb-1">
+        {post.authorAvatar ? <img src={post.authorAvatar} alt="" className="w-6 h-6 rounded-full border-2 border-black object-cover" /> : <div className="w-6 h-6 rounded-full bg-neutral-200 border-2 border-black" />}
+        <span className="font-mono text-[10px] font-bold uppercase inline-flex items-center gap-1">@{post.authorUsername}<VerifiedBadge verified={post.authorId === profile.uid ? profile.isVerified : post.isVerified} color={post.authorId === profile.uid ? profile.verificationColor : post.verificationColor} className="w-3.5 h-3.5" /></span>
+      </div>
       <h3 className="font-display font-black text-xl group-hover:text-[var(--color-primary)] transition-colors">{post.title}</h3>
       <p className="mt-2 text-sm text-neutral-600 line-clamp-2">{post.content}</p>
       <div className="mt-4 pt-4 border-t-2 border-neutral-100 flex justify-between font-mono text-xs text-neutral-500">
@@ -190,7 +214,10 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         {tabs.map(tab => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 min-w-[140px] px-4 py-3 border-r-2 last:border-r-0 border-black font-display font-black text-xs uppercase flex items-center justify-center gap-2 ${activeTab === tab.id ? 'bg-[var(--color-primary)]' : 'hover:bg-neutral-100'}`}>{tab.icon}{tab.label} ({tab.count})</button>)}
       </div>
 
-      {activeTab === 'comments' ? <div className="space-y-4">{comments.length === 0 ? <p className="font-mono text-sm text-neutral-500">No comments yet.</p> : comments.map(c => <div key={`${c.articleSlug || c.postId}-${c.id}`} onClick={() => c.postId ? onNavigate('community_post', c.postId) : c.articleSlug ? onNavigate('article', c.articleSlug) : undefined} className="bg-white border-4 border-black p-5 cursor-pointer"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">{c.articleSlug ? `ARTICLE: ${c.articleSlug}` : 'COMMUNITY POST'}</div><p className="font-sans text-sm">{c.content}</p><div className="mt-3 font-mono text-[10px] text-neutral-500">{new Date(c.createdAt).toLocaleString()}</div></div>)}</div> : <div className="space-y-6">{activeTab === 'articles' ? (articles.length ? articles.map(article => <div key={article.slug} onClick={() => onNavigate('article', article.slug)} className="bg-white border-4 border-black p-5 cursor-pointer neo-shadow-sm hover:-translate-y-1 transition-all"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">MAIN ARTICLE • {article.category}</div><h3 className="font-display font-black text-xl uppercase">{article.title}</h3><p className="mt-2 text-sm text-neutral-600">{article.excerpt}</p></div>) : <p className="font-mono text-sm text-neutral-500">No main articles yet.</p>) : activeTab === 'posts' ? (posts.length ? posts.map(p => renderPost(p)) : <p className="font-mono text-sm text-neutral-500">No community posts yet.</p>) : activeTab === 'upvotes' ? (upvotedPosts.length ? upvotedPosts.map(p => renderPost(p, 'UPVOTED')) : <p className="font-mono text-sm text-neutral-500">No upvoted posts yet.</p>) : (repostedPosts.length ? repostedPosts.map(p => renderPost(p, 'REPOST')) : <p className="font-mono text-sm text-neutral-500">No reposts yet.</p>)}</div>}
+      {activeTab === 'comments' ? <div className="space-y-4">{comments.length === 0 ? <p className="font-mono text-sm text-neutral-500">No comments yet.</p> : comments.map(c => <div key={`${c.articleSlug || c.postId}-${c.id}`} onClick={() => c.postId ? onNavigate('community_post', c.postId) : c.articleSlug ? onNavigate('article', c.articleSlug) : undefined} className="bg-white border-4 border-black p-5 cursor-pointer"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">{c.articleSlug ? `ARTICLE: ${c.articleSlug}` : 'COMMUNITY POST'}</div><div className="flex items-center gap-2 mb-2 font-mono text-[10px] font-bold uppercase">
+              {profile.photoURL ? <img src={profile.photoURL} alt="" className="w-5 h-5 rounded-full border border-black object-cover" /> : null}
+              <span>@{profile.username}</span><VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-3.5 h-3.5" />
+            </div><p className="font-sans text-sm">{c.content}</p><div className="mt-3 font-mono text-[10px] text-neutral-500">{new Date(c.createdAt).toLocaleString()}</div></div>)}</div> : <div className="space-y-6">{activeTab === 'articles' ? (articles.length ? articles.map(article => <div key={article.slug} onClick={() => onNavigate('article', article.slug)} className="bg-white border-4 border-black p-5 cursor-pointer neo-shadow-sm hover:-translate-y-1 transition-all"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">MAIN ARTICLE • {article.category}</div><h3 className="font-display font-black text-xl uppercase">{article.title}</h3><p className="mt-2 text-sm text-neutral-600">{article.excerpt}</p></div>) : <p className="font-mono text-sm text-neutral-500">No main articles yet.</p>) : activeTab === 'posts' ? (posts.length ? posts.map(p => renderPost(p)) : <p className="font-mono text-sm text-neutral-500">No community posts yet.</p>) : activeTab === 'upvotes' ? (upvotedPosts.length ? upvotedPosts.map(p => renderPost(p, 'UPVOTED')) : <p className="font-mono text-sm text-neutral-500">No upvoted posts yet.</p>) : (repostedPosts.length ? repostedPosts.map(p => renderPost(p, 'REPOST')) : <p className="font-mono text-sm text-neutral-500">No reposts yet.</p>)}</div>}
     </div>
   );
 };

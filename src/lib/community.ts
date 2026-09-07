@@ -408,15 +408,40 @@ export async function getPosts(type?: 'discussion' | 'blog', username?: string):
 }
 
 export async function getUserPosts(userId: string, username?: string): Promise<CommunityPost[]> {
+  const cleanUsername = username?.toLowerCase().trim();
   try {
-    const snap = await getDocs(query(collection(db, 'posts'), orderBy('createdAt', 'desc')));
-    const cleanUsername = username?.toLowerCase().trim();
-    return snap.docs
-      .map(d => ({ ...d.data(), id: d.id } as CommunityPost))
-      .filter(post => post.authorId === userId || (!!cleanUsername && post.authorUsername?.toLowerCase() === cleanUsername));
+    // Query by authorId first. This is a simple single-field Firestore query
+    // and does not require a composite index. If older posts have a stale or
+    // missing authorId, also scan the public posts collection and reconcile by
+    // the canonical handle so historical content remains visible on profiles.
+    const authorSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
+    const byId = new Map<string, CommunityPost>();
+    authorSnap.docs.forEach(d => byId.set(d.id, { ...d.data(), id: d.id } as CommunityPost));
+
+    if (cleanUsername) {
+      const allSnap = await getDocs(collection(db, 'posts'));
+      allSnap.docs.forEach(d => {
+        const post = { ...d.data(), id: d.id } as CommunityPost;
+        if (post.authorUsername?.toLowerCase() === cleanUsername) byId.set(d.id, post);
+      });
+    }
+
+    return Array.from(byId.values()).sort((a, b) =>
+      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, 'posts');
-    return [];
+    // Last-resort public scan for legacy records. Profile rendering should not
+    // silently fail just because an index or query shape is unavailable.
+    try {
+      const allSnap = await getDocs(collection(db, 'posts'));
+      return allSnap.docs
+        .map(d => ({ ...d.data(), id: d.id } as CommunityPost))
+        .filter(post => post.authorId === userId || (!!cleanUsername && post.authorUsername?.toLowerCase() === cleanUsername))
+        .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    } catch (fallbackError) {
+      handleFirestoreError(fallbackError, OperationType.LIST, 'posts');
+      return [];
+    }
   }
 }
 
@@ -595,7 +620,28 @@ export async function setUserVerificationByUsername(usernameInput: string, isVer
   const writes: Array<{ref: any; data: any}> = [];
   const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', profile.uid)));
   postsSnap.docs.forEach(d => writes.push({ref: d.ref, data: {isVerified, verificationColor: color, updatedAt: serverTimestamp()}}));
-  const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', profile.uid)));
+
+  // Main articles also denormalize author verification so the badge is shown
+  // immediately in article cards, article pages, and search results.
+  const articlesSnap = await getDocs(collection(db, 'articles'));
+  articlesSnap.docs.forEach(d => {
+    const data = d.data();
+    const articleAuthor = data.author || {};
+    if (articleAuthor.uid === profile.uid || articleAuthor.username?.toLowerCase() === cleanUsername) {
+      writes.push({ ref: d.ref, data: {
+        author: { ...articleAuthor, isVerified, verificationColor: color },
+        updatedAt: serverTimestamp()
+      }});
+    }
+  });
+  let commentsSnap;
+  try {
+    commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', profile.uid)));
+  } catch (indexError) {
+    console.warn('Comments author index unavailable during verification; using fallback scan:', indexError);
+    const allComments = await getDocs(collectionGroup(db, 'comments'));
+    commentsSnap = { docs: allComments.docs.filter(d => d.data()?.authorId === profile.uid) } as any;
+  }
   commentsSnap.docs.forEach(d => writes.push({ref: d.ref, data: {isVerified, verificationColor: color, updatedAt: serverTimestamp()}}));
   for (let i = 0; i < writes.length; i += 450) {
     const batch = writeBatch(db);
@@ -693,7 +739,14 @@ export async function syncUserIdentityAcrossContent(userId: string, profile: Pic
   const writes: Array<{ ref: any; data: any }> = [];
   const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
   postsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
-  const commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
+  let commentsSnap;
+  try {
+    commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
+  } catch (indexError) {
+    console.warn('Comments author index unavailable during identity sync; using fallback scan:', indexError);
+    const allComments = await getDocs(collectionGroup(db, 'comments'));
+    commentsSnap = { docs: allComments.docs.filter(d => d.data()?.authorId === userId) } as any;
+  }
   commentsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
   for (let i = 0; i < writes.length; i += 450) {
     const batch = writeBatch(db);
@@ -703,7 +756,14 @@ export async function syncUserIdentityAcrossContent(userId: string, profile: Pic
 }
 
 export async function getUserComments(userId: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {
-  const snap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
+  let snap;
+  try {
+    snap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
+  } catch (indexError) {
+    console.warn('Comments author index unavailable for profile; using fallback scan:', indexError);
+    const allComments = await getDocs(collectionGroup(db, 'comments'));
+    snap = { docs: allComments.docs.filter(d => d.data()?.authorId === userId) } as any;
+  }
   return snap.docs.map(d => {
     const data = d.data();
     const path = d.ref.path.split('/');
