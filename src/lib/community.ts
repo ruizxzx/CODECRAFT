@@ -2,7 +2,7 @@ import { db, auth } from './firebase';
 import { 
   collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment, runTransaction
 } from 'firebase/firestore';
-import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, CarouselSlide } from '../types';
+import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, CarouselSlide, Notification } from '../types';
 
 
 function mapDocDates(data: any) {
@@ -30,6 +30,54 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+
+function extractMentions(text: string): string[] {
+  return Array.from(new Set((text.match(/@[a-zA-Z0-9_]{3,30}/g) || []).map(v => v.slice(1).toLowerCase())));
+}
+
+async function createNotification(userId: string, data: Omit<Notification, 'id' | 'createdAt' | 'read'>): Promise<void> {
+  if (!userId || userId === data.actorId) return;
+  const id = generateId();
+  await setDoc(doc(db, 'users', userId, 'notifications', id), { ...data, read: false, createdAt: serverTimestamp() });
+}
+
+async function notifyMentions(text: string, actor: CommunityUser, targetType: 'post' | 'comment', targetId: string): Promise<void> {
+  const handles = extractMentions(text);
+  if (!handles.length) return;
+  await Promise.all(handles.map(async username => {
+    try {
+      const snap = await getDoc(doc(db, 'usernames', username));
+      const uid = snap.exists() ? snap.data()?.uid : null;
+      if (uid) await createNotification(uid, { type: 'mention', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: `mentioned you in a ${targetType}`, targetType, targetId });
+    } catch (e) { console.warn('Mention notification failed:', e); }
+  }));
+}
+
+export async function getUserNotifications(userId: string): Promise<Notification[]> {
+  const snap = await getDocs(query(collection(db, 'users', userId, 'notifications'), orderBy('createdAt', 'desc'), limit(100)));
+  return snap.docs.map(d => ({ id: d.id, ...mapDocDates(d.data()) } as Notification));
+}
+
+export async function markNotificationsRead(userId: string): Promise<void> {
+  const snap = await getDocs(query(collection(db, 'users', userId, 'notifications'), where('read', '==', false), limit(100)));
+  if (snap.empty) return;
+  const batch = writeBatch(db);
+  snap.docs.forEach(d => batch.update(d.ref, { read: true }));
+  await batch.commit();
+}
+
+export async function saveCommunityDraft(userId: string, data: { type: 'discussion' | 'blog'; title: string; content: string }): Promise<void> {
+  await setDoc(doc(db, 'users', userId, 'drafts', 'community'), { ...data, updatedAt: serverTimestamp() });
+}
+
+export async function getCommunityDraft(userId: string): Promise<{ type: 'discussion' | 'blog'; title: string; content: string } | null> {
+  const snap = await getDoc(doc(db, 'users', userId, 'drafts', 'community'));
+  return snap.exists() ? snap.data() as any : null;
+}
+
+export async function clearCommunityDraft(userId: string): Promise<void> {
+  await deleteDoc(doc(db, 'users', userId, 'drafts', 'community'));
+}
 export async function getCommunityProfile(uid: string): Promise<CommunityUser | null> {
   const p = `users/${uid}`;
   try {
@@ -315,6 +363,8 @@ export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 
       updatedAt: serverTimestamp()
     };
     await setDoc(doc(db, 'posts', postId), postData);
+    const actor = await getCommunityProfile(auth.currentUser?.uid || data.authorId);
+    if (actor) { try { await notifyMentions(data.title + ' ' + data.content, actor, 'post', postId); } catch (e) { console.warn('Post mention notifications failed:', e); } }
     return { ...postData, id: postId, createdAt: now, updatedAt: now } as CommunityPost;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, p);
@@ -513,6 +563,14 @@ export async function addComment(postId: string, currentCommentsCount: number | 
     });
     
     await batch.commit();
+    const actor = await getCommunityProfile(auth.currentUser?.uid || commentData.authorId);
+    if (actor) {
+      try {
+        const target = await getPost(postId);
+        if (target?.authorId) await createNotification(target.authorId, { type: 'comment', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'commented on your post', targetType: 'post', targetId: postId });
+        await notifyMentions(commentData.content, actor, 'comment', commentId);
+      } catch (e) { console.warn('Comment notifications failed:', e); }
+    }
     return { ...commentData, id: commentId, createdAt: now, updatedAt: now } as CommunityComment;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, p);
@@ -833,7 +891,22 @@ export async function toggleRepost(postId: string, userId: string, isReposted: b
     batch.update(doc(db, 'posts', postId), { repostsCount: increment(1), updatedAt: serverTimestamp() });
   }
   await batch.commit();
+  if (!isReposted) {
+    try {
+      const actor = await getCommunityProfile(userId);
+      const target = await getPost(postId);
+      if (actor && target) await createNotification(target.authorId, { type: 'repost', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'reposted your post', targetType: 'post', targetId: postId });
+    } catch (e) { console.warn('Repost notification failed:', e); }
+  }
   return !isReposted;
+}
+
+export async function quoteRepost(postId: string, user: CommunityUser, quoteText: string): Promise<CommunityPost> {
+  const original = await getPost(postId);
+  if (!original) throw new Error('Original post no longer exists.');
+  const created = await createPost({ type: original.type, title: original.title, content: original.content, authorId: user.uid, authorUsername: user.username, authorName: user.displayName, authorAvatar: user.photoURL || '', isVerified: !!user.isVerified, verificationColor: user.verificationColor || '#2196F3', quoteText: quoteText.trim(), quotedPostId: postId });
+  await toggleRepost(postId, user.uid, false);
+  return created;
 }
 
 export async function getUserRepostStatus(postId: string, userId: string): Promise<boolean> {

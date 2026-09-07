@@ -102,7 +102,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'notifications';
 
 export interface CommunityUser {
   uid: string;
@@ -141,6 +141,9 @@ export interface CommunityPost {
   isFeatured: boolean;
   createdAt: string;
   updatedAt: string;
+  editedAt?: string;
+  quoteText?: string;
+  quotedPostId?: string;
 }
 
 export interface CommunityComment {
@@ -170,6 +173,20 @@ export interface UserSavedItem {
   itemId: string;
   itemType: 'article' | 'post';
   title?: string;
+  createdAt: string;
+}
+
+export interface Notification {
+  id: string;
+  type: 'follow' | 'upvote' | 'comment' | 'reply' | 'mention' | 'repost' | 'verification';
+  actorId: string;
+  actorUsername: string;
+  actorName: string;
+  actorAvatar?: string;
+  message: string;
+  targetType?: 'post' | 'comment' | 'profile' | 'article';
+  targetId?: string;
+  read: boolean;
   createdAt: string;
 }
 

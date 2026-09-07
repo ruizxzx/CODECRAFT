@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { CommunityPost, CommunityComment, PageView, CommunityUser } from '../types';
 import { getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
-import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2 } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2, Share2, Pencil, X } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
 
 interface CommunityPostViewProps {
@@ -29,6 +29,12 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   const [localSaved, setLocalSaved] = useState(false);
   const [isReposted, setIsReposted] = useState(false);
   const [isReposting, setIsReposting] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isQuoteOpen, setIsQuoteOpen] = useState(false);
+  const [quoteText, setQuoteText] = useState('');
   
   const [commentInput, setCommentInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -96,6 +102,33 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
       if (post) setPost({ ...post, repostsCount: Math.max(0, (post.repostsCount || 0) + (next ? 1 : -1)) });
     } catch (e: any) { alert('Failed to update repost: ' + (e?.message || 'Permission denied')); }
     finally { setIsReposting(false); }
+  };
+
+  const handleShare = async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share) await navigator.share({ title: post?.title || 'OFFSCRPT post', text: post?.content?.slice(0, 140) || '', url });
+      else { await navigator.clipboard.writeText(url); alert('Link copied.'); }
+    } catch (e) { if ((e as any)?.name !== 'AbortError') { try { await navigator.clipboard.writeText(url); alert('Link copied.'); } catch {} } }
+  };
+
+  const openEdit = () => { if (!post) return; setEditTitle(post.title); setEditContent(post.content); setIsEditing(true); };
+  const saveEdit = async () => {
+    if (!post || !editTitle.trim() || !editContent.trim()) return;
+    setIsSavingEdit(true);
+    try { await updatePost(post.id, { title: editTitle.trim(), content: editContent.trim() }); setPost({ ...post, title: editTitle.trim(), content: editContent.trim(), editedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setIsEditing(false); }
+    catch (e: any) { alert('Failed to edit post: ' + (e?.message || 'Permission denied')); } finally { setIsSavingEdit(false); }
+  };
+
+  const handleQuoteRepost = async () => {
+    if (!userAuth) { await loginWithGoogle(); return; }
+    if (!profile || !quoteText.trim() || !post) return;
+    try {
+      const { quoteRepost } = await import('../lib/community');
+      const created = await quoteRepost(post.id, profile, quoteText);
+      setQuoteText(''); setIsQuoteOpen(false);
+      onNavigate('community_post', created.id);
+    } catch (e: any) { alert('Failed to quote repost: ' + (e?.message || 'Permission denied')); }
   };
 
   const handleToggleSave = () => {
@@ -249,7 +282,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
               <span className="inline-flex items-center gap-1">{post.authorName || `@${post.authorUsername}`}<VerifiedBadge verified={post.isVerified} color={post.verificationColor} className="w-4 h-4" /></span>
             </button>
             <div className="font-mono text-xs text-neutral-500">
-              @{post.authorUsername} &bull; {formatDisplayDate(post.createdAt)}
+              @{post.authorUsername} &bull; {formatDisplayDate(post.createdAt)}{post.editedAt ? ' • edited' : ''}
             </div>
           </div>
         </div>
@@ -276,6 +309,9 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
             </button>
           </div>
           <button onClick={handleToggleRepost} disabled={isReposting} className={`px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 sm:gap-2 shrink-0 ${isReposted ? 'bg-[var(--color-primary)]' : 'bg-white'}`}><Repeat2 className="w-4 h-4" />{isReposted ? 'REPOSTED' : 'REPOST'} ({post.repostsCount || 0})</button>
+          <button onClick={() => setIsQuoteOpen(true)} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100"><Repeat2 className="w-4 h-4" />QUOTE</button>
+          <button onClick={handleShare} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100"><Share2 className="w-4 h-4" />SHARE</button>
+          {activeUser?.uid === post.authorId && <button onClick={openEdit} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100"><Pencil className="w-4 h-4" />EDIT</button>}
           <button 
             onClick={handleToggleSave}
             className={`flex items-center space-x-2 font-mono text-xs sm:text-sm font-bold uppercase px-3 sm:px-4 py-2 border-2 border-black shrink-0 transition-colors ${effectiveIsSaved ? 'bg-[var(--color-secondary)]' : 'hover:bg-neutral-100'}`}
@@ -361,6 +397,26 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           ))}
         </div>
       </div>
+      {isEditing && (
+        <div className="fixed inset-0 z-[80] bg-black/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-white border-4 border-black neo-shadow-lg p-6">
+            <div className="flex justify-between items-center mb-5"><h3 className="font-display font-black text-xl uppercase">Edit Post</h3><button onClick={() => setIsEditing(false)}><X /></button></div>
+            <input value={editTitle} onChange={e => setEditTitle(e.target.value)} className="w-full border-2 border-black p-3 mb-3 font-bold" maxLength={256}/>
+            <textarea value={editContent} onChange={e => setEditContent(e.target.value)} className="w-full border-2 border-black p-3 min-h-[220px]"/>
+            <button disabled={isSavingEdit} onClick={saveEdit} className="mt-4 px-5 py-3 bg-[var(--color-primary)] border-2 border-black font-black uppercase">{isSavingEdit ? 'Saving...' : 'Save Changes'}</button>
+          </div>
+        </div>
+      )}
+      {isQuoteOpen && (
+        <div className="fixed inset-0 z-[80] bg-black/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-white border-4 border-black neo-shadow-lg p-6">
+            <div className="flex justify-between items-center mb-5"><h3 className="font-display font-black text-xl uppercase">Quote Repost</h3><button onClick={() => setIsQuoteOpen(false)}><X /></button></div>
+            <textarea value={quoteText} onChange={e => setQuoteText(e.target.value)} placeholder="Add your take..." className="w-full border-2 border-black p-3 min-h-[150px]" maxLength={2000}/>
+            <div className="mt-3 border-2 border-neutral-300 p-3 text-sm"><b>{post.title}</b><div className="text-neutral-600 mt-1 line-clamp-3">{post.content}</div></div>
+            <button disabled={!quoteText.trim()} onClick={handleQuoteRepost} className="mt-4 px-5 py-3 bg-[var(--color-secondary)] border-2 border-black font-black uppercase disabled:opacity-50">Publish Quote</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

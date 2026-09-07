@@ -19,7 +19,8 @@ import {
   ShieldAlert,
   Settings,
   Plus,
-  Smartphone
+  Smartphone,
+  Bell
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -95,6 +96,7 @@ export const Header: React.FC<HeaderProps> = ({
     { label: 'Blog', page: 'blog', icon: BookOpen },
     { label: 'Community', page: 'community', icon: Users },
     { label: 'Saved', page: 'saved', count: savedCount, icon: Bookmark },
+    { label: 'Notifications', page: 'notifications', icon: Bell },
   ];
 
   const secondaryNavLinks = [

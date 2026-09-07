@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost } from '../types';
-import { createPost } from '../lib/community';
+import { createPost, getCommunityDraft, saveCommunityDraft, clearCommunityDraft } from '../lib/community';
 import { X, Send, Loader2, BookOpen, MessageSquare, AtSign, Info } from 'lucide-react';
 
 interface CommunityEditorProps {
@@ -21,6 +21,27 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
   const [content, setContent] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [draftLoaded, setDraftLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getCommunityDraft(profile.uid).then(draft => {
+      if (!cancelled && draft) {
+        setType(draft.type || defaultType);
+        setTitle(draft.title || '');
+        setContent(draft.content || '');
+      }
+    }).catch(() => {}).finally(() => { if (!cancelled) setDraftLoaded(true); });
+    return () => { cancelled = true; };
+  }, [profile.uid, defaultType]);
+
+  useEffect(() => {
+    if (!draftLoaded || (!title.trim() && !content.trim())) return;
+    const timer = window.setTimeout(() => {
+      saveCommunityDraft(profile.uid, { type, title, content }).catch(() => {});
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [draftLoaded, profile.uid, type, title, content]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,6 +64,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
         isVerified: !!profile.isVerified,
         verificationColor: profile.verificationColor || '#2196F3'
       });
+      await clearCommunityDraft(profile.uid).catch(() => {});
       onPublished(post);
     } catch (error) {
       console.error(error);

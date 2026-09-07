@@ -26,6 +26,7 @@ import { CommunityView } from './components/CommunityView';
 import { CommunityPostView } from './components/CommunityPostView';
 import { CommunityProfileView } from './components/CommunityProfileView';
 import { SavedView } from './components/SavedView';
+import { NotificationsView } from './components/NotificationsView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
@@ -202,14 +203,12 @@ export default function App() {
     siteConfig.themeSuccessColor
   ]);
 
-  // Keep all browser/PWA branding synchronized with the cloud-managed logo.
-  // Global Settings -> Logo Image URL is the single source of truth.
+  // Keep the browser favicon synchronized with the cloud-managed site logo.
   useEffect(() => {
-    const fallbackLogo = 'https://i.postimg.cc/kMf3D3cS/Screenshot-2026-09-07-142924.png';
-    const logoUrl = siteConfig.logoImageUrl?.trim() || fallbackLogo;
+    const fallbackFavicon = 'https://i.postimg.cc/kMf3D3cS/Screenshot-2026-09-07-142924.png';
+    const logoUrl = siteConfig.logoImageUrl?.trim() || fallbackFavicon;
     const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
 
-    // Browser favicon.
     let favicon = document.querySelector<HTMLLinkElement>('link#site-favicon');
     if (!favicon) {
       favicon = document.createElement('link');
@@ -220,56 +219,37 @@ export default function App() {
     }
     favicon.href = logoUrl;
 
-    // iOS home-screen icon.
-    let appleIcon = document.querySelector<HTMLLinkElement>('link#site-apple-touch-icon');
-    if (!appleIcon) {
-      appleIcon = document.createElement('link');
-      appleIcon.id = 'site-apple-touch-icon';
-      appleIcon.rel = 'apple-touch-icon';
-      document.head.appendChild(appleIcon);
+    // Keep PWA/home-screen metadata synchronized with the CMS-managed logo.
+    const appleIcon = document.querySelector<HTMLLinkElement>('link#site-apple-touch-icon');
+    if (appleIcon) appleIcon.href = logoUrl;
+
+    const manifestLink = document.querySelector<HTMLLinkElement>('link#site-manifest');
+    if (manifestLink) {
+      const manifest = {
+        name: brandName,
+        short_name: brandName,
+        description: siteConfig.metaDescription || 'Independent technology publication for builders.',
+        start_url: '/#home',
+        scope: '/',
+        display: 'standalone',
+        background_color: '#ffffff',
+        theme_color: siteConfig.themePrimaryColor || '#FFD600',
+        orientation: 'portrait-primary',
+        icons: [
+          { src: logoUrl, sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: logoUrl, sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+        ]
+      };
+      const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+      const objectUrl = URL.createObjectURL(blob);
+      manifestLink.href = objectUrl;
+      manifestLink.dataset.dynamicManifest = objectUrl;
     }
-    appleIcon.href = logoUrl;
-
-    // Keep the static manifest as the installability fallback, but replace its
-    // icon URLs at runtime so a newly saved Global Settings logo is used for
-    // subsequent PWA installs without requiring a new deployment.
-    let manifestLink = document.querySelector<HTMLLinkElement>('link#site-manifest');
-    if (!manifestLink) {
-      manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
-      if (manifestLink) manifestLink.id = 'site-manifest';
-    }
-
-    const updateManifest = async () => {
-      if (!manifestLink) return;
-      try {
-        const response = await fetch(`/manifest.webmanifest?v=${encodeURIComponent(logoUrl)}`, { cache: 'no-store' });
-        if (!response.ok) return;
-        const manifest = await response.json();
-        manifest.name = brandName;
-        manifest.short_name = brandName;
-        manifest.theme_color = siteConfig.themePrimaryColor || manifest.theme_color || '#FFD600';
-        manifest.icons = (manifest.icons || []).map((icon: Record<string, unknown>) => ({ ...icon, src: logoUrl }));
-
-        const blobUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
-        const previous = manifestLink.dataset.dynamicUrl;
-        manifestLink.href = blobUrl;
-        manifestLink.dataset.dynamicUrl = blobUrl;
-        if (previous) URL.revokeObjectURL(previous);
-      } catch (error) {
-        console.warn('Failed to synchronize PWA manifest logo:', error);
-      }
-    };
-
-    void updateManifest();
 
     document.title = `${brandName} — Tech Publication for Builders`;
+
     const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (themeMeta) themeMeta.content = siteConfig.themePrimaryColor || '#FFD600';
-
-    return () => {
-      const current = manifestLink?.dataset.dynamicUrl;
-      if (current) URL.revokeObjectURL(current);
-    };
   }, [siteConfig.logoImageUrl, siteConfig.logoPart1, siteConfig.logoPart2, siteConfig.themePrimaryColor]);
 
   // URL Hash Sync for standard navigation & browser back button support
@@ -297,6 +277,9 @@ export default function App() {
         setActiveArticleSlug(null);
       } else if (hash === 'saved') {
         setCurrentPage('saved');
+        setActiveArticleSlug(null);
+      } else if (hash === 'notifications') {
+        setCurrentPage('notifications');
         setActiveArticleSlug(null);
       } else if (hash === 'community') {
         setCurrentPage('community');
@@ -564,6 +547,10 @@ export default function App() {
                 userProfile={userProfile}
                 siteConfig={siteConfig}
               />
+            )}
+
+            {currentPage === 'notifications' && (
+              <NotificationsView userProfile={userProfile} onNavigate={navigateTo} />
             )}
 
             {currentPage === 'community' && (
