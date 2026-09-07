@@ -25,7 +25,7 @@ import {
 import { ArticleCard } from './ArticleCard';
 import { CommentsSection } from './CommentsSection';
 import { auth, loginWithGoogle } from '../lib/firebase';
-import { getArticleLikeStatus, toggleArticleLike } from '../lib/community';
+import { getArticleLikeStatus, toggleArticleLike, getPost, getCommunityProfile } from '../lib/community';
 import { recordArticleView, ARTICLE_REACTIONS, getArticleReaction, setArticleReaction, getSeriesArticles } from '../lib/cms';
 import type { ArticleReaction } from '../lib/cms';
 import { useAuthState } from 'react-firebase-hooks/auth';
@@ -61,11 +61,46 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [reaction, setReaction] = useState<ArticleReaction|null>(null);
   const [reactionBusy, setReactionBusy] = useState(false);
   const [seriesArticles, setSeriesArticles] = useState<Article[]>([]);
+  const [resolvedOriginalAuthor, setResolvedOriginalAuthor] = useState<any>(article.originalAuthor || article.author);
 
   useEffect(() => { void recordArticleView(article.slug, user?.uid); }, [article.slug, user?.uid]);
 
   useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
   useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
+  useEffect(() => {
+    let active = true;
+    const resolve = async () => {
+      const fallback = article.originalAuthor || article.author;
+      if (!article.sourcePostId) { if (active) setResolvedOriginalAuthor(fallback); return; }
+      try {
+        let post:any = null;
+        if ((article as any).sourceCommunityId) {
+          const { doc, getDoc } = await import('firebase/firestore');
+          const { db } = await import('../lib/firebase');
+          const snap = await getDoc(doc(db, 'communities', (article as any).sourceCommunityId, 'posts', article.sourcePostId));
+          post = snap.exists() ? { ...snap.data(), id: snap.id } : null;
+        } else {
+          post = await getPost(article.sourcePostId);
+        }
+        if (!post?.authorId) { if (active) setResolvedOriginalAuthor(fallback); return; }
+        let profile:any = null;
+        try { profile = await getCommunityProfile(post.authorId); } catch {}
+        if (active) setResolvedOriginalAuthor({
+          ...fallback,
+          uid: post.authorId,
+          username: profile?.username || post.authorUsername || fallback.username,
+          name: profile?.displayName || post.authorName || fallback.name,
+          avatar: profile?.photoUrl || post.authorAvatar || fallback.avatar,
+          bio: profile?.bio || fallback.bio,
+          isVerified: !!(profile?.isVerified ?? post.isVerified ?? fallback.isVerified),
+          verificationColor: profile?.verificationColor || post.verificationColor || fallback.verificationColor
+        });
+      } catch { if (active) setResolvedOriginalAuthor(fallback); }
+    };
+    void resolve();
+    return () => { active = false; };
+  }, [article.slug, article.sourcePostId, (article as any).sourceCommunityId, article.originalAuthor, article.author]);
+
 
   // Check if current user has liked this article in Firestore
   useEffect(() => {
@@ -231,22 +266,18 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Author Metadata Strip */}
         <div className="p-4 bg-white neo-border neo-shadow mb-10 flex flex-wrap items-center justify-between gap-4">
-          <button type="button" onClick={() => { const u = article.author.username || siteConfig.authorProfileUsername; if (u && onOpenAuthorProfile) onOpenAuthorProfile(u); }} className="flex items-center space-x-3.5 text-left">
+          <button type="button" onClick={() => { const u = resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername; if (u && onOpenAuthorProfile) onOpenAuthorProfile(u); }} className="flex items-center space-x-3.5 text-left">
             <img
-              src={article.author.avatar}
-              alt={article.author.name}
+              src={resolvedOriginalAuthor?.avatar || article.author.avatar}
+              alt={resolvedOriginalAuthor?.name || article.author.name}
               className="w-12 h-12 neo-border-2 object-cover"
             />
             <div>
               <div className="font-display font-black text-base text-black flex items-center space-x-1.5">
-                <span className="inline-flex items-center gap-1">{article.author.name}<VerifiedBadge verified={article.author.isVerified} color={article.author.verificationColor} className="w-4 h-4" /></span>
-                <span className="text-[11px] font-mono font-bold bg-[var(--color-success)] text-black px-1.5 py-0.2 border-2 border-black">
-                  AUTHOR
-                </span>
+                <span className="inline-flex items-center gap-1">{resolvedOriginalAuthor?.name || article.author.name}<VerifiedBadge verified={resolvedOriginalAuthor?.isVerified ?? article.author.isVerified} color={resolvedOriginalAuthor?.verificationColor || article.author.verificationColor} className="w-4 h-4" /></span>
+                <span className="text-[11px] font-mono font-bold bg-[var(--color-success)] text-black px-1.5 py-0.2 border-2 border-black">AUTHOR</span>
               </div>
-              <div className="font-mono text-xs text-neutral-500">
-                {article.author.role}
-              </div>
+              <div className="font-mono text-xs text-neutral-500">@{resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername}</div>
             </div>
           </button>
 
@@ -267,7 +298,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           <div className="mb-8 border-2 border-black bg-[var(--color-primary)] p-3 font-mono text-xs flex flex-wrap items-center gap-2">
             <span>REPUBLISHED BY</span>
             {article.republishedBy.avatar && <img src={article.republishedBy.avatar} alt="" className="w-6 h-6 border-2 border-black object-cover" />}
-            <strong>@{article.republishedBy.username || 'krishsarkar'}</strong>
+            <button type="button" onClick={() => { const u = article.republishedBy?.username; if (u && onOpenAuthorProfile) onOpenAuthorProfile(u); }} className="font-black underline">@{article.republishedBy.username || 'krishsarkar'}</button>
             <span>with credit to the original creator</span>
           </div>
         )}

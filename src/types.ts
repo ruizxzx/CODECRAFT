@@ -41,6 +41,7 @@ export interface Article {
   reactionCounts?: Record<string, number>;
   viewsCount?: number;
   republishedBy?: { uid?: string; username?: string; name?: string; avatar?: string };
+  originalAuthor?: { uid?: string; username?: string; name?: string; avatar?: string; bio?: string; role?: string; isVerified?: boolean; verificationColor?: string };
   sourcePostId?: string;
   origin?: 'admin' | 'community_blog' | 'community_post';
   promotedToArticleSlug?: string;

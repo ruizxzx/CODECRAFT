@@ -18,7 +18,7 @@ import {
   increment
 } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
-import { deletePost } from './community';
+import { deletePost, getCommunityProfile, getPost } from './community';
 import { Article, SiteConfig, BentoLink, ArticleComment, CommunityPost } from '../types';
 import { INITIAL_ARTICLES } from '../data/articles';
 
@@ -327,6 +327,46 @@ function mergeArticlesWithInitial(cloudArticles: Article[], deletedSlugs: Set<st
   return [...cloudArticles, ...fallbackOnly];
 }
 
+async function hydrateArticleOriginalAuthor(article: Article): Promise<Article> {
+  if (!article.sourcePostId || article.origin !== 'community_blog') return article;
+  const fallback:any = article.originalAuthor || article.author;
+  try {
+    let post:any = null;
+    if ((article as any).sourceCommunityId) {
+      post = await getDoc(doc(db, 'communities', (article as any).sourceCommunityId, 'posts', article.sourcePostId));
+      post = post.exists() ? { ...post.data(), id: post.id } : null;
+    } else {
+      post = await getPost(article.sourcePostId);
+    }
+    if (!post?.authorId) return article;
+    let profile:any = null;
+    try { profile = await getCommunityProfile(post.authorId); } catch {}
+    const originalAuthor = {
+      ...fallback,
+      uid: post.authorId,
+      username: profile?.username || post.authorUsername || fallback?.username,
+      name: profile?.displayName || post.authorName || fallback?.name,
+      avatar: profile?.photoUrl || post.authorAvatar || fallback?.avatar,
+      bio: profile?.bio || fallback?.bio || '',
+      role: profile?.isVerified ? 'Verified Creator' : (fallback?.role || 'Creator'),
+      isVerified: !!(profile?.isVerified ?? post.isVerified ?? fallback?.isVerified),
+      verificationColor: profile?.verificationColor || post.verificationColor || fallback?.verificationColor
+    };
+    return { ...article, author: originalAuthor as any, originalAuthor };
+  } catch (e) {
+    console.warn('Could not hydrate original article creator:', e);
+    return article;
+  }
+}
+
+async function hydrateArticleAuthors(articles: Article[]): Promise<Article[]> {
+  const candidates = articles.filter(a => !!a.sourcePostId && a.origin === 'community_blog');
+  if (!candidates.length) return articles;
+  const hydrated = await Promise.all(candidates.map(hydrateArticleOriginalAuthor));
+  const bySlug = new Map(hydrated.map(a => [a.slug, a]));
+  return articles.map(a => bySlug.get(a.slug) || a);
+}
+
 export function subscribeArticles(callback: (articles: Article[]) => void): () => void {
   const articlesRef = collection(db, 'articles');
   return onSnapshot(articlesRef, async (snap) => {
@@ -342,7 +382,7 @@ export function subscribeArticles(callback: (articles: Article[]) => void): () =
       }).filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
       // Sort by publishedAt desc
       cloudArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-      callback(mergeArticlesWithInitial(cloudArticles, deletedSlugs));
+      hydrateArticleAuthors(cloudArticles).then(hydrated => callback(mergeArticlesWithInitial(hydrated, deletedSlugs))).catch(() => callback(mergeArticlesWithInitial(cloudArticles, deletedSlugs)));
     } else {
       const fallback = INITIAL_ARTICLES.filter(a => !deletedSlugs.has(a.slug));
       callback(fallback);
@@ -356,8 +396,9 @@ export function subscribeArticles(callback: (articles: Article[]) => void): () =
 export async function fetchAllArticlesForAdmin(): Promise<Article[]> {
   if (!checkIsAdmin(auth.currentUser?.email)) throw new Error('Master admin access required.');
   const snap = await getDocs(collection(db, 'articles'));
-  return snap.docs.map(d => ({ ...d.data(), id: (d.data() as any).id || d.id, slug: (d.data() as any).slug || d.id } as Article))
-    .sort((a,b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime());
+  const articles = snap.docs.map(d => ({ ...d.data(), id: (d.data() as any).id || d.id, slug: (d.data() as any).slug || d.id } as Article));
+  const hydrated = await hydrateArticleAuthors(articles);
+  return hydrated.sort((a,b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime());
 }
 
 export async function fetchArticles(): Promise<{ articles: Article[]; source: 'firestore' | 'fallback' }> {
@@ -374,8 +415,9 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
         } as Article;
       }).filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
       cloudArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+      const hydrated = await hydrateArticleAuthors(cloudArticles);
       return {
-        articles: mergeArticlesWithInitial(cloudArticles, deletedSlugs),
+        articles: mergeArticlesWithInitial(hydrated, deletedSlugs),
         source: 'firestore'
       };
     }
@@ -472,26 +514,45 @@ export async function saveArticle(article: Article): Promise<Article> {
   return article;
 }
 
+async function resolveOriginalCreatorForPromotion(post: CommunityPost) {
+  let profile:any = null;
+  try { profile = post.authorId ? await getCommunityProfile(post.authorId) : null; } catch {}
+  const username = profile?.username || post.authorUsername || 'creator';
+  const name = profile?.displayName || post.authorName || username;
+  const avatar = profile?.photoUrl || post.authorAvatar || '';
+  return {
+    uid: post.authorId,
+    username,
+    name,
+    avatar,
+    bio: profile?.bio || '',
+    role: profile?.isVerified ? 'Verified Creator' : 'Creator',
+    isVerified: !!(profile?.isVerified ?? post.isVerified),
+    verificationColor: profile?.verificationColor || post.verificationColor
+  };
+}
+
 export async function promoteCommunityBlogToMain(post: CommunityPost, collaborateAsEditor = true): Promise<Article> {
   if (!checkIsAdmin(auth.currentUser?.email)) throw new Error('Master admin access required.');
   if (post.type !== 'blog') throw new Error('Only a community blog can be promoted to the main publication.');
+  const originalAuthor = await resolveOriginalCreatorForPromotion(post);
   const baseSlug = String(post.title || 'community-blog').toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,70) || 'community-blog';
   let slug = `community-${baseSlug}`;
   let n = 2;
+  const blocks = Array.isArray(post.contentBlocks) && post.contentBlocks.length
+    ? post.contentBlocks.map((b:any)=>({...b}))
+    : [{type:'paragraph' as const, content:post.content}];
   // Re-publishing an existing source restores the same main article instead of creating duplicates.
   const existingSource = (await getDocs(query(collection(db,'articles'), where('sourcePostId','==',post.id), limit(10)))).docs.find(d => (d.data() as any).sourcePostId === post.id);
   if (existingSource) {
     slug = existingSource.id;
     const existingArticle = existingSource.data() as any;
-    const restored = { ...existingArticle, id: existingSource.id, slug: existingSource.id, title: post.title, excerpt: post.excerpt || post.content.slice(0,240), coverImage: post.coverImage || '', coverImageAlt: post.coverImageAlt || post.title, category: post.category || 'Community', tags: Array.isArray(post.tags) ? post.tags : [], content: blocks, author: { name: post.authorName, role: 'Community Creator', avatar: post.authorAvatar, uid: post.authorId, username: post.authorUsername, isVerified: !!post.isVerified, verificationColor: post.verificationColor }, sourcePostId: post.id, sourceCommunityId: (post as any).communityId || undefined, isPublished: true, mainPublicationStatus: 'published', updatedAt: serverTimestamp() };
+    const restored = { ...existingArticle, id: existingSource.id, slug: existingSource.id, title: post.title, excerpt: post.excerpt || post.content.slice(0,240), coverImage: post.coverImage || '', coverImageAlt: post.coverImageAlt || post.title, category: post.category || 'Community', tags: Array.isArray(post.tags) ? post.tags : [], content: blocks, author: originalAuthor, originalAuthor, sourcePostId: post.id, sourceCommunityId: (post as any).communityId || undefined, isPublished: true, mainPublicationStatus: 'published', updatedAt: serverTimestamp() };
     await setDoc(existingSource.ref, stripUndefinedDeep(restored), { merge: true });
     try { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: slug, mainPublicationStatus: 'published', updatedAt: serverTimestamp() }); } catch {}
     return { ...existingArticle, id: slug, slug, isPublished: true, mainPublicationStatus: 'published' } as Article;
   }
   while ((await getDoc(doc(db,'articles',slug))).exists()) slug = `community-${baseSlug}-${n++}`;
-  const blocks = Array.isArray(post.contentBlocks) && post.contentBlocks.length
-    ? post.contentBlocks.map((b:any)=>({...b}))
-    : [{type:'paragraph' as const, content:post.content}];
   const article: Article = {
     id: slug,
     slug,
@@ -511,20 +572,13 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
     mainPublicationStatus: 'published',
     sourcePostId: post.id,
     sourceCommunityId: (post as any).communityId || undefined,
-    collaborators: collaborateAsEditor ? [{uid:post.authorId,username:post.authorUsername,name:post.authorName,role:'Original Creator'}] : [],
+    collaborators: collaborateAsEditor ? [{uid:originalAuthor.uid,username:originalAuthor.username,name:originalAuthor.name,role:'Original Creator'}] : [],
+    originalAuthor,
     republishedBy: {uid: auth.currentUser?.uid || '', username: 'krishsarkar', name: 'Krish', avatar: auth.currentUser?.photoURL || DEFAULT_SITE_CONFIG.authorAvatarUrl},
     seriesId: (post as any).seriesId || undefined,
     seriesName: (post as any).seriesName || undefined,
     seriesOrder: (post as any).seriesOrder || undefined,
-    author: {
-      name: post.authorName,
-      role: 'Community Creator',
-      avatar: post.authorAvatar,
-      uid: post.authorId,
-      username: post.authorUsername,
-      isVerified: !!post.isVerified,
-      verificationColor: post.verificationColor
-    },
+    author: originalAuthor,
     content: blocks
   } as Article;
   const saved = await saveArticle(article);
