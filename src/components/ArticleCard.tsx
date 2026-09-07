@@ -76,7 +76,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
               <div className="flex items-center space-x-3">
                 <span className="flex items-center space-x-1">
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>{article.publishedAt}</span>
+                  <span>{article.publishedAt}</span>{article.editedAt && <><span>•</span><span className="font-black">EDITED{article.sourceEditPendingApproval ? " · REVIEW PENDING" : ""}</span></>}
                 </span>
                 <span>•</span>
                 <span className="flex items-center space-x-1">
@@ -201,7 +201,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
         {/* Card Content */}
         <div className="p-5">
           <div className="flex items-center space-x-2 text-xs font-mono font-semibold text-neutral-500 mb-2.5">
-            <span>{article.publishedAt}</span>
+            <span>{article.publishedAt}</span>{article.editedAt && <><span>•</span><span className="font-black">EDITED{article.sourceEditPendingApproval ? " · REVIEW PENDING" : ""}</span></>}
             <span>•</span>
             <span>{article.readingTimeMinutes} min read</span>
           </div>

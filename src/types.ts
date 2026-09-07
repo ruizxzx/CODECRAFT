@@ -49,6 +49,10 @@ export interface Article {
   mainPublicationStatus?: 'published' | 'unpublished';
   promotedAt?: string;
   promotedBy?: string;
+  editedAt?: string;
+  sourceEditPendingApproval?: boolean;
+  sourceEditApprovedAt?: string;
+  sourceEditApprovedBy?: string;
   author: {
     name: string;
     role: string;
@@ -195,6 +199,9 @@ export interface CommunityPost {
   mainPublicationStatus?: 'published' | 'unpublished';
   promotedAt?: string;
   promotedBy?: string;
+  editedAt?: string;
+  sourceEditPendingApproval?: boolean;
+  sourceEditApprovedBy?: string;
   clapsCount?: number; // legacy
   upvotesCount: number;
   downvotesCount: number;

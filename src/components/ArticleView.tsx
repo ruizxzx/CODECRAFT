@@ -303,6 +303,24 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           </div>
         </div>
 
+        {article.editedAt && article.sourceEditPendingApproval && (
+          <div className="mb-8 border-4 border-black bg-yellow-300 p-4 font-mono text-xs font-bold">
+            EDITED BY @{resolvedOriginalAuthor?.username || article.originalAuthor?.username || 'creator'} · {article.editedAt}. This republished article reflects a creator edit that has not yet been re-approved by OFFSCRPT administration. Verify this updated version before relying on it.
+          </div>
+        )}
+        {article.editedAt && !article.sourceEditPendingApproval && (
+          <div className="mb-6 border-2 border-black bg-neutral-100 p-2 font-mono text-[10px] font-bold">EDITED BY @{resolvedOriginalAuthor?.username || article.originalAuthor?.username || 'creator'} · {article.editedAt}</div>
+        )}
+
+        {article.editedAt && article.sourceEditPendingApproval && (
+          <div className="mb-8 border-4 border-black bg-yellow-300 p-4 font-mono text-xs font-bold">
+            EDITED BY @{resolvedOriginalAuthor?.username || article.originalAuthor?.username || 'creator'} · {article.editedAt}. This republished article reflects an edit made by the original creator that has not yet been re-approved by OFFSCRPT administration. Verify this updated version before relying on it.
+          </div>
+        )}
+        {article.editedAt && !article.sourceEditPendingApproval && (
+          <div className="mb-6 border-2 border-black bg-neutral-100 p-2 font-mono text-[10px] font-bold">EDITED BY @{resolvedOriginalAuthor?.username || article.originalAuthor?.username || 'creator'} · {article.editedAt}</div>
+        )}
+
         {article.republishedBy && (
           <div className="mb-8 border-2 border-black bg-[var(--color-primary)] p-3 font-mono text-xs flex flex-wrap items-center gap-2">
             <span>REPUBLISHED BY</span>

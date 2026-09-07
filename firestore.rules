@@ -383,7 +383,7 @@ service cloud.firestore {
         && (
           isAdmin()
           || isPlatformModerator()
-          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'editedAt', 'updatedAt']))
+          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'editedAt', 'updatedAt', 'sourceEditPendingApproval', 'sourceEditApprovedAt', 'sourceEditApprovedBy']))
           || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'isVerified', 'verificationColor', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
@@ -489,7 +489,16 @@ service cloud.firestore {
 
     match /articles/{slug} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isSignedIn()
+        && existing().sourcePostId is string
+        && (
+          (existing().sourceCommunityId is string && get(/databases/$(database)/documents/communities/$(existing().sourceCommunityId)/posts/$(existing().sourcePostId)).data.authorId == request.auth.uid)
+          || (existing().get('sourceCommunityId','') == '' && get(/databases/$(database)/documents/posts/$(existing().sourcePostId)).data.authorId == request.auth.uid)
+        )
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title','content','excerpt','coverImage','coverImageAlt','coverImageCaption','category','tags','readingTimeMinutes','contentBlocks','seriesId','seriesName','seriesOrder','editedAt','sourceEditPendingApproval','sourceEditApprovedAt','sourceEditApprovedBy','updatedAt'])
+      );
 
       match /reactions/{userId} {
         allow read: if true;

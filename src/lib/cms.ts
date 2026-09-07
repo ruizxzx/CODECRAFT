@@ -547,7 +547,7 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
   if (existingSource) {
     slug = existingSource.id;
     const existingArticle = existingSource.data() as any;
-    const restored = { ...existingArticle, id: existingSource.id, slug: existingSource.id, title: post.title, excerpt: post.excerpt || post.content.slice(0,240), coverImage: post.coverImage || '', coverImageAlt: post.coverImageAlt || post.title, category: post.category || 'Community', tags: Array.isArray(post.tags) ? post.tags : [], content: blocks, author: originalAuthor, originalAuthor, sourcePostId: post.id, sourceCommunityId: (post as any).communityId || undefined, isPublished: true, mainPublicationStatus: 'published', updatedAt: serverTimestamp() };
+    const restored = { ...existingArticle, id: existingSource.id, slug: existingSource.id, title: post.title, excerpt: post.excerpt || post.content.slice(0,240), coverImage: post.coverImage || '', coverImageAlt: post.coverImageAlt || post.title, category: post.category || 'Community', tags: Array.isArray(post.tags) ? post.tags : [], content: blocks, author: originalAuthor, originalAuthor, sourcePostId: post.id, sourceCommunityId: (post as any).communityId || undefined, isPublished: true, mainPublicationStatus: 'published', sourceEditPendingApproval: false, updatedAt: serverTimestamp() };
     await setDoc(existingSource.ref, stripUndefinedDeep(restored), { merge: true });
     try { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: slug, mainPublicationStatus: 'published', updatedAt: serverTimestamp() }); } catch {}
     return { ...existingArticle, id: slug, slug, isPublished: true, mainPublicationStatus: 'published' } as Article;
@@ -570,6 +570,7 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
     origin: 'community_blog',
     isPublished: true,
     mainPublicationStatus: 'published',
+    sourceEditPendingApproval: false,
     sourcePostId: post.id,
     sourceCommunityId: (post as any).communityId || undefined,
     collaborators: collaborateAsEditor ? [{uid:originalAuthor.uid,username:originalAuthor.username,name:originalAuthor.name,role:'Original Creator'}] : [],
@@ -584,6 +585,32 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
   const saved = await saveArticle(article);
   { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: saved.slug, promotedAt: serverTimestamp(), promotedBy: auth.currentUser?.uid || '', updatedAt: serverTimestamp() }); }
   return saved;
+}
+
+
+export async function approveArticleSourceEdit(article: Article): Promise<Article> {
+  const admin = auth.currentUser;
+  if (!admin || !checkIsAdmin(admin.email)) throw new Error('Master admin access required.');
+  if (!article.slug || !article.sourcePostId) throw new Error('This article is not linked to a creator post.');
+  const articleRef = doc(db, 'articles', article.slug);
+  await updateDoc(articleRef, {
+    sourceEditPendingApproval: false,
+    sourceEditApprovedAt: serverTimestamp(),
+    sourceEditApprovedBy: admin.uid,
+    updatedAt: serverTimestamp(),
+  });
+  try {
+    const sourceRef = (article as any).sourceCommunityId
+      ? doc(db, 'communities', (article as any).sourceCommunityId, 'posts', article.sourcePostId)
+      : doc(db, 'posts', article.sourcePostId);
+    await updateDoc(sourceRef, {
+      sourceEditPendingApproval: false,
+      sourceEditApprovedAt: serverTimestamp(),
+      sourceEditApprovedBy: admin.uid,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (e) { console.warn('Could not sync source approval flag:', e); }
+  return ({ ...article, sourceEditPendingApproval: false, sourceEditApprovedBy: admin.uid } as Article);
 }
 
 export async function unpublishMainArticle(article: Article): Promise<void> {
