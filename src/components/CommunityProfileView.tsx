@@ -7,7 +7,7 @@ import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
 import { syncUserIdentityAcrossContent } from '../lib/community';
 import { formatDisplayDate } from '../lib/dateUtils';
-import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText, Camera, Link as LinkIcon, MapPin, Search as SearchIcon } from 'lucide-react';
+import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText, Camera, Link as LinkIcon, MapPin, Search as SearchIcon, Shield } from 'lucide-react';
 
 interface CommunityProfileViewProps {
   username: string;
@@ -205,13 +205,14 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     if (!activeUser || (!isAdmin && activeUser.uid !== profile?.uid)) return;
     if (!confirm('Are you sure you want to permanently delete this post?')) return;
     try {
-      await deletePost(postId);
-      setPosts(prev => prev.filter(p => p.id !== postId));
+      const target:any = posts.find((p:any)=>p.id===postId);
+      if(target?.sourceType==='community' && target.communityId){ const {deleteCommunityPost}=await import('../lib/social'); await deleteCommunityPost(target.communityId,postId,activeUser.uid); } else { await deletePost(postId); }
+      setPosts(prev => prev.filter((p:any) => !(p.id === postId && ((p as any).communityId||'') === ((target as any)?.communityId||''))));
     } catch (err: any) { alert('Failed to delete post: ' + (err?.message || 'Permission denied')); }
   };
 
   const renderPost = (post: CommunityPost, label?: string) => (
-    <div key={post.id} onClick={() => onNavigate('community_post', post.id)} className="bg-white border-4 border-black p-5 cursor-pointer neo-shadow-sm hover:-translate-y-1 hover:neo-shadow transition-all group">
+    <div key={`${(post as any).sourceType || 'root'}:${(post as any).communityId || ''}:${post.id}`} onClick={() => (post as any).sourceType==='community' ? onNavigate('social') : onNavigate('community_post', post.id)} className="bg-white border-4 border-black p-5 cursor-pointer neo-shadow-sm hover:-translate-y-1 hover:neo-shadow transition-all group">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="inline-block px-2 py-0.5 bg-[var(--color-secondary)] border border-black font-mono text-[10px] font-black uppercase">{label || post.type}</div>
@@ -223,12 +224,12 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       </div>
       <div className="flex items-center gap-2 mb-1">
         {post.authorAvatar ? <img src={post.authorAvatar} alt="" className="w-6 h-6 rounded-full border-2 border-black object-cover" /> : <div className="w-6 h-6 rounded-full bg-neutral-200 border-2 border-black" />}
-        <span className="font-mono text-[10px] font-bold uppercase inline-flex items-center gap-1">@{post.authorUsername}<VerifiedBadge verified={post.authorId === profile.uid ? profile.isVerified : post.isVerified} color={post.authorId === profile.uid ? profile.verificationColor : post.verificationColor} className="w-3.5 h-3.5" /></span>
+        <span className="font-mono text-[10px] font-bold uppercase inline-flex items-center gap-1">@{post.authorUsername}{((post as any).platformRole==='moderator' || (post as any).platformRole==='master_admin') && <span className="px-1 border border-black bg-[var(--color-primary)]"><Shield className="inline w-3 h-3"/>{(post as any).platformRole==='master_admin' ? 'MASTER' : 'MOD'}</span>}<VerifiedBadge verified={post.authorId === profile.uid ? !!profile.isVerified : !!post.isVerified} color={post.authorId === profile.uid ? profile.verificationColor : post.verificationColor} className="w-3.5 h-3.5" /></span>
       </div>
       <h3 className="font-display font-black text-xl group-hover:text-[var(--color-primary)] transition-colors">{post.title}</h3>
       <p className="mt-2 text-sm text-neutral-600 line-clamp-2">{post.content}</p>
       <div className="mt-4 pt-4 border-t-2 border-neutral-100 flex justify-between font-mono text-xs text-neutral-500">
-        <span>{formatDisplayDate(post.createdAt)}</span>
+        <span>{formatDisplayDate(post.createdAt)}{(post as any).communityId ? ` · c/${(post as any).communitySlug || ''}` : ''}</span>
         <div className="flex gap-4"><span>{post.upvotesCount || 0} Upvotes</span><span>{post.commentsCount || 0} Comments</span><span>{post.repostsCount || 0} Reposts</span></div>
       </div>
     </div>

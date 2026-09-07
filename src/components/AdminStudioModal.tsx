@@ -30,6 +30,7 @@ import {
   BadgeCheck
 } from 'lucide-react';
 import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
+import { isPlatformModerator } from '../lib/social';
 import { 
   saveArticle, 
   deleteArticle, 
@@ -78,19 +79,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 }) => {
   const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user && checkIsAdmin(user.email)) {
-        setIsAuthenticated(true);
-        setCurrentUserEmail(user.email || null);
-      } else {
-        setIsAuthenticated(false);
-        setCurrentUserEmail(user?.email || null);
-      }
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      const master = !!user && checkIsAdmin(user.email);
+      const moderator = !!user && !master && await isPlatformModerator(user.uid);
+      setIsAuthenticated(master || moderator);
+      setIsModerator(moderator);
+      setCurrentUserEmail(user?.email || null);
+      if (moderator) setActiveTab('social');
     });
     return () => unsubscribe();
   }, []);
@@ -102,9 +103,15 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       const user = await loginWithGoogle();
       if (user && checkIsAdmin(user.email)) {
         setIsAuthenticated(true);
+        setIsModerator(false);
         setCurrentUserEmail(user.email || null);
+      } else if (user && await isPlatformModerator(user.uid)) {
+        setIsAuthenticated(true);
+        setIsModerator(true);
+        setCurrentUserEmail(user.email || null);
+        setActiveTab('social');
       } else {
-        setLoginError(`Access Denied: ${user?.email || 'Your account'} is not an authorized administrator. Authorized accounts: ${ADMIN_EMAILS.join(', ')}`);
+        setLoginError(`Access Denied: ${user?.email || 'Your account'} is not an authorized administrator or moderator. Master accounts: ${ADMIN_EMAILS.join(', ')}`);
         await logout();
       }
     } catch (error: any) {
@@ -901,7 +908,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
             {/* Tab Selector (5 Clean Modules) */}
             <div className="grid grid-cols-7 border-b-4 border-black font-display font-black text-[10px] sm:text-xs uppercase bg-white overflow-x-auto whitespace-nowrap">
-              <button
+              {!isModerator && <button
                 onClick={() => setActiveTab('settings')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
                   activeTab === 'settings' ? 'bg-[var(--color-primary)] text-black border-r-2 border-black' : 'hover:bg-neutral-100 border-r-2 border-black'
@@ -909,9 +916,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               >
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">SETTINGS</span>
-              </button>
+              </button>}
               
-              <button
+              {!isModerator && <button
                 onClick={() => setActiveTab('create')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
                   activeTab === 'create' ? 'bg-[var(--color-primary)] text-black border-r-2 border-black' : 'hover:bg-neutral-100 border-r-2 border-black'
@@ -919,9 +926,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               >
                 <PlusCircle className="w-4 h-4" />
                 <span className="hidden sm:inline">{editingArticleSlug ? 'EDIT ARTICLE' : 'WRITE ARTICLE'}</span>
-              </button>
+              </button>}
 
-              <button
+              {!isModerator && <button
                 onClick={() => setActiveTab('manage')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
                   activeTab === 'manage' ? 'bg-[var(--color-primary)] text-black border-r-2 border-black' : 'hover:bg-neutral-100 border-r-2 border-black'
@@ -929,9 +936,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               >
                 <Edit2 className="w-4 h-4" />
                 <span className="hidden sm:inline">MANAGE ({articles.length})</span>
-              </button>
+              </button>}
 
-              <button
+              {!isModerator && <button
                 onClick={() => setActiveTab('links')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
                   activeTab === 'links' ? 'bg-[var(--color-primary)] text-black border-r-2 border-black' : 'hover:bg-neutral-100 border-r-2 border-black'
@@ -939,9 +946,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               >
                 <LinkIcon className="w-4 h-4" />
                 <span className="hidden sm:inline">BENTO LINKS</span>
-              </button>
+              </button>}
               
-              <button
+              {!isModerator && <button
                 onClick={() => setActiveTab('carousel')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
                   activeTab === 'carousel' ? 'bg-[var(--color-primary)] text-black' : 'hover:bg-neutral-100'
@@ -949,7 +956,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               >
                 <Layout className="w-4 h-4" />
                 <span className="hidden sm:inline">CAROUSEL</span>
-              </button>
+              </button>}
 
               <button
                 onClick={() => setActiveTab('social')}
@@ -1734,10 +1741,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
             )}
 
             {/* TAB: SOCIAL MODERATION */}
-            {activeTab === 'social' && <SocialAdminPanel />}
+            {activeTab === 'social' && (isModerator ? <div className="p-6"><div className="border-4 border-black bg-black text-white p-5 font-mono text-xs">SITE MODERATOR MODE — USE MASTER CONTROL FOR MODERATION. MASTER-ONLY SETTINGS ARE HIDDEN.</div><AdminControlPanel isModerator /></div> : <SocialAdminPanel />)}
 
             {/* TAB: MASTER CONTROL */}
-            {activeTab === 'control' && <AdminControlPanel onSiteConfigRestored={async () => { onUpdateSiteConfig(await getSiteConfig()); }} />}
+            {activeTab === 'control' && !isModerator && <AdminControlPanel onSiteConfigRestored={async () => { onUpdateSiteConfig(await getSiteConfig()); }} />}
 
             {/* TAB: CAROUSEL */}
             {activeTab === 'carousel' && (

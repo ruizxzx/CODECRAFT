@@ -436,7 +436,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                             @
                           </div>
                         )}
-                        <span className="font-bold text-black inline-flex items-center gap-1">@{post.authorUsername}<VerifiedBadge verified={post.isVerified} color={post.verificationColor} className="w-3.5 h-3.5" /></span>
+                        <span className="font-bold text-black inline-flex items-center gap-1">@{post.authorUsername}{((post as any).platformRole==='master_admin'||(post as any).platformRole==='moderator')&&<span className="px-1 border border-black bg-[var(--color-primary)] font-mono text-[9px] font-black">{(post as any).platformRole==='master_admin'?'MASTER':'MOD'}</span>}<VerifiedBadge verified={post.isVerified} color={post.verificationColor} className="w-3.5 h-3.5" /></span>
                       </button>
                       <span className="text-neutral-400">&bull;</span>
                       <span className="text-neutral-500">{formatDisplayDate(post.createdAt)}</span>

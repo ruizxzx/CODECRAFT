@@ -4,6 +4,7 @@ import { CommunityPost, CommunityComment, PageView, CommunityUser } from '../typ
 import { reportContent } from '../lib/social';
 import { getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
+import { isPlatformModerator } from '../lib/social';
 import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2, Share2, Pencil, X } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { CommunityPostExtras } from './CommunityPostExtras';
@@ -31,6 +32,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   const [localSaved, setLocalSaved] = useState(false);
   const [isReposted, setIsReposted] = useState(false);
   const [isReposting, setIsReposting] = useState(false);
+  const [isModerator, setIsModerator] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
@@ -49,6 +51,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
       if (user) {
         const p = await getCommunityProfile(user.uid);
         setProfile(p);
+        setIsModerator(!!user && await isPlatformModerator(user.uid));
         const v = await getUserVote(postId, user.uid);
         setVote(v);
         const savedIds = JSON.parse(localStorage.getItem('krishficient_saved_community_v1') || '[]');
@@ -174,7 +177,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
 
   const activeUser = auth.currentUser || userAuth;
   const isAdmin = checkIsAdmin(activeUser?.email);
-  const canDeletePost = activeUser && (activeUser.uid === post?.authorId || isAdmin);
+  const canDeletePost = !!activeUser && (!!post) && (activeUser.uid === post.authorId || isAdmin || isModerator);
 
   const handleDeletePost = async () => {
     if (!confirm('Are you sure you want to permanently delete this post from the database?')) return;
@@ -191,7 +194,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   const handleDeleteComment = async (commentId: string, commentAuthorId: string) => {
     const activeUser = auth.currentUser || userAuth;
     const currentIsAdmin = checkIsAdmin(activeUser?.email);
-    const canDeleteComment = activeUser && (activeUser.uid === commentAuthorId || currentIsAdmin);
+    const canDeleteComment = activeUser && (activeUser.uid === commentAuthorId || currentIsAdmin || isModerator);
     if (!canDeleteComment) {
       alert('You do not have permission to delete this comment.');
       return;
@@ -313,7 +316,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
               onClick={() => onNavigate('community_profile', post.authorUsername)}
               className="font-display font-black text-lg hover:underline"
             >
-              <span className="inline-flex items-center gap-1">{post.authorName || `@${post.authorUsername}`}<VerifiedBadge verified={post.isVerified} color={post.verificationColor} className="w-4 h-4" /></span>
+              <span className="inline-flex items-center gap-1">{post.authorName || `@${post.authorUsername}`} {(post as any).platformRole === 'master_admin' ? <span className="px-1 border border-black bg-[var(--color-primary)] font-mono text-[9px] font-black">MASTER</span> : (post as any).platformRole === 'moderator' ? <span className="px-1 border border-black bg-[var(--color-primary)] font-mono text-[9px] font-black">MOD</span> : null}<VerifiedBadge verified={post.isVerified} color={post.verificationColor} className="w-4 h-4" /></span>
             </button>
             <div className="font-mono text-xs text-neutral-500">
               @{post.authorUsername} &bull; {formatDisplayDate(post.createdAt)}{post.editedAt ? ' • edited' : ''}
@@ -432,7 +435,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
                 </button>
                 <div className="font-mono text-xs">
                   <button onClick={() => onNavigate('community_profile', c.authorUsername)} className="font-bold hover:underline text-black">
-                    <span className="inline-flex items-center gap-1">{c.authorName || `@${c.authorUsername}`}<VerifiedBadge verified={c.isVerified} color={c.verificationColor} className="w-3.5 h-3.5" /></span>
+                    <span className="inline-flex items-center gap-1">{c.authorName || `@${c.authorUsername}`} {((c as any).platformRole === 'master_admin' || (c as any).platformRole === 'moderator') && <span className="px-1 border border-black bg-[var(--color-primary)] font-mono text-[9px] font-black">{(c as any).platformRole === 'master_admin' ? 'MASTER' : 'MOD'}</span>}<VerifiedBadge verified={c.isVerified} color={c.verificationColor} className="w-3.5 h-3.5" /></span>
                   </button>
                   <span className="text-neutral-500 ml-2">{formatDisplayDate(c.createdAt)}</span>
                 </div>

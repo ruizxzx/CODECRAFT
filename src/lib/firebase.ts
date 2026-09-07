@@ -53,6 +53,10 @@ export const checkIsAdmin = (email?: string | null): boolean => {
   return ADMIN_EMAILS.includes(email.toLowerCase().trim());
 };
 
+export const MASTER_ADMIN_EMAILS = ADMIN_EMAILS.slice();
+
+export const isMasterAdmin = (email?: string | null): boolean => checkIsAdmin(email);
+
 /**
  * Signs in user via Google.
  * Handles popups on desktop, gracefully handles cancellations without throwing errors,

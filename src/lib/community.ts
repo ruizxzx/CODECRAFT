@@ -3,6 +3,7 @@ import {
   collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment, runTransaction
 } from 'firebase/firestore';
 import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, BookmarkCollection, CarouselSlide, Notification } from '../types';
+import { isPlatformModerator } from './social';
 
 
 function mapDocDates(data: any) {
@@ -54,14 +55,17 @@ async function createAdminNotification(data: any): Promise<void> {
 /** Subscribe to unread notifications for the signed-in user, including admin moderation alerts. */
 export function subscribeUnreadNotificationCount(userId: string, callback: (count: number) => void): () => void {
   if (!userId) { callback(0); return () => {}; }
-  let userCount = 0; let adminCount = 0;
+  let userCount = 0; let adminCount = 0; let active = true;
   const emit = () => callback(userCount + adminCount);
   const unsubUser = onSnapshot(query(collection(db, 'users', userId, 'notifications'), where('read', '==', false)), snap => { userCount = snap.size; emit(); }, err => { console.warn('Unread notification subscription failed:', err); userCount = 0; emit(); });
-  let unsubAdmin = () => {};
-  if (checkIsAdmin(auth.currentUser?.email)) {
-    unsubAdmin = onSnapshot(query(collection(db, 'admin_notifications'), where('read', '==', false)), snap => { adminCount = snap.size; emit(); }, err => { console.warn('Admin notification subscription failed:', err); adminCount = 0; emit(); });
-  }
-  return () => { unsubUser(); unsubAdmin(); };
+  let unsubAdmin:()=>void = () => {};
+  isPlatformModerator(userId).then(mod => {
+    if (!active) return;
+    if (checkIsAdmin(auth.currentUser?.email) || mod) {
+      unsubAdmin = onSnapshot(query(collection(db, 'admin_notifications'), where('read', '==', false)), snap => { adminCount = snap.size; emit(); }, err => { console.warn('Admin notification subscription failed:', err); adminCount = 0; emit(); });
+    }
+  }).catch(()=>{});
+  return () => { active = false; unsubUser(); unsubAdmin(); };
 }
 
 async function notifyMentions(text: string, actor: CommunityUser, targetType: 'post' | 'comment', targetId: string): Promise<void> {
@@ -91,7 +95,7 @@ async function notifyMentions(text: string, actor: CommunityUser, targetType: 'p
 export async function getUserNotifications(userId: string): Promise<Notification[]> {
   const snap = await getDocs(query(collection(db, 'users', userId, 'notifications'), orderBy('createdAt', 'desc'), limit(100)));
   const items = snap.docs.map(d => ({ id: d.id, ...mapDocDates(d.data()) } as Notification));
-  if (checkIsAdmin(auth.currentUser?.email)) {
+  if (checkIsAdmin(auth.currentUser?.email) || await isPlatformModerator(userId)) {
     try {
       const adminSnap = await getDocs(query(collection(db, 'admin_notifications'), orderBy('createdAt', 'desc'), limit(100)));
       const adminItems = adminSnap.docs.map(d => ({ id: `admin:${d.id}`, ...mapDocDates(d.data()) } as Notification));
@@ -105,7 +109,7 @@ export async function markNotificationsRead(userId: string): Promise<void> {
   const batch = writeBatch(db);
   const snap = await getDocs(query(collection(db, 'users', userId, 'notifications'), where('read', '==', false), limit(100)));
   snap.docs.forEach(d => batch.update(d.ref, { read: true }));
-  if (checkIsAdmin(auth.currentUser?.email)) {
+  if (checkIsAdmin(auth.currentUser?.email) || await isPlatformModerator(userId)) {
     try {
       const adminSnap = await getDocs(query(collection(db, 'admin_notifications'), where('read', '==', false), limit(100)));
       adminSnap.docs.forEach(d => batch.update(d.ref, { read: true }));
@@ -178,8 +182,9 @@ async function chooseAvailableUsername(base: string): Promise<string> {
  */
 export async function getAllCommunityUsers(): Promise<CommunityUser[]> {
   try {
-    const snap = await getDocs(collection(db, 'users'));
-    return snap.docs.map(d => mapDocDates(d.data()) as CommunityUser)
+    const [snap, modSnap] = await Promise.all([getDocs(collection(db, 'users')), getDocs(collection(db, 'siteModerators')).catch(() => ({docs:[]} as any))]);
+    const moderators = new Set((modSnap.docs || []).map((d:any)=>d.id));
+    return snap.docs.map(d => { const u:any = mapDocDates(d.data()) as CommunityUser; if (moderators.has(u.uid)) { u.platformRole='moderator'; u.role='Moderator'; } return u; })
       .filter(u => !!u?.username)
       .sort((a, b) => a.username.localeCompare(b.username));
   } catch (error) {
@@ -212,7 +217,12 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
   if (!auth.currentUser || auth.currentUser.uid !== user.uid) throw new Error('Must be logged in');
 
   const existing = await getCommunityProfile(user.uid);
-  if (existing) return existing;
+  if (existing) {
+    if (checkIsAdmin(user.email) && existing.platformRole !== 'master_admin') {
+      try { await updateDoc(doc(db,'users',user.uid), { platformRole:'master_admin', role:'Master Admin', email:user.email || '', updatedAt:serverTimestamp() }); existing.platformRole='master_admin'; existing.role='Master Admin'; } catch {}
+    }
+    return existing;
+  }
 
   const emailBase = (user.email || '').split('@')[0] || '';
   const displayBase = user.displayName || emailBase || 'user';
@@ -235,7 +245,9 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
     photoURL: user.photoURL || '',
     bio: 'Software builder & writer',
     themeColor: '#000000',
-    role: '',
+    role: checkIsAdmin(user.email) ? 'Master Admin' : '',
+    platformRole: checkIsAdmin(user.email) ? 'master_admin' : 'member',
+    email: user.email || '',
     isAuthor: false,
     isVerified: false,
     verificationColor: '#2196F3',
@@ -427,17 +439,39 @@ export async function checkIsFollowing(currentUserId: string, targetUserId: stri
   }
 }
 
+function postDedupeKey(data: Partial<CommunityPost>) {
+  const raw = `${data.authorId || ''}|${data.type || ''}|${String(data.title || '').trim().toLowerCase()}|${String(data.content || '').trim()}`;
+  let h = 2166136261;
+  for (let i = 0; i < raw.length; i++) { h ^= raw.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36);
+}
+function dedupeLegacyPosts(items: CommunityPost[]) {
+  const seen = new Set<string>(); const signatures = new Set<string>();
+  return items.filter(p => {
+    if (seen.has(p.id)) return false; seen.add(p.id);
+    const t = new Date(p.createdAt || 0).getTime();
+    const sig = `${p.authorId}|${p.type}|${String(p.title || '').trim().toLowerCase()}|${String(p.content || '').trim()}|${Math.floor(t / 60000)}`;
+    if (signatures.has(sig)) return false; signatures.add(sig); return true;
+  });
+}
+
 function generateId() {
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 
 export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 'updatedAt' | 'upvotesCount' | 'downvotesCount' | 'commentsCount' | 'isFeatured'>) {
-  const postId = generateId();
-  const p = `posts/${postId}`;
+  const dedupeKey = postDedupeKey(data);
   try {
+    const existingSnap = await getDocs(query(collection(db, 'posts'), where('dedupeKey', '==', dedupeKey), limit(5)));
+    const existing = existingSnap.docs.find(d => d.data()?.authorId === data.authorId && d.data()?.type === data.type);
+    if (existing) return { ...existing.data(), id: existing.id } as CommunityPost;
+    const postId = generateId();
+    const p = `posts/${postId}`;
     const now = new Date().toISOString();
     const postData = {
       ...data,
+      dedupeKey,
+      platformRole: data.platformRole || (auth.currentUser?.email && checkIsAdmin(auth.currentUser.email) ? 'master_admin' : undefined),
       mentionedUsernames: extractMentions(`${data.title} ${data.content}`),
       hashtags: extractHashtags(`${data.title} ${data.content}`),
       upvotesCount: 0,
@@ -519,6 +553,7 @@ export function subscribeCommunityPosts(type: 'discussion' | 'blog' | undefined,
   return onSnapshot(q, (snap) => {
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
     if (type) results = results.filter(r => r.type === type);
+    results = dedupeLegacyPosts(results);
     results.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     callback(results);
   }, (error) => {
@@ -537,6 +572,7 @@ export async function getPosts(type?: 'discussion' | 'blog', username?: string):
     let results = snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityPost));
     if (type) results = results.filter(r => r.type === type);
     if (username) results = results.filter(r => r.authorUsername === username);
+    results = dedupeLegacyPosts(results);
     results.sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
     return results;
   } catch (error) {
@@ -569,6 +605,8 @@ export async function getUserPosts(userId: string, username?: string): Promise<C
     // This keeps profile history complete even when collection-group indexing is disabled.
     try {
       const communitiesSnap = await getDocs(collection(db, 'communities'));
+      const authorProfiles = new Map<string,CommunityUser>();
+      try { const usersSnap = await getDocs(collection(db,'users')); usersSnap.docs.forEach(d=>authorProfiles.set(d.id,mapDocDates(d.data()) as CommunityUser)); } catch {}
       const communityResults = await Promise.allSettled(communitiesSnap.docs.map(async cDoc => {
         const postsSnap = await getDocs(collection(db, 'communities', cDoc.id, 'posts'));
         return { cDoc, postsSnap };
@@ -580,7 +618,7 @@ export async function getUserPosts(userId: string, username?: string): Promise<C
         for (const d of postsSnap.docs) {
           const data:any = d.data();
           if (data.authorId === userId || (cleanUsername && data.authorUsername?.toLowerCase() === cleanUsername)) {
-            byId.set(`community:${cDoc.id}:${d.id}`, { ...data, id: d.id, sourceType: 'community', communityId: cDoc.id, communitySlug } as any);
+            const ap=authorProfiles.get(data.authorId); byId.set(`community:${cDoc.id}:${d.id}`, { ...data, id: d.id, sourceType: 'community', communityId: cDoc.id, communitySlug, platformRole: data.platformRole || ap?.platformRole, role: data.role || ap?.role } as any);
           }
         }
       }

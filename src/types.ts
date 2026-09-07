@@ -85,10 +85,21 @@ export interface SiteConfig {
   contactGithub?: string;
   contactTelegram?: string;
   contactInstagram?: string;
+  contactWebsite?: string;
+  contactX?: string;
   
   // Extra Info
   aboutMeImageUrl?: string;
   metaDescription?: string;
+  maintenanceMode?: boolean;
+  maintenanceMessage?: string;
+  communityEnabled?: boolean;
+  allowCommunityCreation?: boolean;
+  allowCommunityPosts?: boolean;
+  allowQuestions?: boolean;
+  allowTopics?: boolean;
+  allowDirectMessages?: boolean;
+  socialAnnouncement?: string;
   customCategories?: string[];
   authorProfileUid?: string;
   authorProfileUsername?: string;
@@ -118,6 +129,8 @@ export interface CommunityUser {
   socialGithub?: string;
   socialTelegram?: string;
   socialInstagram?: string;
+  platformRole?: 'member' | 'moderator' | 'master_admin';
+  email?: string;
   bio: string;
   themeColor: string;
   isBlocked?: boolean;
@@ -142,6 +155,7 @@ export interface CommunityPost {
   authorAvatar: string;
   isVerified?: boolean;
   verificationColor?: string;
+  platformRole?: 'member' | 'moderator' | 'master_admin';
   clapsCount?: number; // legacy
   upvotesCount: number;
   downvotesCount: number;
