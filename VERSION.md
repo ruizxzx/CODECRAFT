@@ -1,11 +1,11 @@
-# OFFSCRPT V66
+# OFFSCRPT V67
 
-Reliability release for article and community deep links.
+Article/community runtime hardening release.
 
-- Legacy and malformed article content is normalized before rendering.
-- Article series/tag rendering is defensive.
-- Community post URLs now resolve both root posts and community-scoped posts.
-- Community post type is normalized from type/postType.
-- Comments load/write/delete against the actual post location.
-- Community votes, reposts, edits and deletes resolve the actual post location.
-- Root/src source trees synchronized.
+- Fix article render crash caused by unsafe optional republisher fields.
+- Harden article related-content tag calculations.
+- Harden legacy article-card tags.
+- Harden Blog category configuration.
+- Harden SeriesStrip against malformed Firestore series records.
+- Add page-level runtime recovery so a single page cannot blank the entire shell.
+- Keep root and `src/` application trees synchronized.

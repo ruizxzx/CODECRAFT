@@ -52,6 +52,22 @@ import { recordArticleAnalyticsEvent } from './lib/analytics';
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
 const SAVED_COMMUNITY_KEY = 'krishficient_saved_community_v1';
 
+
+class PageErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError:boolean; message:string}> {
+  state = { hasError: false, message: '' };
+  static getDerivedStateFromError(error: unknown) {
+    return { hasError: true, message: error instanceof Error ? error.message : String(error || 'Unexpected error') };
+  }
+  componentDidCatch(error: unknown) { console.error('OFFSCRPT page runtime error:', error); }
+  componentDidUpdate(prevProps: {children: React.ReactNode}) {
+    if (prevProps.children !== this.props.children && this.state.hasError) this.setState({hasError:false, message:''});
+  }
+  render() {
+    if (this.state.hasError) return <div className="max-w-3xl mx-auto px-4 py-24"><div className="border-4 border-black bg-white p-6 neo-shadow"><div className="font-mono text-[10px] font-black uppercase text-red-600">PAGE ERROR</div><h2 className="font-display font-black text-3xl uppercase mt-2">THIS PAGE COULD NOT RENDER</h2><p className="font-mono text-xs text-neutral-600 mt-3 break-words">{this.state.message}</p><button className="mt-5 border-2 border-black bg-[var(--color-primary)] px-4 py-2 font-mono text-xs font-black uppercase" onClick={() => this.setState({hasError:false,message:''})}>RETRY PAGE</button></div></div>;
+    return this.props.children;
+  }
+}
+
 function ToastHost(){
   const [toasts,setToasts]=React.useState<Array<{id:number;message:string;kind:'success'|'error'|'info';duration:number}>>([]);
   React.useEffect(()=>{
@@ -635,6 +651,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 w-full">
+        <PageErrorBoundary>
         {loading ? (
           <div className="py-32 flex flex-col items-center justify-center space-y-4">
             <Loader2 className="w-10 h-10 animate-spin text-black stroke-[3]" />
@@ -839,6 +856,7 @@ export default function App() {
             )}
           </>
         )}
+        </PageErrorBoundary>
       </main>
 
       {/* Global Modals */}

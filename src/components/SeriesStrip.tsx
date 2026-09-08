@@ -20,15 +20,28 @@ export const SeriesStrip: React.FC<Props> = ({ articles, onNavigate, compact = f
 
   useEffect(() => subscribeSeriesList(items => setSeries(items)), []);
 
-  const hydrated = useMemo(() => series.map(s => ({
-    ...s,
-    items: articles.filter(a => a.seriesId === s.id || a.seriesId === s.slug)
-      .sort((a, b) => (a.seriesOrder ?? 999999) - (b.seriesOrder ?? 999999)),
-  })), [series, articles]);
+  const hydrated = useMemo(() => (Array.isArray(series) ? series : []).map(raw => {
+    const s: any = raw && typeof raw === 'object' ? raw : {};
+    const safeId = String(s.id || s.slug || '');
+    const safeSlug = String(s.slug || s.id || '');
+    const safeTags = Array.isArray(s.tags) ? s.tags.map((tag:any) => String(tag)) : [];
+    const safeArticles = Array.isArray(articles) ? articles : [];
+    return {
+      ...s,
+      id: safeId,
+      slug: safeSlug,
+      title: String(s.title || 'Untitled Series'),
+      description: String(s.description || ''),
+      tags: safeTags,
+      ownerUsername: s.ownerUsername ? String(s.ownerUsername) : '',
+      items: safeArticles.filter(a => a.seriesId === safeId || a.seriesId === safeSlug)
+        .sort((a, b) => (a.seriesOrder ?? 999999) - (b.seriesOrder ?? 999999)),
+    };
+  }), [series, articles]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = hydrated.filter(s => !q || `${s.title} ${s.description} ${(s.tags || []).join(' ')} ${s.ownerUsername || ''}`.toLowerCase().includes(q));
+    const list = hydrated.filter(s => !q || `${s.title} ${s.description} ${s.tags.join(' ')} ${s.ownerUsername}`.toLowerCase().includes(q));
     return showAll ? list : list.slice(0, 3);
   }, [hydrated, query, showAll]);
 

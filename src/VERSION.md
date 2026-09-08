@@ -1,15 +1,11 @@
-# OFFSCRPT V63
+# OFFSCRPT V67
 
-Platform reliability + personalization milestone.
+Article/community runtime hardening release.
 
-## Added
-- Universal MY OFFSCRPT activity center backed by Firestore history, saves, notifications, drafts and published content.
-- Continue Reading 2.0 with cloud position, current section, timestamp, device/source and series-aware resume data.
-- Personalized homepage sections derived from actual reader history, saves, followed creators, followed series, followed topics and engagement.
-- Creator following feed support plus existing series following and new topic following.
-- Realtime grouped notifications with read/unread state and mark-all-read.
-- Creator dashboard with live article views, reactions and comments.
-
-## Validation
-- Root source and duplicated `src/` source trees synchronized.
-- TypeScript validation performed with the installed system compiler.
+- Fix article render crash caused by unsafe optional republisher fields.
+- Harden article related-content tag calculations.
+- Harden legacy article-card tags.
+- Harden Blog category configuration.
+- Harden SeriesStrip against malformed Firestore series records.
+- Add page-level runtime recovery so a single page cannot blank the entire shell.
+- Keep root and `src/` application trees synchronized.

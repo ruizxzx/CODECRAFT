@@ -418,7 +418,12 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
   const relatedArticles = allArticles
     .filter((a) => a.slug !== article.slug)
-    .map(a => ({ a, score: (a.category === article.category ? 4 : 0) + (a.tags||[]).filter(t => (article.tags||[]).map(x=>x.toLowerCase()).includes(String(t).toLowerCase())).length * 2 }))
+    .map(a => {
+      const tags = Array.isArray(a.tags) ? a.tags.map(t => String(t)) : [];
+      const articleTags = safeTags.map(t => String(t).toLowerCase());
+      const overlap = tags.filter(t => articleTags.includes(t.toLowerCase())).length;
+      return { a, score: (a.category === article.category ? 4 : 0) + overlap * 2 };
+    })
     .sort((x,y) => y.score - x.score || new Date(y.a.publishedAt).getTime() - new Date(x.a.publishedAt).getTime())
     .slice(0, 3)
     .map(x=>x.a);
@@ -615,8 +620,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         {article.republishedBy && (
           <div className="mb-8 border-2 border-black bg-[var(--color-primary)] p-3 font-mono text-xs flex flex-wrap items-center gap-2">
             <span>REPUBLISHED BY</span>
-            {article.republishedBy.avatar && <img src={article.republishedBy.avatar} alt="" className="w-6 h-6 border-2 border-black object-cover" />}
-            <button type="button" onClick={() => { const republisherHandle = article.republishedBy?.username; if (republisherHandle && onOpenAuthorProfile) onOpenAuthorProfile(republisherHandle); }} className="font-black underline">@{article.republishedBy.username || 'krishsarkar'}</button>
+            {article.republishedBy?.avatar && <img src={article.republishedBy.avatar} alt="" className="w-6 h-6 border-2 border-black object-cover" />}
+            <button type="button" onClick={() => { const republisherHandle = article.republishedBy?.username; if (republisherHandle && onOpenAuthorProfile) onOpenAuthorProfile(republisherHandle); }} className="font-black underline">@{article.republishedBy?.username || 'krishsarkar'}</button>
             <span>with credit to the original creator</span>
           </div>
         )}

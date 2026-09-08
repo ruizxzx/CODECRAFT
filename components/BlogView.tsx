@@ -38,7 +38,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'reading-time' | 'popular'>('newest');
-  const categories = useMemo(() => Array.from(new Set([...CATEGORIES, ...(siteConfig.customCategories || []), ...articles.map(a => a.category).filter(Boolean)])), [siteConfig.customCategories, articles]);
+  const customCategories = Array.isArray(siteConfig.customCategories) ? siteConfig.customCategories : [];
+  const categories = useMemo(() => Array.from(new Set([...CATEGORIES, ...customCategories, ...articles.map(a => a.category).filter(Boolean)])), [customCategories, articles]);
 
   // Extract all unique tags
   const allTags = useMemo(() => {
