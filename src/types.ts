@@ -7,7 +7,7 @@ export interface CodeSnippet {
 }
 
 export interface ArticleContentBlock {
-  type: 'paragraph' | 'heading2' | 'heading3' | 'callout' | 'quote' | 'code' | 'image' | 'list' | 'takeaways';
+  type: 'paragraph' | 'heading2' | 'heading3' | 'callout' | 'quote' | 'code' | 'image' | 'list' | 'takeaways' | 'link' | 'button';
   content?: string;
   items?: string[];
   calloutType?: 'info' | 'warning' | 'tip' | 'insight';
@@ -16,6 +16,11 @@ export interface ArticleContentBlock {
   imageUrl?: string;
   imageAlt?: string;
   imageCaption?: string;
+  imageHref?: string;
+  linkText?: string;
+  href?: string;
+  buttonText?: string;
+  buttonStyle?: 'primary' | 'secondary' | 'dark';
   quoteAuthor?: string;
 }
 
@@ -233,7 +238,7 @@ export interface CommunityComment {
   updatedAt: string;
 }
 
-export type CarouselElementType = 'text' | 'badge' | 'button';
+export type CarouselElementType = 'text' | 'badge' | 'button' | 'link';
 
 export interface CarouselElement {
   id: string;
@@ -250,8 +255,10 @@ export interface CarouselElement {
 export interface CarouselSlide {
   id: string;
   title: string;
-  imageUrl: string;
+  imageUrl?: string;
   linkUrl: string;
+  mode?: 'image' | 'scratch';
+  backgroundColor?: string;
   order: number;
   imagePositionX?: number;
   imagePositionY?: number;

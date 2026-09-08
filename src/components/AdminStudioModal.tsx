@@ -27,7 +27,8 @@ import {
   Minus,
   Plus,
   Trash,
-  BadgeCheck
+  BadgeCheck,
+  MousePointer2
 } from 'lucide-react';
 import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
 import { isPlatformModerator } from '../lib/social';
@@ -135,7 +136,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([]);
   const [isLoadingCarousel, setIsLoadingCarousel] = useState(false);
   const [newSlideTitle, setNewSlideTitle] = useState('');
+  const [newSlideMode, setNewSlideMode] = useState<'image' | 'scratch'>('image');
   const [newSlideImageUrl, setNewSlideImageUrl] = useState('');
+  const [newSlideBackgroundColor, setNewSlideBackgroundColor] = useState('#FF00A8');
   const [newSlideLinkUrl, setNewSlideLinkUrl] = useState('');
   const [newSlidePositionX, setNewSlidePositionX] = useState(50);
   const [newSlidePositionY, setNewSlidePositionY] = useState(50);
@@ -146,7 +149,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   // Carousel Editing State
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
   const [editSlideTitle, setEditSlideTitle] = useState('');
+  const [editSlideMode, setEditSlideMode] = useState<'image' | 'scratch'>('image');
   const [editSlideImageUrl, setEditSlideImageUrl] = useState('');
+  const [editSlideBackgroundColor, setEditSlideBackgroundColor] = useState('#FF00A8');
   const [editSlideLinkUrl, setEditSlideLinkUrl] = useState('');
   const [editSlidePositionX, setEditSlidePositionX] = useState(50);
   const [editSlidePositionY, setEditSlidePositionY] = useState(50);
@@ -188,15 +193,17 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   };
 
   const handleAddSlide = async () => {
-    if (!newSlideImageUrl.trim()) {
-      setCarouselErrorMessage("Please provide an image URL or upload an image first.");
+    if (newSlideMode === 'image' && !newSlideImageUrl.trim()) {
+      setCarouselErrorMessage("Please provide an image URL for image mode, or switch to Build From Scratch.");
       return;
     }
     setCarouselErrorMessage(null);
     try {
       const added = await addCarouselSlide({
         title: newSlideTitle.trim(),
-        imageUrl: newSlideImageUrl.trim(),
+        mode: newSlideMode,
+        imageUrl: newSlideMode === 'image' ? newSlideImageUrl.trim() : '',
+        backgroundColor: newSlideBackgroundColor,
         linkUrl: newSlideLinkUrl.trim(),
         order: carouselSlides.length,
         imagePositionX: newSlidePositionX,
@@ -207,7 +214,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       });
       setCarouselSlides(prev => [...prev, added]);
       setNewSlideTitle('');
+      setNewSlideMode('image');
       setNewSlideImageUrl('');
+      setNewSlideBackgroundColor('#FF00A8');
       setNewSlideLinkUrl('');
       setNewSlidePositionX(50);
       setNewSlidePositionY(50);
@@ -252,7 +261,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const handleStartEditSlide = (slide: CarouselSlide) => {
     setEditingSlideId(slide.id);
     setEditSlideTitle(slide.title || '');
+    setEditSlideMode(slide.mode || (slide.imageUrl ? 'image' : 'scratch'));
     setEditSlideImageUrl(slide.imageUrl || '');
+    setEditSlideBackgroundColor(slide.backgroundColor || '#FF00A8');
     setEditSlideLinkUrl(slide.linkUrl || '');
     setEditSlidePositionX(slide.imagePositionX ?? 50);
     setEditSlidePositionY(slide.imagePositionY ?? 50);
@@ -266,7 +277,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const handleCancelEditSlide = () => {
     setEditingSlideId(null);
     setEditSlideTitle('');
+    setEditSlideMode('image');
     setEditSlideImageUrl('');
+    setEditSlideBackgroundColor('#FF00A8');
     setEditSlideLinkUrl('');
     setEditSlidePositionX(50);
     setEditSlidePositionY(50);
@@ -276,8 +289,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   };
 
   const handleSaveEditSlide = async (id: string) => {
-    if (!editSlideImageUrl.trim()) {
-      setCarouselErrorMessage("Slide image URL cannot be empty.");
+    if (editSlideMode === 'image' && !editSlideImageUrl.trim()) {
+      setCarouselErrorMessage("Slide image URL cannot be empty in image mode.");
       return;
     }
     setCarouselErrorMessage(null);
@@ -285,7 +298,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     try {
       const patch = {
         title: editSlideTitle.trim(),
-        imageUrl: editSlideImageUrl.trim(),
+        mode: editSlideMode,
+        imageUrl: editSlideMode === 'image' ? editSlideImageUrl.trim() : '',
+        backgroundColor: editSlideBackgroundColor,
         linkUrl: editSlideLinkUrl.trim(),
         imagePositionX: editSlidePositionX,
         imagePositionY: editSlidePositionY,
@@ -829,8 +844,12 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     const block: Article['content'][number] = type === 'code'
       ? { type, codeBlock: { language: 'typescript', code: '' } }
       : type === 'image'
-        ? { type, imageUrl: '', imageAlt: 'Article image', imageCaption: '' }
-        : type === 'list' || type === 'takeaways'
+        ? { type, imageUrl: '', imageAlt: 'Article image', imageCaption: '', imageHref: '' }
+        : type === 'link'
+          ? { type, linkText: 'OPEN LINK', href: '' }
+          : type === 'button'
+            ? { type, buttonText: 'OPEN LINK', href: '', buttonStyle: 'primary' }
+          : type === 'list' || type === 'takeaways'
           ? { type, items: [''] }
           : type === 'quote'
             ? { type, content: '', quoteAuthor: '' }
@@ -1457,7 +1476,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {([
-                            ['paragraph','TEXT'],['heading2','H2'],['heading3','H3'],['image','IMAGE'],['code','CODE'],['quote','QUOTE'],['callout','CALLOUT'],['list','LIST'],['takeaways','TAKEAWAYS']
+                            ['paragraph','TEXT'],['heading2','H2'],['heading3','H3'],['image','IMAGE'],['link','LINK'],['button','BUTTON'],['code','CODE'],['quote','QUOTE'],['callout','CALLOUT'],['list','LIST'],['takeaways','TAKEAWAYS']
                           ] as const).map(([type,label]) => (
                             <button key={type} type="button" onClick={() => addContentBlock(type)} className="px-2.5 py-1.5 border-2 border-black bg-white font-mono text-[10px] font-bold uppercase hover:bg-[var(--color-primary)]">+ {label}</button>
                           ))}
@@ -1491,7 +1510,12 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                 </div>
                                 <input value={block.imageAlt || ''} onChange={(e)=>updateContentBlock(index,{imageAlt:e.target.value})} placeholder="Alt text" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
                                 <input value={block.imageCaption || ''} onChange={(e)=>updateContentBlock(index,{imageCaption:e.target.value})} placeholder="Caption (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
+                                <input value={block.imageHref || ''} onChange={(e)=>updateContentBlock(index,{imageHref:e.target.value})} placeholder="Optional image click-through URL" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
                               </div>
+                            ) : block.type === 'link' ? (
+                              <div className="grid gap-2"><input value={block.linkText || ''} onChange={(e)=>updateContentBlock(index,{linkText:e.target.value})} placeholder="Visible linked text" className="w-full px-3 py-2 border-2 border-black font-sans text-sm" /><input value={block.href || ''} onChange={(e)=>updateContentBlock(index,{href:e.target.value})} placeholder="https://example.com or /blog" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /></div>
+                            ) : block.type === 'button' ? (
+                              <div className="grid gap-2"><input value={block.buttonText || ''} onChange={(e)=>updateContentBlock(index,{buttonText:e.target.value})} placeholder="Button label" className="w-full px-3 py-2 border-2 border-black font-display font-bold" /><div className="grid grid-cols-[1fr_auto] gap-2"><input value={block.href || ''} onChange={(e)=>updateContentBlock(index,{href:e.target.value})} placeholder="https://example.com or /blog" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><select value={block.buttonStyle || 'primary'} onChange={(e)=>updateContentBlock(index,{buttonStyle:e.target.value as any})} className="px-2 py-2 border-2 border-black font-mono text-xs"><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="dark">Dark</option></select></div></div>
                             ) : block.type === 'code' ? (
                               <div className="space-y-2"><div className="flex gap-2"><select value={block.codeBlock?.language || 'typescript'} onChange={(e)=>updateContentBlock(index,{codeBlock:{...(block.codeBlock || {code:''}),language:e.target.value}})} className="px-2 py-2 border-2 border-black font-mono text-xs"><option>typescript</option><option>javascript</option><option>python</option><option>rust</option><option>go</option><option>json</option><option>bash</option></select><input value={block.codeBlock?.filename || ''} onChange={(e)=>updateContentBlock(index,{codeBlock:{...(block.codeBlock || {language:'typescript',code:''}),filename:e.target.value}})} placeholder="Filename" className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs" /></div><textarea rows={7} value={block.codeBlock?.code || ''} onChange={(e)=>updateContentBlock(index,{codeBlock:{...(block.codeBlock || {language:'typescript',filename:''}),code:e.target.value}})} placeholder="Paste code..." className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /></div>
                             ) : block.type === 'quote' ? (
@@ -1837,6 +1861,15 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="md:col-span-2 space-y-4">
                         <div>
+                          <label className="font-mono text-xs font-bold uppercase block mb-1">Canvas Type</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button type="button" onClick={() => setNewSlideMode('image')} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${newSlideMode === 'image' ? 'bg-[var(--color-primary)]' : 'bg-white'}`}>IMAGE + DESIGN</button>
+                            <button type="button" onClick={() => setNewSlideMode('scratch')} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${newSlideMode === 'scratch' ? 'bg-[var(--color-primary)]' : 'bg-white'}`}>BUILD FROM SCRATCH</button>
+                          </div>
+                          <p className="font-mono text-[10px] text-neutral-500 mt-1 uppercase">Use image mode for promos; scratch mode is a blank branded canvas for custom homepage announcements.</p>
+                        </div>
+
+                        <div>
                           <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Headline / Title</label>
                           <input 
                             type="text" 
@@ -1847,16 +1880,18 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           />
                         </div>
 
-                        <div>
+                        {newSlideMode === 'image' && <div>
                           <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Image URL</label>
                           <div className="flex gap-2">
-                            <input 
-                              type="url" 
-                              value={newSlideImageUrl}
-                              onChange={(e) => setNewSlideImageUrl(e.target.value)}
-                              placeholder="https://images.unsplash.com/... or upload"
-                              className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm"
-                            />
+                            <input type="url" value={newSlideImageUrl} onChange={(e) => setNewSlideImageUrl(e.target.value)} placeholder="https://..." className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm" />
+                          </div>
+                        </div>}
+
+                        <div>
+                          <label className="font-mono text-xs font-bold uppercase block mb-1">Canvas Background</label>
+                          <div className="flex gap-2 items-center">
+                            <input type="color" value={newSlideBackgroundColor} onChange={(e) => setNewSlideBackgroundColor(e.target.value)} className="w-12 h-10 border-2 border-black" />
+                            <input value={newSlideBackgroundColor} onChange={(e) => setNewSlideBackgroundColor(e.target.value)} className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs uppercase" />
                           </div>
                         </div>
 
@@ -1878,23 +1913,17 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       {/* Live Thumbnail Preview */}
                       <div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-300 p-3 bg-neutral-50 min-h-[140px]">
                         <span className="font-mono text-[10px] uppercase font-bold text-neutral-500 mb-2">Live Slide Preview</span>
-                        {newSlideImageUrl ? (
-                          <img 
-                            src={newSlideImageUrl} 
-                            alt="Slide preview" 
-                            className="w-full aspect-[21/9] object-cover border-2 border-black bg-neutral-200" 
-                          />
-                        ) : (
-                          <div className="text-center text-neutral-400 font-mono text-xs">
-                            No image selected yet
-                          </div>
-                        )}
+                        <div className="w-full aspect-[21/9] border-2 border-black overflow-hidden" style={{ backgroundColor: newSlideBackgroundColor }}>
+                          {newSlideMode === 'image' && newSlideImageUrl ? <img src={newSlideImageUrl} alt="Slide preview" className="w-full h-full object-cover" /> : <div className="h-full grid place-items-center text-center text-neutral-700/70 font-mono text-xs uppercase px-4">Scratch canvas — use the visual builder below</div>}
+                        </div>
                       </div>
                     </div>
 
                     <div className="pt-2 border-t-4 border-black">
                       <CarouselBuilder
+                        mode={newSlideMode}
                         imageUrl={newSlideImageUrl}
+                        backgroundColor={newSlideBackgroundColor}
                         positionX={newSlidePositionX}
                         positionY={newSlidePositionY}
                         zoom={newSlideZoom}
@@ -1974,6 +2003,13 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                   <div className="md:col-span-2 space-y-3">
                                     <div>
+                                      <label className="font-mono text-xs font-bold uppercase block mb-1">Canvas Type</label>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <button type="button" onClick={() => setEditSlideMode('image')} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${editSlideMode === 'image' ? 'bg-[var(--color-primary)]' : 'bg-white'}`}>IMAGE + DESIGN</button>
+                                        <button type="button" onClick={() => setEditSlideMode('scratch')} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${editSlideMode === 'scratch' ? 'bg-[var(--color-primary)]' : 'bg-white'}`}>BUILD FROM SCRATCH</button>
+                                      </div>
+                                    </div>
+                                    <div>
                                       <label className="font-mono text-xs font-bold uppercase block mb-1">Headline / Title</label>
                                       <input 
                                         type="text" 
@@ -1984,16 +2020,17 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                       />
                                     </div>
 
-                                    <div>
+                                    {editSlideMode === 'image' && <div>
                                       <label className="font-mono text-xs font-bold uppercase block mb-1">Image URL</label>
                                       <div className="flex gap-2">
-                                        <input 
-                                          type="url" 
-                                          value={editSlideImageUrl}
-                                          onChange={(e) => setEditSlideImageUrl(e.target.value)}
-                                          placeholder="https://..."
-                                          className="flex-1 px-3 py-2 border-2 border-black font-sans text-sm"
-                                        />
+                                        <input type="url" value={editSlideImageUrl} onChange={(e) => setEditSlideImageUrl(e.target.value)} placeholder="https://..." className="flex-1 px-3 py-2 border-2 border-black font-sans text-sm" />
+                                      </div>
+                                    </div>}
+                                    <div>
+                                      <label className="font-mono text-xs font-bold uppercase block mb-1">Canvas Background</label>
+                                      <div className="flex gap-2 items-center">
+                                        <input type="color" value={editSlideBackgroundColor} onChange={(e) => setEditSlideBackgroundColor(e.target.value)} className="w-12 h-10 border-2 border-black" />
+                                        <input value={editSlideBackgroundColor} onChange={(e) => setEditSlideBackgroundColor(e.target.value)} className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs uppercase" />
                                       </div>
                                     </div>
 
@@ -2015,22 +2052,17 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                   {/* Preview */}
                                   <div className="flex flex-col items-center justify-center border-2 border-black p-2 bg-neutral-100">
                                     <span className="font-mono text-[10px] uppercase font-bold text-neutral-600 mb-2">Updated Preview</span>
-                                    {editSlideImageUrl ? (
-                                      <img 
-                                        src={editSlideImageUrl} 
-                                        alt="Edit preview" 
-                                        className="w-full aspect-[21/9] object-cover border-2 border-black bg-white" 
-                                        style={{ objectPosition: `${editSlidePositionX}% ${editSlidePositionY}%`, transform: `scale(${editSlideZoom / 100})` }}
-                                      />
-                                    ) : (
-                                      <div className="text-neutral-400 font-mono text-xs">No image</div>
-                                    )}
+                                    <div className="w-full aspect-[21/9] border-2 border-black overflow-hidden" style={{ backgroundColor: editSlideBackgroundColor }}>
+                                      {editSlideMode === 'image' && editSlideImageUrl ? <img src={editSlideImageUrl} alt="Edit preview" className="w-full h-full object-cover" style={{ objectPosition: `${editSlidePositionX}% ${editSlidePositionY}%`, transform: `scale(${editSlideZoom / 100})` }} /> : <div className="h-full grid place-items-center text-neutral-600 font-mono text-xs uppercase">Scratch canvas</div>}
+                                    </div>
                                   </div>
                                 </div>
 
                                 <div className="pt-3 border-t-4 border-black mt-4">
                                   <CarouselBuilder
+                                    mode={editSlideMode}
                                     imageUrl={editSlideImageUrl}
+                                    backgroundColor={editSlideBackgroundColor}
                                     positionX={editSlidePositionX}
                                     positionY={editSlidePositionY}
                                     zoom={editSlideZoom}

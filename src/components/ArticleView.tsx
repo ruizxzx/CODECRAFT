@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { ArticleCard } from './ArticleCard';
 import { CommentsSection } from './CommentsSection';
+import { RichText } from './RichText';
 import { auth, loginWithGoogle } from '../lib/firebase';
 import { getArticleLikeStatus, toggleArticleLike, getPost, getCommunityProfile } from '../lib/community';
 import { recordArticleView, ARTICLE_REACTIONS, getArticleReaction, setArticleReaction, getSeriesArticles } from '../lib/cms';
@@ -272,7 +273,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Excerpt */}
         <p className="font-serif text-xl sm:text-2xl text-neutral-800 leading-relaxed font-normal italic mb-8 border-l-4 border-black pl-4 py-1">
-          {article.excerpt}
+          <RichText text={article.excerpt} />
         </p>
 
         {/* Author Metadata Strip */}
@@ -327,7 +328,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           <nav className="mb-10 border-4 border-black bg-neutral-50 p-4 neo-shadow">
             <div className="font-display font-black uppercase mb-3">Table of contents</div>
             <div className="grid gap-1">
-              {toc.map(({b,i})=><button key={i} onClick={()=>document.getElementById(`article-block-${i}`)?.scrollIntoView({behavior:'smooth',block:'start'})} className={`text-left font-mono text-xs py-1 ${b.type==='heading3'?'pl-5':'font-black'}`}>{b.content}</button>)}
+              {toc.map(({b,i})=><button key={i} onClick={()=>document.getElementById(`article-block-${i}`)?.scrollIntoView({behavior:'smooth',block:'start'})} className={`text-left font-mono text-xs py-1 ${b.type==='heading3'?'pl-5':'font-black'}`}><RichText text={b.content} /></button>)}
             </div>
           </nav>
         )}
@@ -352,7 +353,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             if (block.type === 'paragraph') {
               return (
                 <p key={index} className="text-neutral-800 leading-relaxed">
-                  {block.content}
+                  <RichText text={block.content} />
                 </p>
               );
             }
@@ -364,7 +365,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                   id={`article-block-${index}`}
                   className="font-display font-black text-2xl sm:text-3xl text-black tracking-tight mt-12 pt-6 border-t-2 border-black/20 uppercase"
                 >
-                  {block.content}
+                  <RichText text={block.content} />
                 </h2>
               );
             }
@@ -376,7 +377,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                   id={`article-block-${index}`}
                   className="font-display font-black text-xl sm:text-2xl text-black mt-8"
                 >
-                  {block.content}
+                  <RichText text={block.content} />
                 </h3>
               );
             }
@@ -385,7 +386,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               return (
                 <figure key={index} className="my-8 p-6 bg-gray-50 border-l-8 border-black neo-border neo-shadow-sm">
                   <blockquote className="font-serif italic text-xl sm:text-2xl text-black leading-snug">
-                    "{block.content}"
+                    <RichText text={block.content} />
                   </blockquote>
                   {block.quoteAuthor && (
                     <figcaption className="mt-3 font-mono text-xs font-bold text-neutral-600 uppercase">
@@ -409,8 +410,30 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                     <Sparkles className="w-3.5 h-3.5 fill-black" />
                   </div>
                   <div className="p-5 font-sans font-medium text-neutral-900 text-base">
-                    {block.content}
+                    <RichText text={block.content} />
                   </div>
+                </div>
+              );
+            }
+
+            if (block.type === 'link') {
+              return (
+                <div key={index} className="my-6">
+                  <a href={block.href || '#'} target={/^https?:/i.test(block.href || '') ? '_blank' : undefined} rel={/^https?:/i.test(block.href || '') ? 'noopener noreferrer' : undefined} className="inline-flex items-center gap-2 text-base font-sans font-black underline decoration-2 underline-offset-4 hover:opacity-70">
+                    <RichText text={block.linkText || block.content || block.href || 'OPEN LINK'} />
+                    <ExternalLink className="w-4 h-4 shrink-0" />
+                  </a>
+                </div>
+              );
+            }
+
+            if (block.type === 'button') {
+              const buttonStyle = block.buttonStyle === 'dark' ? 'bg-black text-white' : block.buttonStyle === 'secondary' ? 'bg-white text-black' : 'bg-[var(--color-primary)] text-black';
+              return (
+                <div key={index} className="my-8">
+                  <a href={block.href || '#'} target={/^https?:/i.test(block.href || '') ? '_blank' : undefined} rel={/^https?:/i.test(block.href || '') ? 'noopener noreferrer' : undefined} className={`inline-flex items-center gap-2 px-5 py-3 border-2 border-black neo-shadow-sm font-display font-black uppercase text-sm hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none transition-all ${buttonStyle}`}>
+                    <RichText text={block.buttonText || block.content || 'OPEN'} /> <ExternalLink className="w-4 h-4" />
+                  </a>
                 </div>
               );
             }
@@ -418,8 +441,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             if (block.type === 'image' && block.imageUrl) {
               return (
                 <figure key={index} className="my-10 neo-border neo-shadow overflow-hidden bg-neutral-900">
-                  <img src={block.imageUrl} alt={block.imageAlt || article.title} className="w-full h-auto max-h-[680px] object-cover" loading="lazy" />
-                  {block.imageCaption && <figcaption className="p-3 bg-neutral-100 border-t-2 border-black font-mono text-xs text-neutral-700 italic">{block.imageCaption}</figcaption>}
+                  {block.imageHref ? <a href={block.imageHref} target={/^https?:/i.test(block.imageHref) ? '_blank' : undefined} rel={/^https?:/i.test(block.imageHref) ? 'noopener noreferrer' : undefined}><img src={block.imageUrl} alt={block.imageAlt || article.title} className="w-full h-auto max-h-[680px] object-cover" loading="lazy" /></a> : <img src={block.imageUrl} alt={block.imageAlt || article.title} className="w-full h-auto max-h-[680px] object-cover" loading="lazy" />}
+                  {block.imageCaption && <figcaption className="p-3 bg-neutral-100 border-t-2 border-black font-mono text-xs text-neutral-700 italic"><RichText text={block.imageCaption} /></figcaption>}
                 </figure>
               );
             }
@@ -427,7 +450,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             if (block.type === 'list' && block.items) {
               return (
                 <ul key={index} className="my-8 list-disc pl-7 space-y-3 font-sans text-base text-neutral-800">
-                  {block.items.filter(Boolean).map((item, idx) => <li key={idx}>{item}</li>)}
+                  {block.items.filter(Boolean).map((item, idx) => <li key={idx}><RichText text={item} /></li>)}
                 </ul>
               );
             }
@@ -486,7 +509,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                         <span className="font-mono font-bold text-xs bg-black text-[var(--color-primary)] px-1.5 py-0.5 border border-black shrink-0 mt-0.5">
                           {idx + 1}
                         </span>
-                        <span>{item}</span>
+                        <span><RichText text={item} /></span>
                       </li>
                     ))}
                   </ul>

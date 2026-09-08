@@ -9,6 +9,7 @@ import { promoteCommunityBlogToMain, fetchAllArticlesForAdmin, unpublishMainArti
 import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2, Share2, Pencil, X } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { CommunityPostExtras } from './CommunityPostExtras';
+import { RichText } from './RichText';
 
 interface CommunityPostViewProps {
   postId: string;
@@ -145,25 +146,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   };
 
 
-  const renderTextWithMentions = (text: string) => {
-    const parts = text.split(/(@[a-zA-Z0-9_]{3,30})/g);
-    return parts.map((part, index) => {
-      if (/^@[a-zA-Z0-9_]{3,30}$/.test(part)) {
-        const username = part.slice(1).toLowerCase();
-        return (
-          <button
-            key={`${username}-${index}`}
-            type="button"
-            onClick={() => onNavigate('community_profile', username)}
-            className="font-bold underline decoration-2 underline-offset-2 hover:opacity-70"
-          >
-            {part}
-          </button>
-        );
-      }
-      return <React.Fragment key={index}>{part}</React.Fragment>;
-    });
-  };
+  const renderTextWithMentions = (text: string) => <RichText text={text} onMentionClick={(username) => onNavigate('community_profile', username)} />;
 
   const handleShare = async () => {
     const url = window.location.href;
@@ -383,13 +366,15 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
         {Array.isArray(post.contentBlocks) && post.contentBlocks.length ? (
           <div className="space-y-6 mb-12 min-w-0">
             {post.contentBlocks.map((block:any, idx:number) => {
-              if (block.type === 'image') return <figure key={idx} className="space-y-2"><img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-[620px] object-cover border-2 border-black"/>{block.imageCaption && <figcaption className="font-mono text-[10px] text-neutral-500">{block.imageCaption}</figcaption>}</figure>;
+              if (block.type === 'link') return <div key={idx}><a href={block.href || '#'} target={/^https?:/i.test(block.href || '') ? '_blank' : undefined} rel={/^https?:/i.test(block.href || '') ? 'noopener noreferrer' : undefined} className="inline-flex items-center gap-2 font-sans font-black underline decoration-2 underline-offset-4"><RichText text={block.linkText || block.content || block.href || 'OPEN LINK'} onMentionClick={(username) => onNavigate('community_profile', username)} /><span>↗</span></a></div>;
+              if (block.type === 'button') return <div key={idx}><a href={block.href || '#'} target={/^https?:/i.test(block.href || '') ? '_blank' : undefined} rel={/^https?:/i.test(block.href || '') ? 'noopener noreferrer' : undefined} className={`inline-flex items-center gap-2 px-5 py-3 border-2 border-black font-display font-black uppercase ${block.buttonStyle === 'dark' ? 'bg-black text-white' : block.buttonStyle === 'secondary' ? 'bg-white text-black' : 'bg-[var(--color-primary)] text-black'}`}><RichText text={block.buttonText || block.content || 'OPEN LINK'} onMentionClick={(username) => onNavigate('community_profile', username)} /><span>↗</span></a></div>;
+              if (block.type === 'image') return <figure key={idx} className="space-y-2">{block.imageHref ? <a href={block.imageHref} target={/^https?:/i.test(block.imageHref) ? '_blank' : undefined} rel={/^https?:/i.test(block.imageHref) ? 'noopener noreferrer' : undefined}><img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-[620px] object-cover border-2 border-black"/></a> : <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-[620px] object-cover border-2 border-black"/>}{block.imageCaption && <figcaption className="font-mono text-[10px] text-neutral-500"><RichText text={block.imageCaption} onMentionClick={(username) => onNavigate('community_profile', username)} /></figcaption>}</figure>;
               if (block.type === 'code') return <pre key={idx} className="border-2 border-black bg-black text-white p-4 overflow-auto font-mono text-xs whitespace-pre"><code>{block.codeBlock?.code || ''}</code></pre>;
               if (block.type === 'quote') return <blockquote key={idx} className="border-l-8 border-black bg-[var(--color-primary)] p-4 font-serif text-lg italic">{renderTextWithMentions(block.content || '')}{block.quoteAuthor && <div className="font-mono text-[10px] not-italic mt-2">— {block.quoteAuthor}</div>}</blockquote>;
               if (block.type === 'callout') return <div key={idx} className="border-2 border-black bg-[var(--color-secondary)]/30 p-4"><div className="font-display font-black uppercase text-sm">{block.calloutTitle || block.calloutType || 'NOTE'}</div><div className="font-sans text-base leading-relaxed mt-2 whitespace-pre-wrap">{renderTextWithMentions(block.content || '')}</div></div>;
               if (block.type === 'list' || block.type === 'takeaways') return <div key={idx} className="border-2 border-black p-4"><div className="font-display font-black uppercase text-sm mb-2">{block.type === 'takeaways' ? 'Key Takeaways' : 'List'}</div><ul className="list-disc pl-6 space-y-1 font-sans text-base">{(block.items || []).filter(Boolean).map((item:string,j:number)=><li key={j}>{renderTextWithMentions(item)}</li>)}</ul></div>;
-              if (block.type === 'heading2') return <h2 key={idx} className="font-display font-black text-2xl sm:text-3xl uppercase border-b-2 border-black pb-2">{block.content || ''}</h2>;
-              if (block.type === 'heading3') return <h3 key={idx} className="font-display font-black text-xl sm:text-2xl uppercase">{block.content || ''}</h3>;
+              if (block.type === 'heading2') return <h2 key={idx} className="font-display font-black text-2xl sm:text-3xl uppercase border-b-2 border-black pb-2"><RichText text={block.content || ''} onMentionClick={(username) => onNavigate('community_profile', username)} /></h2>;
+              if (block.type === 'heading3') return <h3 key={idx} className="font-display font-black text-xl sm:text-2xl uppercase"><RichText text={block.content || ''} onMentionClick={(username) => onNavigate('community_profile', username)} /></h3>;
               return <p key={idx} className="font-sans text-lg leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-neutral-800">{renderTextWithMentions(block.content || '')}</p>;
             })}
           </div>

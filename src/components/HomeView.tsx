@@ -53,46 +53,35 @@ const CarouselComponent: React.FC<{ slides: CarouselSlide[] }> = ({ slides }) =>
     return () => clearInterval(interval);
   }, [slides.length, currentIndex]);
 
-  useEffect(() => {
-    if (currentIndex >= slides.length) setCurrentIndex(0);
-  }, [slides.length, currentIndex]);
-
+  useEffect(() => { if (currentIndex >= slides.length) setCurrentIndex(0); }, [slides.length, currentIndex]);
   if (!slides.length) return null;
-  const safeIndex = Math.min(currentIndex, slides.length - 1);
-  const currentSlide = slides[safeIndex];
+
+  const currentSlide = slides[Math.min(currentIndex, slides.length - 1)];
   const showDots = slides.some(slide => slide.showDots !== false);
-
   const openLink = (url: string) => {
-    if (!url) return;
-    const external = /^https?:\/\//i.test(url);
-    if (external) window.open(url, '_blank', 'noopener,noreferrer');
-    else window.location.href = url;
+    const value = url.trim();
+    if (!value) return;
+    const external = /^(https?:|mailto:|tel:)/i.test(value);
+    if (external) window.open(value, '_blank', 'noopener,noreferrer');
+    else window.location.href = value;
   };
-
-  const handleSurfaceClick = () => {
-    if (currentSlide.linkUrl?.trim()) openLink(currentSlide.linkUrl.trim());
-  };
+  const handleSurfaceClick = () => { if (currentSlide.linkUrl?.trim()) openLink(currentSlide.linkUrl); };
 
   return (
     <div className="w-full bg-black border-b-4 border-black p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <div
-          className={`relative w-full aspect-[21/9] sm:aspect-[3/1] neo-border bg-white overflow-hidden group ${currentSlide.linkUrl?.trim() ? 'cursor-pointer' : ''}`}
+          className={`relative w-full aspect-[21/9] sm:aspect-[3/1] neo-border overflow-hidden group ${currentSlide.linkUrl?.trim() ? 'cursor-pointer' : ''}`}
+          style={{ backgroundColor: currentSlide.backgroundColor || '#111111' }}
           onClick={handleSurfaceClick}
           role={currentSlide.linkUrl?.trim() ? 'link' : undefined}
           tabIndex={currentSlide.linkUrl?.trim() ? 0 : undefined}
           onKeyDown={e => { if (currentSlide.linkUrl?.trim() && (e.key === 'Enter' || e.key === ' ')) handleSurfaceClick(); }}
         >
-          <img
-            src={currentSlide.imageUrl}
-            alt={currentSlide.title || 'Carousel slide'}
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{
-              objectPosition: `${currentSlide.imagePositionX ?? 50}% ${currentSlide.imagePositionY ?? 50}%`,
-              transform: `scale(${(currentSlide.imageZoom ?? 100) / 100})`,
-            }}
-          />
-
+          {currentSlide.mode !== 'scratch' && currentSlide.imageUrl && (
+            <img src={currentSlide.imageUrl} alt={currentSlide.title || 'Carousel slide'} className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: `${currentSlide.imagePositionX ?? 50}% ${currentSlide.imagePositionY ?? 50}%`, transform: `scale(${(currentSlide.imageZoom ?? 100) / 100})` }} />
+          )}
+          {currentSlide.mode !== 'scratch' && !currentSlide.imageUrl && <div className="absolute inset-0 grid place-items-center text-white font-mono text-xs uppercase">Carousel image unavailable</div>}
           <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/10 pointer-events-none" />
 
           {currentSlide.title && !currentSlide.elements?.some(el => el.text === currentSlide.title) && (
@@ -102,33 +91,21 @@ const CarouselComponent: React.FC<{ slides: CarouselSlide[] }> = ({ slides }) =>
           )}
 
           {currentSlide.elements?.map(el => {
-            const style: React.CSSProperties = {
-              left: `${el.x}%`, top: `${el.y}%`, color: el.color, fontSize: `${el.fontSize || 12}px`,
-            };
-            if (el.type === 'button') {
-              return <button key={el.id} type="button" onClick={(e) => { e.stopPropagation(); if (el.href) openLink(el.href); }} className="absolute inline-block border-2 border-black px-3 py-1.5 font-mono font-black uppercase shadow-[3px_3px_0_0_#000]" style={{ ...style, backgroundColor: el.backgroundColor || '#FF00A8' }}>{el.text}</button>;
-            }
-            if (el.type === 'badge') {
-              return <span key={el.id} className="absolute inline-block border-2 border-black px-2 py-1 font-mono font-black uppercase" style={{ ...style, backgroundColor: el.backgroundColor || '#FFFFFF' }}>{el.text}</span>;
-            }
-            return <span key={el.id} className="absolute max-w-[78%] font-display font-black uppercase leading-none drop-shadow-[2px_2px_0_#000]" style={style}>{el.text}</span>;
+            const style: React.CSSProperties = { left: `${el.x}%`, top: `${el.y}%`, color: el.color, fontSize: `${el.fontSize || 12}px` };
+            if (el.type === 'button') return <button key={el.id} type="button" onClick={e => { e.stopPropagation(); if (el.href) openLink(el.href); }} className="absolute inline-block border-2 border-black px-3 py-1.5 font-mono font-black uppercase shadow-[3px_3px_0_0_#000]" style={{ ...style, backgroundColor: el.backgroundColor || '#FF00A8' }}>{el.text}</button>;
+            if (el.type === 'badge') return <span key={el.id} className="absolute inline-block border-2 border-black px-2 py-1 font-mono font-black uppercase" style={{ ...style, backgroundColor: el.backgroundColor || '#FFFFFF' }}>{el.text}</span>;
+            if (el.type === 'link') return <button key={el.id} type="button" onClick={e => { e.stopPropagation(); if (el.href) openLink(el.href); }} className="absolute font-mono font-black uppercase underline decoration-2 underline-offset-4 drop-shadow-[2px_2px_0_#000] text-left" style={style}>{el.text}</button>;
+            return <span key={el.id} className="absolute max-w-[78%] font-display font-black uppercase leading-none drop-shadow-[3px_3px_0_#000]" style={style}>{el.text}</span>;
           })}
 
-          {slides.length > 1 && (
-            <>
-              <div className="absolute bottom-0 left-0 h-1.5 sm:h-2 bg-neutral-900/50 w-full pointer-events-none">
-                <div className="h-full bg-[var(--color-primary)] transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
-              </div>
-              <button aria-label="Previous slide" onClick={e => { e.stopPropagation(); setCurrentIndex(i => (i - 1 + slides.length) % slides.length); setProgress(0); }} className="absolute top-1/2 -translate-y-1/2 left-4 w-8 h-8 sm:w-10 sm:h-10 bg-white/10 hover:bg-white text-white hover:text-black neo-border backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-colors"><ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" /></button>
-              <button aria-label="Next slide" onClick={e => { e.stopPropagation(); setCurrentIndex(i => (i + 1) % slides.length); setProgress(0); }} className="absolute top-1/2 -translate-y-1/2 right-4 w-8 h-8 sm:w-10 sm:h-10 bg-white/10 hover:bg-white text-white hover:text-black neo-border backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-colors"><ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" /></button>
-            </>
-          )}
-
-          {showDots && slides.length > 1 && (
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-3 flex items-center gap-2 z-10">
-              {slides.map((slide, index) => <button key={slide.id} type="button" aria-label={`Go to slide ${index + 1}`} onClick={e => { e.stopPropagation(); setCurrentIndex(index); setProgress(0); }} className={`w-2.5 h-2.5 sm:w-3 sm:h-3 border-2 border-black transition-all ${index === currentIndex ? 'bg-[var(--color-primary)] scale-125' : 'bg-white hover:bg-neutral-200'}`} />)}
-            </div>
-          )}
+          {slides.length > 1 && <>
+            <div className="absolute bottom-0 left-0 h-1.5 sm:h-2 bg-neutral-900/50 w-full pointer-events-none"><div className="h-full bg-[var(--color-primary)] transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} /></div>
+            <button aria-label="Previous slide" onClick={e => { e.stopPropagation(); setCurrentIndex(i => (i - 1 + slides.length) % slides.length); setProgress(0); }} className="absolute top-1/2 -translate-y-1/2 left-4 w-8 h-8 sm:w-10 sm:h-10 bg-white/10 hover:bg-white text-white hover:text-black neo-border backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-colors"><ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" /></button>
+            <button aria-label="Next slide" onClick={e => { e.stopPropagation(); setCurrentIndex(i => (i + 1) % slides.length); setProgress(0); }} className="absolute top-1/2 -translate-y-1/2 right-4 w-8 h-8 sm:w-10 sm:h-10 bg-white/10 hover:bg-white text-white hover:text-black neo-border backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-colors"><ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" /></button>
+          </>}
+          {showDots && slides.length > 1 && <div className="absolute left-1/2 -translate-x-1/2 bottom-3 flex items-center gap-2 z-10">
+            {slides.map((slide, index) => <button key={slide.id} type="button" aria-label={`Go to slide ${index + 1}`} onClick={e => { e.stopPropagation(); setCurrentIndex(index); setProgress(0); }} className={`w-2.5 h-2.5 sm:w-3 sm:h-3 border-2 border-black transition-all ${index === currentIndex ? 'bg-[var(--color-primary)] scale-125' : 'bg-white hover:bg-neutral-200'}`} />)}
+          </div>}
         </div>
       </div>
     </div>

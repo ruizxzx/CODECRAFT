@@ -6,6 +6,7 @@ import { subscribeArticleComments, addArticleComment, deleteArticleComment } fro
 import { getCommunityProfile } from '../lib/community';
 import { ArticleComment } from '../types';
 import { formatDisplayDate } from '../lib/dateUtils';
+import { RichText } from './RichText';
 
 interface CommentsSectionProps {
   articleSlug: string;
@@ -237,9 +238,7 @@ export const CommentsSection: React.FC<CommentsSectionProps> = ({ articleSlug })
                   </div>
                 </div>
 
-                <p className="font-serif text-base text-neutral-800 leading-relaxed whitespace-pre-wrap">
-                  {comment.content}
-                </p>
+                <p className="font-serif text-base text-neutral-800 leading-relaxed whitespace-pre-wrap"><RichText text={comment.content} /></p>
               </div>
             );
           })

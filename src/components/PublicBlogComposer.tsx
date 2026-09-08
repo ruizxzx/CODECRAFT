@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArticleContentBlock, CommunityPost, CommunityUser } from '../types';
 import { createPost, updatePost, getPost, saveCommunityDraft, clearCommunityDraft } from '../lib/community';
 import { createCommunityPost, updateCommunityPost, SocialCommunity } from '../lib/social';
-import { Plus, Trash2, ArrowUp, ArrowDown, BookOpen, Image as ImageIcon, Code2, Quote, Lightbulb, List, CheckCircle2, Eye, Save } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, BookOpen, Image as ImageIcon, Code2, Quote, Lightbulb, List, CheckCircle2, Eye, Save, Link2, MousePointer2 } from 'lucide-react';
 
 type Props = {
   userProfile: CommunityUser;
@@ -19,6 +19,8 @@ const blockTypes: Array<[ArticleContentBlock['type'], string, React.ComponentTyp
   ['heading2', 'SECTION', BookOpen],
   ['heading3', 'SUBSECTION', BookOpen],
   ['image', 'IMAGE', ImageIcon],
+  ['link', 'LINK', Link2],
+  ['button', 'BUTTON', MousePointer2],
   ['code', 'CODE', Code2],
   ['quote', 'QUOTE', Quote],
   ['callout', 'CALLOUT', Lightbulb],
@@ -99,7 +101,9 @@ export const PublicBlogComposer: React.FC<Props> = ({
 
   const addBlock = (type: ArticleContentBlock['type']) => {
     const block: ArticleContentBlock = { type, content: '' };
-    if (type === 'image') Object.assign(block, { imageUrl: '', imageAlt: '', imageCaption: '' });
+    if (type === 'image') Object.assign(block, { imageUrl: '', imageAlt: '', imageCaption: '', imageHref: '' });
+    if (type === 'link') Object.assign(block, { linkText: 'Open link', href: '' });
+    if (type === 'button') Object.assign(block, { buttonText: 'OPEN LINK', href: '', buttonStyle: 'primary' });
     if (type === 'code') Object.assign(block, { codeBlock: { language: 'typescript', code: '', filename: '' } });
     if (type === 'callout') Object.assign(block, { calloutType: 'info', calloutTitle: '' });
     if (type === 'list' || type === 'takeaways') Object.assign(block, { items: [''] });
@@ -241,6 +245,10 @@ export const PublicBlogComposer: React.FC<Props> = ({
           </div>
           <textarea value={block.codeBlock?.code || ''} onChange={(e) => updateBlock(index, { codeBlock: { ...(block.codeBlock || { language: 'typescript' }), code: e.target.value } })} placeholder="Code" className="w-full border-2 border-black p-2 font-mono text-xs min-h-28" />
         </>
+      ) : block.type === 'link' ? (
+        <div className="space-y-2"><input value={block.linkText || ''} onChange={(e) => updateBlock(index, { linkText: e.target.value })} placeholder="Visible link text" className="w-full border-2 border-black p-2" /><input value={block.href || ''} onChange={(e) => updateBlock(index, { href: e.target.value })} placeholder="https://example.com or /blog" className="w-full border-2 border-black p-2 font-mono text-xs" /></div>
+      ) : block.type === 'button' ? (
+        <div className="space-y-2"><input value={block.buttonText || ''} onChange={(e) => updateBlock(index, { buttonText: e.target.value })} placeholder="Button label" className="w-full border-2 border-black p-2" /><div className="flex gap-2"><input value={block.href || ''} onChange={(e) => updateBlock(index, { href: e.target.value })} placeholder="https://example.com or /blog" className="flex-1 border-2 border-black p-2 font-mono text-xs" /><select value={block.buttonStyle || 'primary'} onChange={(e) => updateBlock(index, { buttonStyle: e.target.value as any })} className="border-2 border-black p-2 font-mono text-xs"><option value="primary">Primary</option><option value="secondary">Secondary</option><option value="dark">Dark</option></select></div></div>
       ) : block.type === 'quote' ? (
         <>
           <textarea value={block.content || ''} onChange={(e) => updateBlock(index, { content: e.target.value })} placeholder="Quote" className="w-full border-2 border-black p-2 min-h-20" />
@@ -309,7 +317,7 @@ export const PublicBlogComposer: React.FC<Props> = ({
             <h1 className="font-display font-black text-3xl uppercase">{title || 'UNTITLED BLOG'}</h1>
             {excerpt && <p className="text-sm text-neutral-600">{excerpt}</p>}
             {coverImage && <img src={coverImage} alt={coverImageAlt || ''} className="w-full max-h-96 object-cover border-2 border-black" />}
-            <div className="space-y-4">{blocks.map((block, index) => <div key={index}>{block.type === 'heading2' ? <h2 className="font-display font-black text-2xl">{block.content}</h2> : block.type === 'heading3' ? <h3 className="font-display font-black text-xl">{block.content}</h3> : block.type === 'code' ? <pre className="border-2 border-black bg-black text-white p-3 overflow-auto font-mono text-xs">{block.codeBlock?.code}</pre> : block.type === 'quote' ? <blockquote className="border-l-4 border-black pl-3 italic">{block.content}</blockquote> : block.type === 'list' || block.type === 'takeaways' ? <ul className="list-disc ml-5">{(block.items || []).map((item, i) => <li key={i}>{item}</li>)}</ul> : block.type === 'image' && block.imageUrl ? <figure><img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full border-2 border-black" />{block.imageCaption && <figcaption className="font-mono text-[10px] mt-1">{block.imageCaption}</figcaption>}</figure> : <p className="whitespace-pre-wrap leading-relaxed">{block.content}</p>}</div>)}</div>
+            <div className="space-y-4">{blocks.map((block, index) => <div key={index}>{block.type === 'heading2' ? <h2 className="font-display font-black text-2xl">{block.content}</h2> : block.type === 'heading3' ? <h3 className="font-display font-black text-xl">{block.content}</h3> : block.type === 'code' ? <pre className="border-2 border-black bg-black text-white p-3 overflow-auto font-mono text-xs">{block.codeBlock?.code}</pre> : block.type === 'quote' ? <blockquote className="border-l-4 border-black pl-3 italic">{block.content}</blockquote> : block.type === 'list' || block.type === 'takeaways' ? <ul className="list-disc ml-5">{(block.items || []).map((item, i) => <li key={i}>{item}</li>)}</ul> : block.type === 'image' && block.imageUrl ? <figure>{block.imageHref ? <a href={block.imageHref}><img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full border-2 border-black" /></a> : <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full border-2 border-black" />}{block.imageCaption && <figcaption className="font-mono text-[10px] mt-1">{block.imageCaption}</figcaption>}</figure> : block.type === 'link' ? <a href={block.href || '#'} className="font-sans font-black underline">{block.linkText || block.href}</a> : block.type === 'button' ? <a href={block.href || '#'} className="inline-block px-4 py-2 border-2 border-black bg-[var(--color-primary)] font-display font-black uppercase">{block.buttonText || 'OPEN LINK'}</a> : <p className="whitespace-pre-wrap leading-relaxed">{block.content}</p>}</div>)}</div>
           </div>}
 
           {error && <div className="border-2 border-red-500 bg-red-100 p-3 font-mono text-xs font-bold">{error}</div>}
