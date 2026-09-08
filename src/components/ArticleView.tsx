@@ -112,6 +112,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [progressHydrated, setProgressHydrated] = useState(false);
   const articleContentRef = React.useRef<HTMLDivElement | null>(null);
   const articleContentEndRef = React.useRef<HTMLDivElement | null>(null);
+  const activeTocIdRef = React.useRef('');
+  const completionCommittedRef = React.useRef(false);
   const user = useAuthUser();
   const [reaction, setReaction] = useState<ArticleReaction|null>(null);
   const [reactionBusy, setReactionBusy] = useState(false);
@@ -122,6 +124,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     .map((b,i)=>({ b, i, id: `article-block-${i}-${slugifyHeading(String(b.content || 'section'))}` }))
     .filter(x=>x.b.type==='heading2'||x.b.type==='heading3');
   const [activeTocId, setActiveTocId] = useState<string>('');
+  useEffect(() => { activeTocIdRef.current = activeTocId; }, [activeTocId]);
   const [tocOpen, setTocOpen] = useState(true);
   const [copiedTocId, setCopiedTocId] = useState<string | null>(null);
 
@@ -129,7 +132,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
   useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); setSavedCloudProgress(pct); maxAutoProgressRef.current = pct; setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
 
-  useEffect(() => { lastSavedProgressRef.current = -1; maxAutoProgressRef.current = 0; setScrollProgress(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
+  useEffect(() => { lastSavedProgressRef.current = -1; maxAutoProgressRef.current = 0; completionCommittedRef.current = false; setScrollProgress(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
   useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
   useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
   useEffect(() => {
@@ -187,42 +190,109 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     }
   }, [article.slug, user]);
 
-  // Reading progress is measured against the actual rendered article-body wrapper.
-  // The endpoint is the last content line, so footer/reactions do not affect progress.
+  // Production reading-progress engine.
+  // The browser viewport is the source of truth for visual progress. We deliberately
+  // avoid window.scrollY/document scrollTop because OFFSCRPT can be embedded in layouts
+  // with sticky/nested containers. The calculation uses the two real article-body sentinels.
+  // Cloud progress is monotonic for resilience, while the top bar reflects the reader's
+  // current position. Manual completion is the only way to lock an article at 100%.
   useEffect(() => {
-    const handleScroll = () => {
+    if (!progressHydrated) return;
+
+    let raf = 0;
+    let disposed = false;
+
+    const calculate = () => {
+      if (disposed) return;
+      raf = 0;
       const startEl = articleContentRef.current;
       const endEl = articleContentEndRef.current;
-      if (!startEl || !endEl || !progressHydrated) return;
-      const startY = startEl.getBoundingClientRect().top + window.scrollY;
-      const endY = endEl.getBoundingClientRect().top + window.scrollY;
-      const travel = Math.max(1, endY - startY - window.innerHeight);
-      const rawProgress = articleCompleted ? 100 : Math.round(Math.min(100, Math.max(0, ((window.scrollY - startY) / travel) * 100)));
-      // Reading progress is monotonic. Reopening/scrolling backwards must not
-      // erase a reader's latest checkpoint. Reset explicitly to start over.
-      const currentProgress = articleCompleted ? 100 : Math.max(rawProgress, maxAutoProgressRef.current);
-      maxAutoProgressRef.current = currentProgress;
-      setScrollProgress(currentProgress);
-      if (user && !articleCompleted && currentProgress !== lastSavedProgressRef.current && (currentProgress === 0 || Math.abs(currentProgress - lastSavedProgressRef.current) >= 2)) {
-        lastSavedProgressRef.current = currentProgress;
-        if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = window.setTimeout(() => {
-          void saveArticleReadingProgress(article.slug, currentProgress, activeTocId || '', false).catch(() => {});
-          void recordArticleHistory(article, currentProgress).catch(() => {});
-        }, 500);
+      if (!startEl || !endEl) return;
+
+      const startRect = startEl.getBoundingClientRect();
+      const endRect = endEl.getBoundingClientRect();
+      const viewportHeight = Math.max(1, window.innerHeight);
+      const contentSpan = endRect.top - startRect.top;
+      const travel = contentSpan - viewportHeight;
+
+      let rawProgress = 0;
+      if (contentSpan <= viewportHeight + 1) {
+        // Short article: once the article has entered the viewport, it is effectively read.
+        rawProgress = endRect.top <= viewportHeight ? 100 : 0;
+      } else {
+        // 0% when article start reaches the top of the viewport.
+        // 100% when the final article-content marker reaches the bottom of the viewport.
+        rawProgress = ((-startRect.top) / travel) * 100;
       }
-      const atContentEnd = endY - (window.scrollY + window.innerHeight) <= 8;
-      if (user && !articleCompleted && atContentEnd) {
+      rawProgress = Math.round(Math.min(100, Math.max(0, rawProgress)));
+
+      const visualProgress = articleCompleted ? 100 : rawProgress;
+      setScrollProgress(visualProgress);
+
+      if (!articleCompleted && user) {
+        // Persist the highest automatically reached checkpoint, but never use it to drive
+        // the visual bar. This keeps the UI accurate when a reader scrolls backwards while
+        // still preserving resume progress across sessions/devices.
+        const cloudProgress = Math.max(rawProgress, maxAutoProgressRef.current);
+        maxAutoProgressRef.current = cloudProgress;
+
+        if (cloudProgress !== lastSavedProgressRef.current && (cloudProgress === 0 || Math.abs(cloudProgress - lastSavedProgressRef.current) >= 2)) {
+          lastSavedProgressRef.current = cloudProgress;
+          if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = window.setTimeout(() => {
+            void saveArticleReadingProgress(article.slug, cloudProgress, activeTocIdRef.current || '', false).catch(() => {});
+            void recordArticleHistory(article, cloudProgress).catch(() => {});
+          }, 350);
+        }
+      }
+
+      // Reaching the final content line records 100% progress, but does not silently mark
+      // the article completed. Completion remains an explicit reader action.
+      if (user && !articleCompleted && rawProgress >= 100 && !completionCommittedRef.current) {
         if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-        void saveArticleReadingProgress(article.slug, 100, activeTocId || 'completed', true).then(() => { setArticleCompleted(true); setSavedCloudProgress(100); setScrollProgress(100); }).catch(() => {});
+        completionCommittedRef.current = true;
+        void saveArticleReadingProgress(article.slug, 100, activeTocIdRef.current || 'end', false)
+          .then(() => { if (!disposed) { maxAutoProgressRef.current = 100; setSavedCloudProgress(100); } })
+          .catch(() => { completionCommittedRef.current = false; });
         void recordArticleHistory(article, 100).catch(() => {});
       }
     };
-    handleScroll();
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleScroll);
-    return () => { window.removeEventListener('scroll', handleScroll); window.removeEventListener('resize', handleScroll); if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current); };
-  }, [article.slug, user?.uid, activeTocId, articleCompleted, progressHydrated]);
+
+    const requestCalculate = () => {
+      if (!raf) raf = window.requestAnimationFrame(calculate);
+    };
+
+    requestCalculate();
+    window.addEventListener('scroll', requestCalculate, { passive: true, capture: true });
+    window.addEventListener('resize', requestCalculate, { passive: true });
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(requestCalculate);
+      if (articleContentRef.current) ro.observe(articleContentRef.current);
+      if (articleContentEndRef.current) ro.observe(articleContentEndRef.current);
+    }
+
+    const onLoad = requestCalculate;
+    window.addEventListener('load', onLoad);
+
+    // Image/video/font layout changes can move the endpoint after the first render.
+    const fontReady = (document as any).fonts?.ready;
+    if (fontReady?.then) void fontReady.then(requestCalculate).catch(() => {});
+    window.setTimeout(requestCalculate, 100);
+    window.setTimeout(requestCalculate, 500);
+    window.setTimeout(requestCalculate, 1200);
+
+    return () => {
+      disposed = true;
+      if (raf) window.cancelAnimationFrame(raf);
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      window.removeEventListener('scroll', requestCalculate, true);
+      window.removeEventListener('resize', requestCalculate);
+      window.removeEventListener('load', onLoad);
+      ro?.disconnect();
+    };
+  }, [article.slug, user?.uid, articleCompleted, progressHydrated]);
 
   // Record an account-level history entry when an article is opened. The deterministic document id
   // means repeated opens update one record instead of creating duplicates.
@@ -274,6 +344,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       await resetArticleReadingProgress(article.slug);
       setArticleCompleted(false);
       maxAutoProgressRef.current = 0;
+      completionCommittedRef.current = false;
       setSavedCloudProgress(0);
       setScrollProgress(0);
       lastSavedProgressRef.current = -1;
@@ -356,10 +427,10 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   return (
     <div className="w-full bg-white min-h-screen">
       {/* Top Reading Progress Bar */}
-      <div className="fixed top-0 left-0 right-0 z-50 h-2 bg-neutral-200">
-        <div 
-          className="h-full bg-[var(--color-primary)] border-b-2 border-black transition-all duration-75"
-          style={{ width: `${scrollProgress}%` }}
+      <div className="fixed top-0 left-0 right-0 z-[10000] h-1.5 bg-neutral-200 pointer-events-none" aria-label={`Article reading progress ${scrollProgress}%`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={scrollProgress}>
+        <div
+          className="h-full bg-[var(--color-primary)] border-b border-black origin-left will-change-transform"
+          style={{ width: `${Math.max(0, Math.min(100, scrollProgress))}%` }}
         />
       </div>
 
