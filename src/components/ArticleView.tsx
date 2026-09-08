@@ -114,6 +114,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [progressHydrated, setProgressHydrated] = useState(false);
   const articleContentRef = React.useRef<HTMLDivElement | null>(null);
   const articleContentEndRef = React.useRef<HTMLDivElement | null>(null);
+  const readerReactionRef = React.useRef<HTMLDivElement | null>(null);
   const activeTocIdRef = React.useRef('');
   const completionCommittedRef = React.useRef(false);
   const user = useAuthUser();
@@ -195,82 +196,108 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   }, [article.slug, user]);
 
   // Production reading-progress engine.
-  // The browser viewport is the source of truth for visual progress. We deliberately
-  // avoid window.scrollY/document scrollTop because OFFSCRPT can be embedded in layouts
-  // with sticky/nested containers. The calculation uses the two real article-body sentinels.
-  // Cloud progress is monotonic for resilience, while the top bar reflects the reader's
-  // current position. Manual completion is the only way to lock an article at 100%.
+  // Two distinct signals:
+  // 1) pagePosition: current viewport position; it follows the reader up/down.
+  // 2) scrollProgress: highest reading progress reached; it never retracts until reset.
+  // The reading endpoint is the READER REACTIONS panel: 100% is reached when that panel
+  // first touches the bottom edge of the viewport. Footer/related content is excluded.
   useEffect(() => {
     if (!progressHydrated) return;
 
     let raf = 0;
     let disposed = false;
 
-    const calculate = () => {
-      if (disposed) return;
-      raf = 0;
+    const getAnchors = () => {
       const startEl = articleContentRef.current;
-      const endEl = articleContentEndRef.current;
-      if (!startEl || !endEl) return;
+      const endEl = readerReactionRef.current || articleContentEndRef.current;
+      if (!startEl || !endEl) return null;
 
       const startRect = startEl.getBoundingClientRect();
       const endRect = endEl.getBoundingClientRect();
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      const startY = startRect.top + scrollY;
+      const endY = endRect.top + scrollY;
       const viewportHeight = Math.max(1, window.innerHeight);
-      const contentSpan = endRect.top - startRect.top;
-      const travel = contentSpan - viewportHeight;
 
-      let rawProgress = 0;
-      if (contentSpan <= viewportHeight + 1) {
-        // Short article: once the article has entered the viewport, it is effectively read.
-        rawProgress = endRect.top <= viewportHeight ? 100 : 0;
-      } else {
-        // 0% when article start reaches the top of the viewport.
-        // 100% when the final article-content marker reaches the bottom of the viewport.
-        rawProgress = ((-startRect.top) / travel) * 100;
-      }
-      rawProgress = Math.round(Math.min(100, Math.max(0, rawProgress)));
+      // Start at 0 when the first pixel of the actual article body enters the viewport.
+      // This makes the first downward scroll produce immediate, proportional movement.
+      const startScrollY = Math.max(0, startY - viewportHeight);
 
-      // Two deliberately separate progress concepts:
-      // 1) pagePosition = the reader's CURRENT viewport position (retracts when scrolling up).
-      // 2) scrollProgress = the reader's HIGHEST reached reading progress (never retracts).
-      // This lets the blue line show where the reader is while the real reading tracker
-      // preserves the highest checkpoint reached during this visit. Manual completion still
-      // hard-locks the tracker at 100% until reset.
-      setPagePosition(articleCompleted ? 100 : rawProgress);
+      // 100% exactly when the reader-reaction panel reaches the bottom of the screen.
+      const endScrollY = Math.max(startScrollY + 1, endY - viewportHeight);
+
+      return { startScrollY, endScrollY, scrollY };
+    };
+
+    const calculate = () => {
+      if (disposed) return;
+      raf = 0;
+
+      const anchors = getAnchors();
+      if (!anchors) return;
+
+      const span = Math.max(1, anchors.endScrollY - anchors.startScrollY);
+      const rawProgress = Math.round(
+        Math.min(100, Math.max(0, ((anchors.scrollY - anchors.startScrollY) / span) * 100))
+      );
+
+      const visualCurrent = rawProgress;
+
+      // CURRENT PAGE POSITION retracts naturally when scrolling upward.
+      setPagePosition(articleCompleted ? 100 : visualCurrent);
+
+      // PERSISTENT READING PROGRESS is monotonic for resume/completion.
       const persistentProgress = articleCompleted
         ? 100
         : Math.max(rawProgress, maxAutoProgressRef.current, savedCloudProgress);
       setScrollProgress(persistentProgress);
 
       if (!articleCompleted) {
-        if (rawProgress > maxAutoProgressRef.current) maxAutoProgressRef.current = rawProgress;
+        if (rawProgress > maxAutoProgressRef.current) {
+          maxAutoProgressRef.current = rawProgress;
+        }
 
         if (user) {
-          // Persist the highest automatically reached checkpoint, but never use it to drive
-        // the visual bar. This keeps the UI accurate when a reader scrolls backwards while
-          // still preserving resume progress across sessions/devices.
           const cloudProgress = maxAutoProgressRef.current;
-
-          if (cloudProgress !== lastSavedProgressRef.current && (cloudProgress === 0 || Math.abs(cloudProgress - lastSavedProgressRef.current) >= 2)) {
+          if (
+            cloudProgress !== lastSavedProgressRef.current &&
+            (cloudProgress === 0 || Math.abs(cloudProgress - lastSavedProgressRef.current) >= 2)
+          ) {
             lastSavedProgressRef.current = cloudProgress;
-            setScrollProgress(current => Math.max(current, cloudProgress));
             if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
             saveTimerRef.current = window.setTimeout(() => {
-              void saveArticleReadingProgress(article.slug, cloudProgress, activeTocIdRef.current || '', false).catch(() => {});
+              void saveArticleReadingProgress(
+                article.slug,
+                cloudProgress,
+                activeTocIdRef.current || '',
+                false
+              ).catch(() => {});
               void recordArticleHistory(article, cloudProgress).catch(() => {});
             }, 350);
           }
         }
       }
 
-      // Reaching the final content line records 100% progress, but does not silently mark
-      // the article completed. Completion remains an explicit reader action.
+      // Reaching the reader-reaction boundary records automatic 100% progress,
+      // but explicit COMPLETED status still requires Mark as Complete.
       if (user && !articleCompleted && rawProgress >= 100 && !completionCommittedRef.current) {
         if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
         completionCommittedRef.current = true;
-        void saveArticleReadingProgress(article.slug, 100, activeTocIdRef.current || 'end', false)
-          .then(() => { if (!disposed) { maxAutoProgressRef.current = 100; setSavedCloudProgress(100); } })
-          .catch(() => { completionCommittedRef.current = false; });
+        void saveArticleReadingProgress(
+          article.slug,
+          100,
+          activeTocIdRef.current || 'end',
+          false
+        )
+          .then(() => {
+            if (!disposed) {
+              maxAutoProgressRef.current = 100;
+              setSavedCloudProgress(100);
+            }
+          })
+          .catch(() => {
+            completionCommittedRef.current = false;
+          });
         void recordArticleHistory(article, 100).catch(() => {});
       }
     };
@@ -282,30 +309,32 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     requestCalculate();
     window.addEventListener('scroll', requestCalculate, { passive: true, capture: true });
     window.addEventListener('resize', requestCalculate, { passive: true });
+    window.addEventListener('orientationchange', requestCalculate, { passive: true });
 
     let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(requestCalculate);
       if (articleContentRef.current) ro.observe(articleContentRef.current);
-      if (articleContentEndRef.current) ro.observe(articleContentEndRef.current);
+      if (readerReactionRef.current) ro.observe(readerReactionRef.current);
     }
 
     const onLoad = requestCalculate;
     window.addEventListener('load', onLoad);
 
-    // Image/video/font layout changes can move the endpoint after the first render.
     const fontReady = (document as any).fonts?.ready;
     if (fontReady?.then) void fontReady.then(requestCalculate).catch(() => {});
-    window.setTimeout(requestCalculate, 100);
-    window.setTimeout(requestCalculate, 500);
-    window.setTimeout(requestCalculate, 1200);
+
+    // Images/embeds can change document height after initial paint.
+    const timers = [100, 300, 600, 1200, 2000].map(ms => window.setTimeout(requestCalculate, ms));
 
     return () => {
       disposed = true;
       if (raf) window.cancelAnimationFrame(raf);
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      timers.forEach(window.clearTimeout);
       window.removeEventListener('scroll', requestCalculate, true);
       window.removeEventListener('resize', requestCalculate);
+      window.removeEventListener('orientationchange', requestCalculate);
       window.removeEventListener('load', onLoad);
       ro?.disconnect();
     };
@@ -320,7 +349,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
   const resumeArticle = () => {
     const startEl = articleContentRef.current;
-    const endEl = articleContentEndRef.current;
+    const endEl = readerReactionRef.current || articleContentEndRef.current;
     if (!startEl || !endEl || savedCloudProgress <= 0 || savedCloudProgress >= 100) { setResumeVisible(false); return; }
     const startY = startEl.getBoundingClientRect().top + window.scrollY;
     const endY = endEl.getBoundingClientRect().top + window.scrollY;
@@ -453,7 +482,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           aria-hidden="true"
         >
           <div
-            className="h-full origin-left will-change-transform"
+            className="h-full origin-left will-change-transform transition-[width] duration-75 ease-linear"
             style={{ backgroundColor: 'var(--progress-page-color)', width: `${Math.max(0, Math.min(100, pagePosition))}%` }}
           />
         </div>
@@ -467,7 +496,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           aria-valuenow={Math.round(scrollProgress)}
         >
           <div
-            className="h-full will-change-transform" style={{ backgroundColor: 'var(--progress-read-color)', width: `${Math.max(0, Math.min(100, scrollProgress))}%` }}
+            className="h-full will-change-transform transition-[width] duration-75 ease-linear" style={{ backgroundColor: 'var(--progress-read-color)', width: `${Math.max(0, Math.min(100, scrollProgress))}%` }}
 
           />
         </div>
@@ -864,7 +893,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           <div ref={articleContentEndRef} aria-hidden="true" className="h-px w-full" />
         </div>
 
-        <div className="my-10 border-4 border-black bg-white p-5 neo-shadow">
+        <div ref={readerReactionRef} className="my-10 border-4 border-black bg-white p-5 neo-shadow">
           <div className="font-display font-black uppercase mb-3 flex items-center gap-2"><HeartPulse className="w-4 h-4"/> Reader reactions</div>
           <div className="flex flex-wrap gap-2">
             {ARTICLE_REACTIONS.map((r)=><button key={r} disabled={reactionBusy} onClick={async()=>{let u=user;if(!u){try{u=await loginWithGoogle();}catch{return}} if(!u)return;setReactionBusy(true);try{const previous=reaction;const next=reaction===r?null:r;await setArticleReaction(article.slug,u.uid,next);setReaction(next);setEngagement(prev=>{const counts={...prev.reactions};if(previous) counts[previous]=Math.max(0,(counts[previous]||0)-1);if(next) counts[next]=(counts[next]||0)+1;return {...prev,reactions:counts};});}catch(e){console.warn(e)}finally{setReactionBusy(false)}}} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${reaction===r?'bg-[var(--color-primary)]':'bg-white'}`}>{r} <span className="ml-1 opacity-70">{engagement.reactions[r]||0}</span></button>)}

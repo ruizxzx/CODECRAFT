@@ -42,3 +42,22 @@ Advanced discovery and creator profiles.
 - Modified TS/TSX files passed TypeScript parser diagnostics.
 - A complete production dependency install/build could not be completed in the build environment because the supplied dependency tree is incomplete and `npm ci` timed out.
 - Run `npm ci` and `npm run build` in the deployment environment before release.
+
+
+## V56 — Reading Progress Precision
+
+- Rebuilt article progress anchors around the actual reader-reaction boundary.
+- Current page-position indicator retracts when scrolling upward.
+- Persistent reading progress remains monotonic until reset or explicit completion reset.
+- Reading reaches 100% when the Reader Reactions panel reaches the bottom edge of the viewport.
+- Added RAF-based smooth tracking, resize/orientation handling, and layout recalculation after media/font loading.
+- Resume navigation uses the same end boundary as reading progress.
+
+
+## V56 — Precision article progress (latest)
+
+- Blue current-position tracker begins when the article body first enters the viewport and retracts with upward scrolling.
+- Persistent reading progress remains monotonic and is driven by the actual highest reading percentage reached.
+- Both trackers now share a precise document-coordinate model; 100% is reached when the Reader Reactions panel reaches the bottom edge of the viewport.
+- The progress engine recalculates on scroll, resize, orientation changes, media/font layout changes, and delayed layout shifts.
+- The end boundary used by Resume Reading matches the reading-progress boundary.
