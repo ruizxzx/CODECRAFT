@@ -2,7 +2,7 @@ import { notifyToast } from '../lib/toast';
 import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
-import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments, getUserFollowers, getUserFollowing, ProfileListEntry } from '../lib/community';
+import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments, getUserFollowers, getUserFollowing, ProfileListEntry, subscribeCommunityProfile } from '../lib/community';
 import { auth, checkIsAdmin } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
@@ -45,6 +45,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [bioInput, setBioInput] = useState('');
   const [themeInput, setThemeInput] = useState('');
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isFollowLoading, setIsFollowLoading] = useState(false);
   const [userAuth, setUserAuth] = useState(auth.currentUser);
   const [relationModal, setRelationModal] = useState<'followers' | 'following' | null>(null);
@@ -53,6 +54,28 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [relationSearch, setRelationSearch] = useState('');
 
   useEffect(() => auth.onAuthStateChanged(setUserAuth), []);
+
+  // Keep the public profile live for every viewer. Do not overwrite form inputs while the owner is editing.
+  useEffect(() => {
+    if (!profile?.uid) return;
+    return subscribeCommunityProfile(profile.uid, next => {
+      if (!next) return;
+      setProfile(next);
+      if (!isEditing) {
+        setDisplayNameInput(next.displayName || '');
+        setBioInput(next.bio || '');
+        setThemeInput(next.themeColor || '#000000');
+        setPhotoUrlInput(next.photoURL || '');
+        setCoverUrlInput(next.coverImageUrl || '');
+        setWebsiteInput(next.websiteUrl || '');
+        setLocationInput(next.location || '');
+        setSocialXInput(next.socialX || '');
+        setSocialGithubInput(next.socialGithub || '');
+        setSocialTelegramInput(next.socialTelegram || '');
+        setSocialInstagramInput(next.socialInstagram || '');
+      }
+    });
+  }, [profile?.uid, isEditing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +181,8 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!profile || !activeUser || activeUser.uid !== profile.uid) return;
+    if (!profile || !activeUser || activeUser.uid !== profile.uid || isSavingProfile) return;
+    setIsSavingProfile(true);
     try {
       const nextPhotoURL = photoUrlInput.trim();
       const nextCoverURL = coverUrlInput.trim();
@@ -168,19 +192,52 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       const nextX = socialXInput.trim();
       const nextGithub = socialGithubInput.trim();
       const nextTelegram = socialTelegramInput.trim();
-      for (const [label, value] of [['Website', nextWebsite], ['X', nextX], ['GitHub', nextGithub], ['Telegram', nextTelegram], ['Instagram', socialInstagramInput.trim()]] as const) {
+      const nextInstagram = socialInstagramInput.trim();
+      for (const [label, value] of [['Website', nextWebsite], ['X', nextX], ['GitHub', nextGithub], ['Telegram', nextTelegram], ['Instagram', nextInstagram]] as const) {
         if (value && !/^https?:\/\//i.test(value)) { notifyToast(`${label} URL must start with http:// or https://`); return; }
       }
       const nextDisplayName = displayNameInput.trim() || profile.username;
       if (nextDisplayName.length > 64) { notifyToast('Display name must be 64 characters or less.'); return; }
-      await updateCommunityProfile(profile.uid, { displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, socialInstagram: socialInstagramInput.trim() });
-      try { await updateProfile(activeUser, { displayName: nextDisplayName, photoURL: nextPhotoURL || null }); } catch (authError) { console.warn('Firebase Auth avatar update skipped:', authError); }
-      const nextProfile = { ...profile, displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, socialInstagram: socialInstagramInput.trim(), updatedAt: new Date().toISOString() };
+      if (!/^#[0-9a-f]{6}$/i.test(themeInput.trim())) { notifyToast('Theme color must be a 6-digit hex color such as #FFD600.'); return; }
+
+      // The profile document is the source of truth. Save this first so a secondary
+      // identity propagation failure can never make a successful profile edit look like a failure.
+      await updateCommunityProfile(profile.uid, {
+        displayName: nextDisplayName, bio: bioInput.trim().slice(0, 500), themeColor: themeInput.trim().toUpperCase(),
+        photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim().slice(0, 100),
+        socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, socialInstagram: nextInstagram
+      });
+
+      try { await updateProfile(activeUser, { displayName: nextDisplayName, photoURL: nextPhotoURL || null }); }
+      catch (authError) { console.warn('Firebase Auth profile update skipped; Firestore profile is still saved:', authError); }
+
+      // Use the complete identity payload required by propagation. This work is
+      // intentionally isolated from the primary save and is retried by realtime views.
+      let propagated = true;
+      try {
+        const syncResult = await syncUserIdentityAcrossContent(activeUser.uid, {
+          displayName: nextDisplayName, photoURL: nextPhotoURL, username: profile.username,
+          isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3'
+        });
+        console.info('Profile identity propagated:', syncResult);
+      } catch (syncError) {
+        propagated = false;
+        console.warn('Profile saved, but legacy author snapshots could not all be propagated:', syncError);
+      }
+
+      const nextProfile = { ...profile, displayName: nextDisplayName, bio: bioInput.trim().slice(0, 500), themeColor: themeInput.trim().toUpperCase(),
+        photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim().slice(0, 100),
+        socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, socialInstagram: nextInstagram, updatedAt: new Date().toISOString() };
       setProfile(nextProfile);
-      await syncUserIdentityAcrossContent(activeUser.uid, { displayName: nextProfile.displayName, photoURL: nextPhotoURL, username: nextProfile.username });
       setIsEditing(false);
-      notifyToast('Profile saved and synchronized across your posts and comments.');
-    } catch (e: any) { notifyToast('Failed to update profile: ' + (e?.message || 'Permission denied.')); }
+      notifyToast(propagated ? 'Profile saved and synchronized across your account.' : 'Profile saved to cloud. Some older author snapshots could not be refreshed yet; live profile views will use the new data.');
+    } catch (e: any) {
+      console.error('Profile update failed:', e);
+      const raw = String(e?.message || '');
+      let detail = raw;
+      try { detail = JSON.parse(raw)?.error || raw; } catch {}
+      notifyToast('Failed to update profile: ' + (detail || 'Permission denied.'));
+    } finally { setIsSavingProfile(false); }
   };
 
   const handleToggleFollow = async () => {
@@ -285,7 +342,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
             <input type="url" value={socialTelegramInput} onChange={e => setSocialTelegramInput(e.target.value)} placeholder="Telegram profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
             <input type="url" value={socialInstagramInput} onChange={e => setSocialInstagramInput(e.target.value)} placeholder="Instagram profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
           </div>
-          <textarea value={bioInput} onChange={e => setBioInput(e.target.value)} rows={4} maxLength={500} placeholder="Bio" className="w-full px-3 py-2 border-2 border-black" /><div className="flex gap-2"><input type="color" value={themeInput} onChange={e => setThemeInput(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={themeInput} onChange={e => setThemeInput(e.target.value)} className="px-3 py-2 border-2 border-black font-mono" /></div><div className="flex gap-2"><button className="px-6 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-bold uppercase">Save</button><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2 bg-neutral-200 border-2 border-black font-mono text-xs font-bold uppercase">Cancel</button></div></form> : <div><h1 className="font-display font-black text-3xl sm:text-4xl uppercase flex items-center gap-2">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-6 h-6 shrink-0" /></h1><p className="font-mono text-sm text-neutral-500 mb-2">@{profile.username}</p>{profile.role && <p className="font-mono text-xs font-bold uppercase mb-4">{profile.role}</p>}{profile.bio && <p className="font-sans text-neutral-800 max-w-2xl text-sm leading-relaxed mb-4 whitespace-pre-wrap">{profile.bio}</p>}
+          <textarea value={bioInput} onChange={e => setBioInput(e.target.value)} rows={4} maxLength={500} placeholder="Bio" className="w-full px-3 py-2 border-2 border-black" /><div className="flex gap-2"><input type="color" value={themeInput} onChange={e => setThemeInput(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={themeInput} onChange={e => setThemeInput(e.target.value)} className="px-3 py-2 border-2 border-black font-mono" /></div><div className="flex gap-2"><button type="submit" disabled={isSavingProfile} className="px-6 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-bold uppercase disabled:opacity-60 disabled:cursor-not-allowed">{isSavingProfile ? 'Saving…' : 'Save'}</button><button type="button" onClick={() => setIsEditing(false)} className="px-6 py-2 bg-neutral-200 border-2 border-black font-mono text-xs font-bold uppercase">Cancel</button></div></form> : <div><h1 className="font-display font-black text-3xl sm:text-4xl uppercase flex items-center gap-2">{profile.displayName}<VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-6 h-6 shrink-0" /></h1><p className="font-mono text-sm text-neutral-500 mb-2">@{profile.username}</p>{profile.role && <p className="font-mono text-xs font-bold uppercase mb-4">{profile.role}</p>}{profile.bio && <p className="font-sans text-neutral-800 max-w-2xl text-sm leading-relaxed mb-4 whitespace-pre-wrap">{profile.bio}</p>}
             {(profile.websiteUrl || profile.location || profile.socialX || profile.socialGithub || profile.socialTelegram || profile.socialInstagram) && <div className="flex flex-wrap items-center gap-2 mb-5 font-mono text-[10px] font-bold uppercase">
               {profile.location && <span className="inline-flex items-center gap-1 px-2 py-1 border-2 border-black bg-neutral-100"><MapPin className="w-3 h-3" />{profile.location}</span>}
               {profile.websiteUrl && <a href={profile.websiteUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="inline-flex items-center gap-1 px-2 py-1 border-2 border-black bg-[var(--color-secondary)] hover:bg-[var(--color-primary)]"><LinkIcon className="w-3 h-3" />Website</a>}

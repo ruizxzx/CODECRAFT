@@ -228,6 +228,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!userAuth?.uid) return;
+    return subscribeCommunityProfile(userAuth.uid, liveProfile => {
+      if (liveProfile) setUserProfile(liveProfile);
+    });
+  }, [userAuth?.uid]);
+
+  useEffect(() => {
     if (!userAuth?.uid) { setReadingQueueIds([]); return; }
     return subscribeReadingQueue(items => setReadingQueueIds(items.filter(item => item.itemType === 'article').map(item => item.itemId)));
   }, [userAuth?.uid]);

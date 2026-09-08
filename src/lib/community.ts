@@ -344,14 +344,39 @@ export async function createCommunityProfile(data: Omit<CommunityUser, 'createdA
 export async function updateCommunityProfile(uid: string, data: Partial<CommunityUser>) {
   const p = `users/${uid}`;
   try {
-    const updatePayload: any = { ...data, updatedAt: serverTimestamp() };
-    delete updatePayload.uid;
-    delete updatePayload.username;
-    delete updatePayload.createdAt;
-    await updateDoc(doc(db, 'users', uid), updatePayload);
+    if (!uid || !isValidId(uid)) throw new Error('Invalid profile ID.');
+    if (!auth.currentUser || auth.currentUser.uid !== uid) throw new Error('You can only edit your own profile.');
+    const clean: any = { ...data };
+    delete clean.uid;
+    delete clean.username;
+    delete clean.createdAt;
+    delete clean.email;
+    delete clean.followersCount;
+    delete clean.followingCount;
+    delete clean.isBlocked;
+    delete clean.isVerified;
+    delete clean.verificationColor;
+    delete clean.isAuthor;
+    delete clean.role;
+    delete clean.platformRole;
+    clean.updatedAt = serverTimestamp();
+    await updateDoc(doc(db, 'users', uid), clean);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, p);
   }
+}
+
+/** Realtime public profile subscription. Every viewer receives profile edits without a refresh. */
+export function subscribeCommunityProfile(uid: string, callback: (profile: CommunityUser | null) => void, onError?: (error: unknown) => void): () => void {
+  if (!uid) { callback(null); return () => {}; }
+  return onSnapshot(
+    doc(db, 'users', uid),
+    snap => callback(snap.exists() ? (mapDocDates(snap.data()) as CommunityUser) : null),
+    error => {
+      console.warn(`Realtime profile subscription failed for ${uid}:`, error);
+      onError?.(error);
+    }
+  );
 }
 
 export async function ensureFollowingAuthor(currentUserId: string, currentUsername?: string): Promise<boolean> {
@@ -1034,10 +1059,12 @@ export async function getUserRepostedPosts(userId: string): Promise<CommunityPos
   return posts.filter(Boolean) as CommunityPost[];
 }
 
-export async function syncUserIdentityAcrossContent(userId: string, profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username' | 'isVerified' | 'verificationColor'>): Promise<void> {
+export async function syncUserIdentityAcrossContent(userId: string, profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username' | 'isVerified' | 'verificationColor'>): Promise<{ posts: number; comments: number }> {
   const writes: Array<{ ref: any; data: any }> = [];
+  let postsCount = 0;
+  let commentsCount = 0;
   const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
-  postsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
+  postsSnap.docs.forEach(d => { postsCount += 1; writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }); });
   let commentsSnap;
   try {
     commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
@@ -1046,12 +1073,13 @@ export async function syncUserIdentityAcrossContent(userId: string, profile: Pic
     const allComments = await getDocs(collectionGroup(db, 'comments'));
     commentsSnap = { docs: allComments.docs.filter(d => d.data()?.authorId === userId) } as any;
   }
-  commentsSnap.docs.forEach(d => writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }));
+  commentsSnap.docs.forEach(d => { commentsCount += 1; writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }); });
   for (let i = 0; i < writes.length; i += 450) {
     const batch = writeBatch(db);
     writes.slice(i, i + 450).forEach(w => batch.update(w.ref, w.data));
     await batch.commit();
   }
+  return { posts: postsCount, comments: commentsCount };
 }
 
 export async function getUserComments(userId: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {
