@@ -286,7 +286,7 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
       <div className="sticky top-[4.5rem] sm:top-[5.5rem] z-30 bg-white border-4 border-black neo-shadow-sm p-2 mb-7">
         <div className="flex overflow-x-auto gap-2">
           {([
-            ['for-you','For You',Sparkles], ['following','Following',Users], ['latest','Latest',Zap], ['trending','Trending',TrendingUp], ['rising','Rising',ArrowUp], ['discussed','Most Discussed',MessageSquare], ['editors','Editor's Picks',Sparkles]
+            ['for-you','For You',Sparkles], ['following','Following',Users], ['latest','Latest',Zap], ['trending','Trending',TrendingUp], ['rising','Rising',ArrowUp], ['discussed','Most Discussed',MessageSquare], ['editors',"Editor's Picks",Sparkles]
           ] as const).map(([key,label,Icon]) => (
             <button key={key} onClick={()=>setTab(key)} className={`shrink-0 px-4 py-2 border-2 border-black font-mono text-[10px] font-black uppercase inline-flex items-center gap-2 ${tab===key?'bg-[var(--color-primary)] text-black':'bg-white hover:bg-neutral-100'}`}>
               <Icon className="w-4 h-4"/>{label}
