@@ -1,28 +1,43 @@
-# OFFSCRPT V52
+# OFFSCRPT V53
 
 ## Release
-Production hardening + account UX upgrade.
+Discovery / Explore FYP build based on V52.1.
 
-### Added / fixed
-- Clearly exposed **Settings & Appearance** entry in the account menu.
-- Dark mode can be enabled from **My OFFSCRPT → Settings & Appearance** and is restored locally and from Firestore.
-- Dark mode CSS coverage expanded across common surfaces, forms, borders and states.
-- Anonymous article and community-post view tracking now works using a stable per-browser identifier with daily deduplication. Authenticated viewers continue using account/day cloud receipts.
-- View tracking runs for logged-out public readers as well as signed-in readers.
-- Reading/view counters remain displayed across article/post surfaces already supported by the app.
-- Existing dual reading indicators, manual completion/reset, history, dashboard, queue, notifications, autosave/recovery and creator-studio functionality retained.
+### Added
+- Rebuilt Explore as a one-page, mixed-content discovery stream for Articles, Community Posts and Series.
+- Added Explore tabs: **For You**, **Following**, **Latest**, **Trending**.
+- Added infinite-style progressive loading with safe client-side batching (Load More) instead of rendering the entire pool at once.
+- Added relevance/freshness/engagement-based ranking for For You and Trending, with format rotation to avoid one content type dominating the stream.
+- Added direct article/post/series cards with real author identity, avatar, handle, views and available engagement metadata.
+- Added trending topics across articles, posts and series.
+- Added direct topic filtering from trending chips and hashtags.
+- Added **Surprise Me** and **Go Down the Rabbit Hole** discovery actions.
+- Added **Why this?** explanations for discovery ranking.
+- Added per-item **Not interested** suppression persisted locally.
+- Added one-click share/copy links on Explore items.
+- Added keyboard shortcuts: `J` / `↓` for next viewport and `R` for a surprise discovery.
+- Added responsive desktop sidebar with trending topics, communities and questions.
+- Added empty/loading states and a clear reset path.
+- Preserved the existing Community page as the social/conversation surface; Explore is discovery-first.
 
-### Firebase / Firestore
-Deploy the included `firestore.rules`. The rules allow public content view receipts to be created anonymously while preventing direct arbitrary counter field edits outside the controlled `+1` update shape. Account-private preferences, drafts, history and queue remain owner-scoped.
+### Navigation
+- Existing `#explore` route remains the Explore entry point.
+- No new top-level Community Feed route was introduced.
 
-### Known architectural note
-Authoritative anti-fraud analytics at large scale should eventually move view counting to trusted server code (Cloud Functions/Cloud Run). V52 provides stable browser/day deduplication and does not expose private account identifiers publicly in the view UI.
+### Firebase
+- No new Firestore collections or permission changes are required for the Explore build.
+- Existing account/following/content reads are reused.
+- Local Explore suppression is intentionally browser-local and does not modify cloud content.
 
 ### Validation
-- Source inspection performed across Firebase, account, CMS, article/post view flows, header/settings, CSS and Firestore rules.
-- `vite build` could not be executed in this environment because the supplied dependency tree has no installed Vite binary.
+- Explore source was rebuilt against the existing V52.1 type/data model.
+- Package remains on the project's existing React/Firebase stack.
+- Full dependency-backed production compilation should be run in the deployment environment before release because this working environment may not contain the complete installed dependency tree.
 
-
-## V52.1 Hotfix
-- Fixed an unmatched parenthesis in `firestore.rules` that caused Firebase to reject the rules at line 490 with `Unexpected allow`.
-- No feature behavior was intentionally changed.
+### Product direction
+- **HOME** = curated publication front page.
+- **BLOG** = article archive.
+- **EXPLORE** = mixed-content discovery / FYP.
+- **COMMUNITY** = social conversation.
+- **SERIES** = structured reading.
+- **MY OFFSCRPT** = personal workspace.
