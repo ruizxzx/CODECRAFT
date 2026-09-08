@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Article, Category, SiteConfig, BentoLink, CarouselSlide } from '../types';
+import { Article, Category, SiteConfig, BentoLink, CarouselSlide, CarouselElement } from '../types';
 import { 
   X, 
   PlusCircle, 
@@ -50,6 +50,7 @@ import {
   getUserVerificationByUsername
 } from '../lib/community';
 import { SocialAdminPanel } from './SocialAdminPanel';
+import { CarouselBuilder } from './CarouselBuilder';
 import { AdminControlPanel } from './AdminControlPanel';
 
 interface AdminStudioModalProps {
@@ -136,12 +137,22 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [newSlideTitle, setNewSlideTitle] = useState('');
   const [newSlideImageUrl, setNewSlideImageUrl] = useState('');
   const [newSlideLinkUrl, setNewSlideLinkUrl] = useState('');
+  const [newSlidePositionX, setNewSlidePositionX] = useState(50);
+  const [newSlidePositionY, setNewSlidePositionY] = useState(50);
+  const [newSlideZoom, setNewSlideZoom] = useState(100);
+  const [newSlideShowDots, setNewSlideShowDots] = useState(true);
+  const [newSlideElements, setNewSlideElements] = useState<CarouselElement[]>([]);
 
   // Carousel Editing State
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
   const [editSlideTitle, setEditSlideTitle] = useState('');
   const [editSlideImageUrl, setEditSlideImageUrl] = useState('');
   const [editSlideLinkUrl, setEditSlideLinkUrl] = useState('');
+  const [editSlidePositionX, setEditSlidePositionX] = useState(50);
+  const [editSlidePositionY, setEditSlidePositionY] = useState(50);
+  const [editSlideZoom, setEditSlideZoom] = useState(100);
+  const [editSlideShowDots, setEditSlideShowDots] = useState(true);
+  const [editSlideElements, setEditSlideElements] = useState<CarouselElement[]>([]);
   const [isSavingSlide, setIsSavingSlide] = useState(false);
 
   // Deletion & Message States (No window.alert or window.confirm which fail in iframes)
@@ -187,12 +198,22 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         title: newSlideTitle.trim(),
         imageUrl: newSlideImageUrl.trim(),
         linkUrl: newSlideLinkUrl.trim(),
-        order: carouselSlides.length
+        order: carouselSlides.length,
+        imagePositionX: newSlidePositionX,
+        imagePositionY: newSlidePositionY,
+        imageZoom: newSlideZoom,
+        showDots: newSlideShowDots,
+        elements: newSlideElements
       });
       setCarouselSlides(prev => [...prev, added]);
       setNewSlideTitle('');
       setNewSlideImageUrl('');
       setNewSlideLinkUrl('');
+      setNewSlidePositionX(50);
+      setNewSlidePositionY(50);
+      setNewSlideZoom(100);
+      setNewSlideShowDots(true);
+      setNewSlideElements([]);
       setCarouselActionMessage("New slide added and synced to cloud Firestore!");
       setTimeout(() => setCarouselActionMessage(null), 4000);
     } catch (e: any) {
@@ -233,6 +254,11 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setEditSlideTitle(slide.title || '');
     setEditSlideImageUrl(slide.imageUrl || '');
     setEditSlideLinkUrl(slide.linkUrl || '');
+    setEditSlidePositionX(slide.imagePositionX ?? 50);
+    setEditSlidePositionY(slide.imagePositionY ?? 50);
+    setEditSlideZoom(slide.imageZoom ?? 100);
+    setEditSlideShowDots(slide.showDots ?? true);
+    setEditSlideElements(slide.elements || []);
     setCarouselActionMessage(null);
     setCarouselErrorMessage(null);
   };
@@ -242,6 +268,11 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setEditSlideTitle('');
     setEditSlideImageUrl('');
     setEditSlideLinkUrl('');
+    setEditSlidePositionX(50);
+    setEditSlidePositionY(50);
+    setEditSlideZoom(100);
+    setEditSlideShowDots(true);
+    setEditSlideElements([]);
   };
 
   const handleSaveEditSlide = async (id: string) => {
@@ -252,17 +283,18 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setCarouselErrorMessage(null);
     setIsSavingSlide(true);
     try {
-      await updateCarouselSlide(id, {
+      const patch = {
         title: editSlideTitle.trim(),
         imageUrl: editSlideImageUrl.trim(),
-        linkUrl: editSlideLinkUrl.trim()
-      });
-      setCarouselSlides(prev => prev.map(s => s.id === id ? {
-        ...s,
-        title: editSlideTitle.trim(),
-        imageUrl: editSlideImageUrl.trim(),
-        linkUrl: editSlideLinkUrl.trim()
-      } : s));
+        linkUrl: editSlideLinkUrl.trim(),
+        imagePositionX: editSlidePositionX,
+        imagePositionY: editSlidePositionY,
+        imageZoom: editSlideZoom,
+        showDots: editSlideShowDots,
+        elements: editSlideElements
+      };
+      await updateCarouselSlide(id, patch);
+      setCarouselSlides(prev => prev.map(s => s.id === id ? { ...s, ...patch } : s));
       setEditingSlideId(null);
       setCarouselActionMessage("Carousel slide successfully updated in cloud Firestore!");
       setTimeout(() => setCarouselActionMessage(null), 4000);
@@ -1829,7 +1861,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         </div>
 
                         <div>
-                          <label className="font-mono text-xs font-bold uppercase block mb-1">Target Link URL</label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="font-mono text-xs font-bold uppercase">Target Link URL</label>
+                            <label className="font-mono text-[10px] font-bold uppercase flex items-center gap-1"><input type="checkbox" checked={newSlideShowDots} onChange={e=>setNewSlideShowDots(e.target.checked)} /> SHOW DOTS</label>
+                          </div>
                           <input 
                             type="text" 
                             value={newSlideLinkUrl}
@@ -1855,6 +1890,20 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           </div>
                         )}
                       </div>
+                    </div>
+
+                    <div className="pt-2 border-t-4 border-black">
+                      <CarouselBuilder
+                        imageUrl={newSlideImageUrl}
+                        positionX={newSlidePositionX}
+                        positionY={newSlidePositionY}
+                        zoom={newSlideZoom}
+                        elements={newSlideElements}
+                        setPositionX={setNewSlidePositionX}
+                        setPositionY={setNewSlidePositionY}
+                        setZoom={setNewSlideZoom}
+                        setElements={setNewSlideElements}
+                      />
                     </div>
 
                     <button
@@ -1949,7 +1998,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                     </div>
 
                                     <div>
-                                      <label className="font-mono text-xs font-bold uppercase block mb-1">Target Link URL</label>
+                                            <div className="flex items-center justify-between mb-1">
+                                  <label className="font-mono text-xs font-bold uppercase">Target Link URL</label>
+                                  <label className="font-mono text-[10px] font-bold uppercase flex items-center gap-1"><input type="checkbox" checked={editSlideShowDots} onChange={e=>setEditSlideShowDots(e.target.checked)} /> SHOW DOTS</label>
+                                </div>
                                       <input 
                                         type="text" 
                                         value={editSlideLinkUrl}
@@ -1968,11 +2020,26 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                         src={editSlideImageUrl} 
                                         alt="Edit preview" 
                                         className="w-full aspect-[21/9] object-cover border-2 border-black bg-white" 
+                                        style={{ objectPosition: `${editSlidePositionX}% ${editSlidePositionY}%`, transform: `scale(${editSlideZoom / 100})` }}
                                       />
                                     ) : (
                                       <div className="text-neutral-400 font-mono text-xs">No image</div>
                                     )}
                                   </div>
+                                </div>
+
+                                <div className="pt-3 border-t-4 border-black mt-4">
+                                  <CarouselBuilder
+                                    imageUrl={editSlideImageUrl}
+                                    positionX={editSlidePositionX}
+                                    positionY={editSlidePositionY}
+                                    zoom={editSlideZoom}
+                                    elements={editSlideElements}
+                                    setPositionX={setEditSlidePositionX}
+                                    setPositionY={setEditSlidePositionY}
+                                    setZoom={setEditSlideZoom}
+                                    setElements={setEditSlideElements}
+                                  />
                                 </div>
 
                                 <div className="flex items-center space-x-3 pt-2 border-t-2 border-neutral-200">

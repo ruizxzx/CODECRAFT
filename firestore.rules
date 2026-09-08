@@ -59,7 +59,9 @@ service cloud.firestore {
     }
 
     match /siteModerators/{userId} {
-      allow read: if isStaff();
+      // A moderator must be able to verify their own staff membership.
+      // Nobody else gets to enumerate the moderator registry.
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       allow create, update, delete: if isAdmin();
     }
 
@@ -72,6 +74,8 @@ service cloud.firestore {
         && incoming().uid == request.auth.uid
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
+        && incoming().get('platformRole', 'member') == (isAdmin() ? 'master_admin' : 'member')
+        && incoming().get('role', '') == (isAdmin() ? 'Master Admin' : '')
         && existsAfter(/databases/$(database)/documents/usernames/$(incoming().username));
       allow update: if (isSignedIn()
         && request.auth.uid == userId
@@ -84,7 +88,8 @@ service cloud.firestore {
         && incoming().get('isVerified', false) == existing().get('isVerified', false)
         && incoming().get('verificationColor', '#2196F3') == existing().get('verificationColor', '#2196F3')
         && incoming().get('isAuthor', false) == existing().get('isAuthor', false)
-        && incoming().get('role', '') == existing().get('role', ''))
+        && incoming().get('role', '') == existing().get('role', '')
+        && incoming().get('platformRole', 'member') == existing().get('platformRole', 'member'))
         || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
         || (isAdmin() && incoming().username == 'krishsarkar' && incoming().isAuthor == true && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'updatedAt']))

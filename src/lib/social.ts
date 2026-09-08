@@ -27,7 +27,7 @@ const hashText=(raw:string)=>{ let h=2166136261; for(let i=0;i<raw.length;i++){h
 const communityDedupeKey=(data:{communityId:string;authorId:string;title:string;content:string;postType:string;parentPostId?:string})=> hashText(`${data.communityId}|${data.authorId}|${data.postType}|${data.parentPostId||''}|${data.title.trim().toLowerCase()}|${data.content.trim()}`);
 
 export async function isPlatformModerator(uid?:string):Promise<boolean>{
-  if(!uid) return false;
+  if(!uid || !auth.currentUser || auth.currentUser.uid !== uid) return false;
   if(isSocialAdmin()) return false;
   try { return (await getDoc(doc(db,'siteModerators',uid))).exists(); } catch { return false; }
 }

@@ -233,12 +233,31 @@ export interface CommunityComment {
   updatedAt: string;
 }
 
+export type CarouselElementType = 'text' | 'badge' | 'button';
+
+export interface CarouselElement {
+  id: string;
+  type: CarouselElementType;
+  text: string;
+  x: number;
+  y: number;
+  color: string;
+  backgroundColor?: string;
+  fontSize?: number;
+  href?: string;
+}
+
 export interface CarouselSlide {
   id: string;
   title: string;
   imageUrl: string;
   linkUrl: string;
   order: number;
+  imagePositionX?: number;
+  imagePositionY?: number;
+  imageZoom?: number;
+  showDots?: boolean;
+  elements?: CarouselElement[];
   createdAt: string;
   updatedAt: string;
 }

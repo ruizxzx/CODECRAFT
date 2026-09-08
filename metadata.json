@@ -1,7 +1,7 @@
 {
   "name": "OFFSCRPT",
-  "version": "v25",
-  "description": "OFFSCRPT social/community reliability and master-control patch: Instagram profile/contact controls, resilient admin cloud loading, community blog/discussion publishing, complete profile post aggregation, and reliable direct-message history/live conversations.",
+  "version": "v38",
+  "description": "OFFSCRPT v38: visual home carousel builder, focal-image cropping, overlay content elements, slide dots, stronger staff authentication boundaries, and privilege-escalation hardening.",
   "majorCapabilities": [
     "Unified Social / Community",
     "Cloud-synced moderation",

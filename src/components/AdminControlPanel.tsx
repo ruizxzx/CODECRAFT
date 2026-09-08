@@ -12,6 +12,9 @@ type Section='overview'|'users'|'posts'|'messages'|'communities'|'questions'|'to
 
 export const AdminControlPanel:React.FC<Props>=({onSiteConfigRestored,isModerator=false})=>{
  const master=checkIsAdmin(auth.currentUser?.email);
+ if (!master && !isModerator) {
+  return <div className="p-8 border-4 border-red-600 bg-red-50 font-mono text-xs font-black">ACCESS DENIED — STAFF ACCOUNT REQUIRED.</div>;
+ }
  const adminId=auth.currentUser?.uid||'';
  const [section,setSection]=useState<Section>(isModerator?'posts':'overview');
  const [users,setUsers]=useState<CommunityUser[]>([]),[posts,setPosts]=useState<SocialAdminPost[]>([]),[messages,setMessages]=useState<SocialMessage[]>([]),[communities,setCommunities]=useState<SocialCommunity[]>([]),[questions,setQuestions]=useState<SocialQuestion[]>([]),[topics,setTopics]=useState<SocialTopic[]>([]),[reports,setReports]=useState<SocialReport[]>([]),[backups,setBackups]=useState<any[]>([]),[moderators,setModerators]=useState<any[]>([]);
