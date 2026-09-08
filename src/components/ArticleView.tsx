@@ -109,6 +109,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [hasClapped, setHasClapped] = useState(false);
   const [fontSize, setFontSize] = useState<'normal' | 'large'>('normal');
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [pagePosition, setPagePosition] = useState(0);
   const [progressHydrated, setProgressHydrated] = useState(false);
   const articleContentRef = React.useRef<HTMLDivElement | null>(null);
   const articleContentEndRef = React.useRef<HTMLDivElement | null>(null);
@@ -132,7 +133,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
   useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); setSavedCloudProgress(pct); maxAutoProgressRef.current = pct; setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
 
-  useEffect(() => { lastSavedProgressRef.current = -1; maxAutoProgressRef.current = 0; completionCommittedRef.current = false; setScrollProgress(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
+  useEffect(() => { lastSavedProgressRef.current = -1; maxAutoProgressRef.current = 0; completionCommittedRef.current = false; setScrollProgress(0); setPagePosition(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
   useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
   useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
   useEffect(() => {
@@ -226,23 +227,36 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       }
       rawProgress = Math.round(Math.min(100, Math.max(0, rawProgress)));
 
-      const visualProgress = articleCompleted ? 100 : rawProgress;
-      setScrollProgress(visualProgress);
+      // Two deliberately separate progress concepts:
+      // 1) pagePosition = the reader's CURRENT viewport position (retracts when scrolling up).
+      // 2) scrollProgress = the reader's HIGHEST reached reading progress (never retracts).
+      // This lets the blue line show where the reader is while the real reading tracker
+      // preserves the highest checkpoint reached during this visit. Manual completion still
+      // hard-locks the tracker at 100% until reset.
+      setPagePosition(articleCompleted ? 100 : rawProgress);
+      const persistentProgress = articleCompleted
+        ? 100
+        : Math.max(rawProgress, maxAutoProgressRef.current, savedCloudProgress);
+      setScrollProgress(persistentProgress);
 
-      if (!articleCompleted && user) {
-        // Persist the highest automatically reached checkpoint, but never use it to drive
+      if (!articleCompleted) {
+        if (rawProgress > maxAutoProgressRef.current) maxAutoProgressRef.current = rawProgress;
+
+        if (user) {
+          // Persist the highest automatically reached checkpoint, but never use it to drive
         // the visual bar. This keeps the UI accurate when a reader scrolls backwards while
-        // still preserving resume progress across sessions/devices.
-        const cloudProgress = Math.max(rawProgress, maxAutoProgressRef.current);
-        maxAutoProgressRef.current = cloudProgress;
+          // still preserving resume progress across sessions/devices.
+          const cloudProgress = maxAutoProgressRef.current;
 
-        if (cloudProgress !== lastSavedProgressRef.current && (cloudProgress === 0 || Math.abs(cloudProgress - lastSavedProgressRef.current) >= 2)) {
-          lastSavedProgressRef.current = cloudProgress;
-          if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-          saveTimerRef.current = window.setTimeout(() => {
-            void saveArticleReadingProgress(article.slug, cloudProgress, activeTocIdRef.current || '', false).catch(() => {});
-            void recordArticleHistory(article, cloudProgress).catch(() => {});
-          }, 350);
+          if (cloudProgress !== lastSavedProgressRef.current && (cloudProgress === 0 || Math.abs(cloudProgress - lastSavedProgressRef.current) >= 2)) {
+            lastSavedProgressRef.current = cloudProgress;
+            setScrollProgress(current => Math.max(current, cloudProgress));
+            if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = window.setTimeout(() => {
+              void saveArticleReadingProgress(article.slug, cloudProgress, activeTocIdRef.current || '', false).catch(() => {});
+              void recordArticleHistory(article, cloudProgress).catch(() => {});
+            }, 350);
+          }
         }
       }
 
@@ -426,12 +440,32 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
   return (
     <div className="w-full bg-white min-h-screen">
-      {/* Top Reading Progress Bar */}
-      <div className="fixed top-0 left-0 right-0 z-[10000] h-1.5 bg-neutral-200 pointer-events-none" aria-label={`Article reading progress ${scrollProgress}%`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={scrollProgress}>
+      {/* Reading position + persistent reading progress. They intentionally behave differently. */}
+      <div className="fixed top-0 left-0 right-0 z-[10000] h-[6px] pointer-events-none" aria-label="Article reading indicators">
+        {/* CURRENT PAGE POSITION: follows the viewport in both directions. */}
         <div
-          className="h-full bg-[var(--color-primary)] border-b border-black origin-left will-change-transform"
-          style={{ width: `${Math.max(0, Math.min(100, scrollProgress))}%` }}
-        />
+          className="h-[3px] w-full bg-black/10 overflow-hidden"
+          aria-hidden="true"
+        >
+          <div
+            className="h-full bg-blue-600 origin-left will-change-transform"
+            style={{ width: `${Math.max(0, Math.min(100, pagePosition))}%` }}
+          />
+        </div>
+        {/* READING PROGRESS: highest progress reached; never retracts on scroll-up. */}
+        <div
+          className="h-[3px] w-full bg-neutral-200 overflow-hidden"
+          role="progressbar"
+          aria-label={`Article reading progress ${Math.round(scrollProgress)}%`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(scrollProgress)}
+        >
+          <div
+            className="h-full bg-[var(--color-primary)] will-change-transform"
+            style={{ width: `${Math.max(0, Math.min(100, scrollProgress))}%` }}
+          />
+        </div>
       </div>
 
       {/* Floating Sub-Header for reading utility */}
