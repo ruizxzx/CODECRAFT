@@ -1,16 +1,19 @@
-# V64 Build Hotfix
+# OFFSCRPT V66 Reliability / Route Fix
 
-Fixed the Vercel production build error in `src/components/ExploreView.tsx`.
+This build addresses production route failures observed on article and community-post deep links.
 
-Cause: the label `Editor's Picks` was wrapped in a single-quoted TypeScript string, so the apostrophe terminated the string early and esbuild reported `Expected "]" but found "s"`.
+## Article deep-link hardening
+- Normalizes legacy and malformed article content blocks before rendering.
+- Guarantees `content`, `items`, and `codeBlock` shapes used by the reader are safe.
+- Defensively handles missing/non-array series tags and malformed legacy records.
+- Preserves Firestore-backed article hydration and realtime updates.
 
-The label is now a valid double-quoted string. The duplicate root `components/ExploreView.tsx` copy was synchronized as well.
+## Community post deep-link hardening
+- `getPost(postId)` now resolves both root `posts/{postId}` documents and community-scoped `communities/{communityId}/posts/{postId}` documents.
+- Community-scoped posts normalize `postType` to the UI's `type` field.
+- Community comments, edits, deletes, votes, reposts and related writes resolve the actual post location.
+- Existing community deep links such as `#community/post/{postId}` continue to work.
 
-
-## V65 Blog runtime fix
-
-Observed production symptom: `/article/...` rendered the application runtime-error boundary instead of the article.
-
-The V64 path allowed raw Firestore article documents into the React tree. Some legacy documents can omit `tags`, `content`, or nested `author` data while still being valid enough to be returned from `articles`. Components such as BlogView and ArticleView directly called `.forEach()`/`.map()` on those fields.
-
-V65 normalizes cloud article records at the CMS subscription/fetch boundary and adds defensive UI fallbacks. This prevents one malformed legacy article from crashing the entire React tree.
+## Validation
+- Modified TS/TSX files transpile successfully with TypeScript's JSX transpiler.
+- Root and src copies of modified files are synchronized.

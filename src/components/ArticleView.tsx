@@ -413,7 +413,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   };
 
   // Related articles (same category or latest excluding current)
-  const relatedSeries = allSeries.filter(s => s.id !== article.seriesId && s.status !== 'archived' && s.visibility !== 'private' && (s.tags||[]).some(tag => (article.tags||[]).map(x=>x.toLowerCase()).includes(String(tag).toLowerCase()))).slice(0,4);
+  const articleTagSet = new Set((safeTags || []).map(x => String(x).toLowerCase()));
+  const relatedSeries = allSeries.filter(s => s.id !== article.seriesId && s.status !== 'archived' && s.visibility !== 'private' && Array.isArray((s as any).tags) && (s as any).tags.some((tag: any) => articleTagSet.has(String(tag).toLowerCase()))).slice(0,4);
 
   const relatedArticles = allArticles
     .filter((a) => a.slug !== article.slug)
@@ -805,7 +806,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             if (block.type === 'list' && block.items) {
               return (
                 <ul key={index} className="my-8 list-disc pl-7 space-y-3 font-sans text-base text-neutral-800">
-                  {block.items.filter(Boolean).map((item, idx) => <li key={idx}><RichText text={item} /></li>)}
+                  {(Array.isArray(block.items) ? block.items : []).filter(Boolean).map((item, idx) => <li key={idx}><RichText text={String(item)} /></li>)}
                 </ul>
               );
             }
@@ -859,7 +860,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                     <span>Key Takeaways for Software Architects</span>
                   </div>
                   <ul className="space-y-3 font-sans text-base text-neutral-800">
-                    {block.items.map((item, idx) => (
+                    {(Array.isArray(block.items) ? block.items : []).map((item, idx) => (
                       <li key={idx} className="flex items-start space-x-3">
                         <span className="font-mono font-bold text-xs bg-black text-[var(--color-primary)] px-1.5 py-0.5 border border-black shrink-0 mt-0.5">
                           {idx + 1}

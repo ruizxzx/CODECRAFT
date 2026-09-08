@@ -388,11 +388,33 @@ function normalizeArticleRecord(raw: any, fallbackId = ''): Article {
   const fallbackAuthor = data.author && typeof data.author === 'object' ? data.author : {};
   const id = String(data.id || fallbackId || data.slug || '');
   const slug = String(data.slug || fallbackId || id);
-  const content = Array.isArray(data.content)
-    ? data.content.filter((block: any) => block && typeof block === 'object')
-    : (Array.isArray(data.contentBlocks)
-        ? data.contentBlocks.filter((block: any) => block && typeof block === 'object')
-        : []);
+  const rawContent = Array.isArray(data.content) ? data.content : (Array.isArray(data.contentBlocks) ? data.contentBlocks : []);
+  const content = rawContent
+    .filter((block: any) => block && typeof block === 'object')
+    .map((block: any) => ({
+      ...block,
+      type: String(block.type || 'paragraph'),
+      content: String(block.content ?? ''),
+      items: Array.isArray(block.items) ? block.items.map((item: any) => String(item ?? '')).filter(Boolean) : [],
+      codeBlock: block.codeBlock && typeof block.codeBlock === 'object' ? {
+        ...block.codeBlock,
+        code: String(block.codeBlock.code ?? ''),
+        language: String(block.codeBlock.language ?? 'text'),
+        filename: String(block.codeBlock.filename ?? ''),
+      } : undefined,
+      href: block.href != null ? String(block.href) : undefined,
+      linkText: block.linkText != null ? String(block.linkText) : undefined,
+      buttonText: block.buttonText != null ? String(block.buttonText) : undefined,
+      imageUrl: block.imageUrl != null ? String(block.imageUrl) : undefined,
+      imageAlt: block.imageAlt != null ? String(block.imageAlt) : undefined,
+      imageCaption: block.imageCaption != null ? String(block.imageCaption) : undefined,
+      imageHref: block.imageHref != null ? String(block.imageHref) : undefined,
+      videoUrl: block.videoUrl != null ? String(block.videoUrl) : undefined,
+      videoTitle: block.videoTitle != null ? String(block.videoTitle) : undefined,
+      videoCaption: block.videoCaption != null ? String(block.videoCaption) : undefined,
+      calloutTitle: block.calloutTitle != null ? String(block.calloutTitle) : undefined,
+      quoteAuthor: block.quoteAuthor != null ? String(block.quoteAuthor) : undefined,
+    }));
   const tags = Array.isArray(data.tags)
     ? data.tags.map((tag: any) => String(tag || '').trim()).filter(Boolean)
     : [];
@@ -656,7 +678,7 @@ export async function getArticleReaction(slug:string,userId:string):Promise<Arti
 export async function getSeriesArticles(seriesId:string):Promise<Article[]>{
   if(!seriesId) return [];
   const snap=await getDocs(query(collection(db,'articles'),where('seriesId','==',seriesId),limit(100)));
-  return snap.docs.map(d=>({...d.data(),id:d.id,slug:(d.data() as any).slug||d.id} as Article)).sort((a:any,b:any)=>(a.seriesOrder||0)-(b.seriesOrder||0));
+  return snap.docs.map(d=>normalizeArticleRecord(d.data(), d.id)).sort((a:any,b:any)=>(a.seriesOrder||0)-(b.seriesOrder||0));
 }
 export async function createArticleRevision(article:Article):Promise<void>{
   if(!checkIsAdmin(auth.currentUser?.email)) return;

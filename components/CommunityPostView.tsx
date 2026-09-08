@@ -301,9 +301,9 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
       <div className="w-full min-w-0 bg-white border-4 border-black neo-shadow-lg p-4 sm:p-10 overflow-hidden">
         <div className="flex justify-between items-start mb-6 flex-wrap gap-2">
           <div className="inline-block px-3 py-1 bg-[var(--color-secondary)] border-2 border-black font-mono text-xs font-black uppercase">
-            {post.type}
+            {post.type || (post as any).postType || 'discussion'}
           </div>
-          {isAdmin && post.type === 'blog' && (
+          {isAdmin && ((post.type || (post as any).postType) === 'blog') && (
             <button type="button" onClick={handlePublishOnMain} className="flex items-center space-x-1.5 px-3 py-1 border-2 border-black font-mono text-xs font-black uppercase bg-[var(--color-primary)]">
               {mainArticleStatus === 'published' ? 'UNPUBLISH FROM MAIN' : 'PUBLISH ON MAIN'}
             </button>
@@ -521,7 +521,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           <div className="w-full max-w-2xl bg-white border-4 border-black neo-shadow-lg p-6">
             <div className="flex justify-between items-center mb-5"><h3 className="font-display font-black text-xl uppercase">Quote Repost</h3><button onClick={() => setIsQuoteOpen(false)}><X /></button></div>
             <textarea value={quoteText} onChange={e => setQuoteText(e.target.value)} placeholder="Add your take..." className="w-full border-2 border-black p-3 min-h-[150px]" maxLength={2000}/>
-            <div className="mt-3 border-2 border-neutral-300 p-3 text-sm"><b>{post.title}</b><div className="text-neutral-600 mt-1 line-clamp-3">{post.content}</div></div>
+            <div className="mt-3 border-2 border-neutral-300 p-3 text-sm"><b>{post.title}</b><div className="text-neutral-600 mt-1 line-clamp-3">{String(post.content || '')}</div></div>
             <button disabled={!quoteText.trim()} onClick={handleQuoteRepost} className="mt-4 px-5 py-3 bg-[var(--color-secondary)] border-2 border-black font-black uppercase disabled:opacity-50">Publish Quote</button>
           </div>
         </div>

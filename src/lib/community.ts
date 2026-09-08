@@ -732,16 +732,45 @@ export async function getUserPosts(userId: string, username?: string): Promise<C
   return Array.from(byId.values()).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()) as CommunityPost[];
 }
 
-export async function getPost(postId: string): Promise<CommunityPost | null> {
-  const p = `posts/${postId}`;
+const postLocationCache = new Map<string, string | null>();
+
+async function resolvePostLocation(postId: string): Promise<any | null> {
+  if (!postId) return null;
+  const cached = postLocationCache.get(postId);
+  if (cached === 'root') return doc(db, 'posts', postId);
+  if (cached && cached.startsWith('community:')) {
+    const [, cid] = cached.split(':');
+    return doc(db, 'communities', cid, 'posts', postId);
+  }
+  if (cached === null) return null;
+  const rootRef = doc(db, 'posts', postId);
+  const rootSnap = await getDoc(rootRef);
+  if (rootSnap.exists()) { postLocationCache.set(postId, 'root'); return rootRef; }
   try {
-    const snap = await getDoc(doc(db, 'posts', postId));
-    if (snap.exists()) {
-      return { ...snap.data(), id: snap.id } as CommunityPost;
+    const communitiesSnap = await getDocs(query(collection(db, 'communities'), limit(300)));
+    for (const c of communitiesSnap.docs) {
+      const ref = doc(db, 'communities', c.id, 'posts', postId);
+      const snap = await getDoc(ref);
+      if (snap.exists()) { postLocationCache.set(postId, `community:${c.id}`); return ref; }
     }
-    return null;
+  } catch (e) { console.warn('Community post location resolution failed:', e); }
+  postLocationCache.set(postId, null);
+  return null;
+}
+
+export async function getPost(postId: string): Promise<CommunityPost | null> {
+  const path = `posts/${postId}`;
+  try {
+    const ref = await resolvePostLocation(postId);
+    if (!ref) return null;
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    const data:any = snap.data();
+    return { ...data, id: snap.id, type: data.type || data.postType || 'discussion', communityId: data.communityId || (ref.path.startsWith('communities/') ? ref.path.split('/')[1] : undefined),
+      commentsCount: Number(data.commentsCount || 0), upvotesCount: Number(data.upvotesCount ?? (data.score > 0 ? data.score : 0)), downvotesCount: Number(data.downvotesCount || 0), repostsCount: Number(data.repostsCount || 0), viewsCount: Number(data.viewsCount || 0),
+      content: String(data.content || '') };
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, p);
+    handleFirestoreError(error, OperationType.GET, path);
     return null;
   }
 }
@@ -769,13 +798,15 @@ export async function updatePost(postId: string, data: Partial<CommunityPost>) {
         patch.editReviewedBy = null;
       }
     }
-    await updateDoc(doc(db, 'posts', postId), patch);
-    const confirmed = await getDoc(doc(db, 'posts', postId));
+    const postRef = await resolvePostLocation(postId);
+    if (!postRef) throw new Error('Post no longer exists.');
+    await updateDoc(postRef, patch);
+    const confirmed = await getDoc(postRef);
     if (!confirmed.exists()) throw new Error('Your edit was not confirmed in Firebase. Please refresh and try again.');
     // Public creator edits remain canonical in the source post. Published main articles
     // are hydrated from this source, so edits appear on the main site immediately with
     // EDITED + PENDING REVIEW until a master admin approves the change.
-    return { ...mapDocDates(confirmed.data()), id: confirmed.id } as CommunityPost;
+    return { ...mapDocDates(confirmed.data()), id: confirmed.id, type: (confirmed.data() as any).type || (confirmed.data() as any).postType || 'discussion', communityId: (confirmed.data() as any).communityId || (postRef.path.startsWith('communities/') ? postRef.path.split('/')[1] : undefined) } as CommunityPost;
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, p);
     throw error;
@@ -783,19 +814,23 @@ export async function updatePost(postId: string, data: Partial<CommunityPost>) {
 }
 
 export function subscribeCommunityComments(postId: string, callback: (comments: CommunityComment[]) => void): () => void {
-  const q = query(collection(db, 'posts', postId, 'comments'), orderBy('createdAt', 'asc'));
-  return onSnapshot(q, (snap) => {
-    callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityComment)));
-  }, (error) => {
-    console.error('Community comment realtime subscription failed:', error);
-    callback([]);
-  });
+  let unsub: (() => void) | null = null;
+  let active = true;
+  void resolvePostLocation(postId).then(ref => {
+    if (!active) return;
+    if (!ref) { callback([]); return; }
+    const q = query(collection(ref, 'comments'), orderBy('createdAt', 'asc'));
+    unsub = onSnapshot(q, snap => callback(snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityComment))), () => callback([]));
+  }).catch(() => callback([]));
+  return () => { active = false; unsub?.(); };
 }
 
 export async function getComments(postId: string): Promise<CommunityComment[]> {
   const p = `posts/${postId}/comments`;
   try {
-    const q = query(collection(db, 'posts', postId, 'comments'), orderBy('createdAt', 'asc'));
+    const postRef = await resolvePostLocation(postId);
+    if (!postRef) return [];
+    const q = query(collection(postRef, 'comments'), orderBy('createdAt', 'asc'));
     const snap = await getDocs(q);
     return snap.docs.map(d => ({ ...d.data(), id: d.id } as CommunityComment));
   } catch (error) {
@@ -809,22 +844,12 @@ export async function addComment(postId: string, currentCommentsCount: number | 
   const p = `posts/${postId}/comments/${commentId}`;
   try {
     const now = new Date().toISOString();
-    const commentData = {
-      ...data,
-      postId,
-      mentionedUsernames: extractMentions(data.content),
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    };
-    
+    const commentData = { ...data, postId, mentionedUsernames: extractMentions(data.content), createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+    const postRef = await resolvePostLocation(postId);
+    if (!postRef) throw new Error('Post no longer exists.');
     const batch = writeBatch(db);
-    batch.set(doc(db, 'posts', postId, 'comments', commentId), commentData);
-    
-    // Increment commentsCount atomically
-    batch.update(doc(db, 'posts', postId), {
-      commentsCount: increment(1),
-      updatedAt: serverTimestamp()
-    });
+    batch.set(doc(postRef, 'comments', commentId), commentData);
+    batch.update(postRef, { commentsCount: increment(1), updatedAt: serverTimestamp() });
     
     await batch.commit();
     const actor = await getCommunityProfile(auth.currentUser?.uid || commentData.authorId);
@@ -833,7 +858,7 @@ export async function addComment(postId: string, currentCommentsCount: number | 
         const target = await getPost(postId);
         if (target?.authorId) await createNotification(target.authorId, { type: commentData.parentId ? 'reply' : 'comment', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: commentData.parentId ? 'replied to your comment' : 'commented on your post', targetType: 'post', targetId: postId });
         if (commentData.parentId) {
-          try { const parent = await getDoc(doc(db, 'posts', postId, 'comments', commentData.parentId)); if (parent.exists()) await createNotification(parent.data().authorId, { type:'reply', actorId:actor.uid, actorUsername:actor.username, actorName:actor.displayName, actorAvatar:actor.photoURL || '', message:'replied to your comment', targetType:'comment', targetId:commentData.parentId }); } catch {}
+          try { const parent = await getDoc(doc(postRef, 'comments', commentData.parentId)); if (parent.exists()) await createNotification(parent.data().authorId, { type:'reply', actorId:actor.uid, actorUsername:actor.username, actorName:actor.displayName, actorAvatar:actor.photoURL || '', message:'replied to your comment', targetType:'comment', targetId:commentData.parentId }); } catch {}
         }
         await notifyMentions(commentData.content, actor, 'comment', commentId);
       } catch (e) { console.warn('Comment notifications failed:', e); }
@@ -890,11 +915,12 @@ export async function hasClapped(postId: string, userId: string): Promise<boolea
 
 export async function deletePost(postId: string) {
   try {
-    const postRef = doc(db, 'posts', postId);
-    const commentsSnap = await getDocs(collection(db, 'posts', postId, 'comments'));
-    const votesSnap = await getDocs(collection(db, 'posts', postId, 'votes'));
-    const clapsSnap = await getDocs(collection(db, 'posts', postId, 'claps'));
-    const repostsSnap = await getDocs(collection(db, 'posts', postId, 'reposts'));
+    const postRef = await resolvePostLocation(postId);
+    if (!postRef) return;
+    const commentsSnap = await getDocs(collection(postRef, 'comments'));
+    const votesSnap = await getDocs(collection(postRef, 'votes'));
+    const clapsSnap = await getDocs(collection(postRef, 'claps'));
+    const repostsSnap = await getDocs(collection(postRef, 'reposts'));
 
     const batch = writeBatch(db);
     commentsSnap.docs.forEach(d => batch.delete(d.ref));
@@ -912,12 +938,11 @@ export async function deletePost(postId: string) {
 
 export async function deleteComment(postId: string, commentId: string) {
   try {
+    const postRef = await resolvePostLocation(postId);
+    if (!postRef) throw new Error('Post no longer exists.');
     const batch = writeBatch(db);
-    batch.delete(doc(db, 'posts', postId, 'comments', commentId));
-    batch.update(doc(db, 'posts', postId), {
-      commentsCount: increment(-1),
-      updatedAt: serverTimestamp()
-    });
+    batch.delete(doc(postRef, 'comments', commentId));
+    batch.update(postRef, { commentsCount: increment(-1), updatedAt: serverTimestamp() });
     await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `posts/${postId}/comments/${commentId}`);
@@ -995,36 +1020,32 @@ export async function blockUser(uid: string, isBlocked: boolean) {
 export async function toggleVote(postId: string, userId: string, currentUpvotes: number, currentDownvotes: number, voteType: 'up' | 'down', currentVote: 'up' | 'down' | null) {
   const p = `posts/${postId}/votes/${userId}`;
   try {
+    const postRef = await resolvePostLocation(postId);
+    if (!postRef) throw new Error('Post no longer exists.');
     const batch = writeBatch(db);
-    const voteRef = doc(db, 'posts', postId, 'votes', userId);
+    const voteRef = doc(postRef, 'votes', userId);
     const upvoteRef = doc(db, 'users', userId, 'upvotes', postId);
     if (currentVote === voteType) {
       batch.delete(voteRef);
-      if (voteType === 'up') batch.update(doc(db, 'posts', postId), { upvotesCount: increment(-1), updatedAt: serverTimestamp() });
-      else batch.update(doc(db, 'posts', postId), { downvotesCount: increment(-1), updatedAt: serverTimestamp() });
+      batch.update(postRef, { [voteType === 'up' ? 'upvotesCount' : 'downvotesCount']: increment(-1), updatedAt: serverTimestamp() });
       if (voteType === 'up') batch.delete(upvoteRef);
     } else {
+      const updates:any = { updatedAt: serverTimestamp() };
+      if (currentVote === 'up') updates.upvotesCount = increment(-1);
+      if (currentVote === 'down') updates.downvotesCount = increment(-1);
+      if (voteType === 'up') { updates.upvotesCount = currentVote === 'up' ? updates.upvotesCount : increment(1); batch.set(upvoteRef, { postId, createdAt: serverTimestamp() }); }
+      else { updates.downvotesCount = increment(1); batch.delete(upvoteRef); }
       batch.set(voteRef, { postId, userId, type: voteType, createdAt: serverTimestamp() });
-      if (voteType === 'up') {
-        batch.set(upvoteRef, { postId, createdAt: serverTimestamp() });
-        batch.update(doc(db, 'posts', postId), { upvotesCount: increment(1), ...(currentVote === 'down' ? { downvotesCount: increment(-1) } : {}), updatedAt: serverTimestamp() });
-      } else {
-        if (currentVote === 'up') batch.delete(upvoteRef);
-        batch.update(doc(db, 'posts', postId), { downvotesCount: increment(1), ...(currentVote === 'up' ? { upvotesCount: increment(-1) } : {}), updatedAt: serverTimestamp() });
-      }
+      batch.update(postRef, updates);
     }
     await batch.commit();
     if (voteType === 'up' && currentVote !== 'up') {
-      try {
-        const post = await getPost(postId);
-        const actor = await getCommunityProfile(userId);
-        if (post && actor) await createNotification(post.authorId, { type: 'upvote', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'upvoted your post', targetType: 'post', targetId: postId });
-      } catch (notificationError) { console.warn('Upvote notification failed:', notificationError); }
+      try { const post = await getPost(postId); const actor = await getCommunityProfile(userId); if (post && actor) await createNotification(post.authorId, { type: 'upvote', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'upvoted your post', targetType: 'post', targetId: postId }); } catch (notificationError) { console.warn('Upvote notification failed:', notificationError); }
     }
     return {
-      upvotesCount: Math.max(0, currentUpvotes + (currentVote === 'up' ? -1 : voteType === 'up' ? 1 : 0)),
-      downvotesCount: Math.max(0, currentDownvotes + (currentVote === 'down' ? -1 : voteType === 'down' ? 1 : 0)),
-      vote: currentVote === voteType ? null : voteType
+      vote: currentVote === voteType ? null : voteType,
+      upvotesCount: Math.max(0, currentUpvotes + ((currentVote === 'up' ? -1 : 0) + (currentVote !== 'up' && voteType === 'up' ? 1 : 0))),
+      downvotesCount: Math.max(0, currentDownvotes + ((currentVote === 'down' ? -1 : 0) + (currentVote !== 'down' && voteType === 'down' ? 1 : 0)))
     };
   } catch (error) { handleFirestoreError(error, OperationType.WRITE, p); throw error; }
 }
@@ -1172,27 +1193,23 @@ export async function getUserComments(userId: string): Promise<Array<{ id: strin
 }
 
 export async function toggleRepost(postId: string, userId: string, isReposted: boolean): Promise<boolean> {
+  const postRef = await resolvePostLocation(postId);
+  if (!postRef) throw new Error('Post no longer exists.');
   const batch = writeBatch(db);
   const repostRef = doc(db, 'users', userId, 'reposts', postId);
-  const reverseRef = doc(db, 'posts', postId, 'reposts', userId);
+  const reverseRef = doc(postRef, 'reposts', userId);
   if (isReposted) {
     batch.delete(repostRef); batch.delete(reverseRef);
-    batch.update(doc(db, 'posts', postId), { repostsCount: increment(-1), updatedAt: serverTimestamp() });
+    batch.update(postRef, { repostsCount: increment(-1), updatedAt: serverTimestamp() });
   } else {
     const post = await getPost(postId);
     if (!post) throw new Error('Post no longer exists.');
     batch.set(repostRef, { postId, title: post.title, authorId: post.authorId, authorUsername: post.authorUsername, createdAt: serverTimestamp() });
     batch.set(reverseRef, { userId, createdAt: serverTimestamp() });
-    batch.update(doc(db, 'posts', postId), { repostsCount: increment(1), updatedAt: serverTimestamp() });
+    batch.update(postRef, { repostsCount: increment(1), updatedAt: serverTimestamp() });
   }
   await batch.commit();
-  if (!isReposted) {
-    try {
-      const actor = await getCommunityProfile(userId);
-      const target = await getPost(postId);
-      if (actor && target) await createNotification(target.authorId, { type: 'repost', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'reposted your post', targetType: 'post', targetId: postId });
-    } catch (e) { console.warn('Repost notification failed:', e); }
-  }
+  if (!isReposted) { try { const actor = await getCommunityProfile(userId); const target = await getPost(postId); if (actor && target) await createNotification(target.authorId, { type: 'repost', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'reposted your post', targetType: 'post', targetId: postId }); } catch (e) { console.warn('Repost notification failed:', e); } }
   return !isReposted;
 }
 

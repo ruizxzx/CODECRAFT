@@ -1,13 +1,11 @@
-# OFFSCRPT V65 — Blog Runtime Safety & Cloud Article Normalization
+# OFFSCRPT V66
 
-Analytics, discovery, creator defaults, mention autocomplete, audit logging, and cloud draft versioning.
+Reliability release for article and community deep links.
 
-
-## V65 Hotfix
-
-- Added `normalizeArticleRecord()` to sanitize legacy/malformed Firestore article documents before they enter the React UI.
-- Normalized article `content`, `tags`, author metadata, title/excerpt/category, publication date, and reading time.
-- Hardened Blog and Article views against missing legacy arrays/fields.
-- Removed duplicate App imports introduced during the analytics/discovery batch.
-- Kept root and `src/` source trees synchronized.
-- Goal: an invalid/partial historical article document must not crash the entire Blog or Article page.
+- Legacy and malformed article content is normalized before rendering.
+- Article series/tag rendering is defensive.
+- Community post URLs now resolve both root posts and community-scoped posts.
+- Community post type is normalized from type/postType.
+- Comments load/write/delete against the actual post location.
+- Community votes, reposts, edits and deletes resolve the actual post location.
+- Root/src source trees synchronized.
