@@ -1,4 +1,4 @@
-# OFFSCRPT V57
+# OFFSCRPT V59
 
 Built from the V56 precision-reading milestone.
 
@@ -26,3 +26,16 @@ Built from the V56 precision-reading milestone.
 - Mirrored active source changes into the repository's duplicate `src/` tree.
 
 Validation: modified TS/TSX files successfully transpile with TypeScript. Full dependency-backed Vite/tsc validation was not available because dependency installation timed out in the build environment.
+
+
+## V59 — Admin Profile Ownership + Blank Page Fix
+
+- Fixed a production runtime crash caused by the realtime profile subscription being referenced from `App.tsx` without being imported; this caused the deployed SPA to render a blank page.
+- Synchronized the active root source tree with `src/`, which is the actual Vite entrypoint referenced by `index.html`, eliminating stale duplicate source files.
+- Fixed trusted-admin editing of the canonical `@krishsarkar` author profile when the signed-in admin UID differs from the canonical author UID.
+- Kept ordinary users restricted to their own profile documents.
+- Tightened Firestore user-update rules so admins cannot arbitrarily edit every user's profile fields; the cross-UID admin exception is limited to the canonical `@krishsarkar` author profile.
+- Added a production runtime error boundary so unexpected React errors show a recoverable reload screen instead of an unexplained white page.
+
+- Canonical admin profile edits now synchronize the publication author fields in `siteConfig/global` as well as the corresponding authored posts/comments/articles.
+- Normal user profile writes remain account-scoped; admin cross-UID access is limited to the reserved `@krishsarkar` author profile.

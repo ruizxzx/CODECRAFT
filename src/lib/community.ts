@@ -345,7 +345,11 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
   const p = `users/${uid}`;
   try {
     if (!uid || !isValidId(uid)) throw new Error('Invalid profile ID.');
-    if (!auth.currentUser || auth.currentUser.uid !== uid) throw new Error('You can only edit your own profile.');
+    const current = auth.currentUser;
+    const adminMayManageCanonicalAuthor = !!current && checkIsAdmin(current.email) && (await getCommunityProfile(uid))?.username?.toLowerCase() === 'krishsarkar';
+    if (!current || (current.uid !== uid && !adminMayManageCanonicalAuthor)) {
+      throw new Error('You can only edit your own profile.');
+    }
     const clean: any = { ...data };
     delete clean.uid;
     delete clean.username;
@@ -1074,6 +1078,24 @@ export async function syncUserIdentityAcrossContent(userId: string, profile: Pic
     commentsSnap = { docs: allComments.docs.filter(d => d.data()?.authorId === userId) } as any;
   }
   commentsSnap.docs.forEach(d => { commentsCount += 1; writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }); });
+
+  // Articles are admin-managed in Firestore. When a trusted admin edits the
+  // canonical @krishsarkar profile, update only articles that belong to that
+  // author so the public publication stays consistent without broad rewrites.
+  if (checkIsAdmin(auth.currentUser?.email) && profile.username.toLowerCase() === 'krishsarkar') {
+    const articlesSnap = await getDocs(collection(db, 'articles'));
+    articlesSnap.docs.forEach(d => {
+      const article = d.data();
+      const a = article.author || {};
+      if (a.uid === userId || a.username?.toLowerCase() === 'krishsarkar') {
+        writes.push({ ref: d.ref, data: {
+          author: { ...a, uid: userId, username: 'krishsarkar', name: profile.displayName, avatar: profile.photoURL || '', bio: profile.bio || a.bio || '', isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3' },
+          updatedAt: serverTimestamp()
+        }});
+      }
+    });
+  }
+
   for (let i = 0; i < writes.length; i += 450) {
     const batch = writeBatch(db);
     writes.slice(i, i + 450).forEach(w => batch.update(w.ref, w.data));

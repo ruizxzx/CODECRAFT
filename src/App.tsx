@@ -38,7 +38,7 @@ import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
-import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
+import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor, subscribeCommunityProfile } from './lib/community';
 import { subscribeReadingQueue, toggleReadingQueue, subscribeThemePreference } from './lib/account';
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
@@ -228,11 +228,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!userAuth?.uid) return;
-    return subscribeCommunityProfile(userAuth.uid, liveProfile => {
+    if (!userProfile?.uid) return;
+    return subscribeCommunityProfile(userProfile.uid, liveProfile => {
       if (liveProfile) setUserProfile(liveProfile);
     });
-  }, [userAuth?.uid]);
+  }, [userProfile?.uid]);
 
   useEffect(() => {
     if (!userAuth?.uid) { setReadingQueueIds([]); return; }
