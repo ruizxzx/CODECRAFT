@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { PageView, SiteConfig, CommunityUser } from '../types';
 import { DEFAULT_TOP_NAVIGATION, DEFAULT_MENU_NAVIGATION } from '../lib/cms';
 import { notifyToast } from '../lib/toast';
-import { auth, loginWithGoogle, logout, ADMIN_EMAILS } from '../lib/firebase';
+import { auth, loginWithGoogle, logout, checkIsAdmin } from '../lib/firebase';
+import { isPlatformModerator } from '../lib/social';
 import { useAuthUser } from '../lib/useAuthUser';
 import { subscribeUnreadNotificationCount } from '../lib/community';
 import { 
@@ -109,7 +110,17 @@ export const Header: React.FC<HeaderProps> = ({
     notifyToast('To install OFFSCRPT, use your browser menu and choose “Install app” or “Add to Home Screen”.', 'info');
   };
 
-  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
+  const [canOpenCms, setCanOpenCms] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = auth.onAuthStateChanged(async (u) => {
+      if (!u) { if (!cancelled) setCanOpenCms(false); return; }
+      const master = checkIsAdmin(u.email);
+      const moderator = !master && await isPlatformModerator(u.uid);
+      if (!cancelled) setCanOpenCms(master || moderator);
+    });
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
 
   const iconById: Record<string, React.ComponentType<{ className?: string }>> = {
     home: Home,
@@ -462,7 +473,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Admin Studio Trigger in Drawer */}
-          {onOpenCms && (
+          {onOpenCms && canOpenCms && (
             <div>
               <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">Management</h3>
               <button

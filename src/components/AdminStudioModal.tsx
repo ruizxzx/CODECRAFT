@@ -74,6 +74,7 @@ interface AdminStudioModalProps {
   onUpdateSiteConfig: (config: SiteConfig) => void;
   bentoLinks: BentoLink[];
   onUpdateBentoLinks: (links: BentoLink[]) => void;
+  initialArticleRequest?: { mode: 'new' | 'edit'; article?: Article; token: number } | null;
 }
 
 
@@ -87,7 +88,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   siteConfig,
   onUpdateSiteConfig,
   bentoLinks,
-  onUpdateBentoLinks
+  onUpdateBentoLinks,
+  initialArticleRequest
 }) => {
   const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -107,6 +109,12 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!isOpen || !isAuthenticated || isModerator || !initialArticleRequest) return;
+    if (initialArticleRequest.mode === 'edit' && initialArticleRequest.article) handleEditArticle(initialArticleRequest.article);
+    else { resetForm(); setActiveTab('create'); }
+  }, [initialArticleRequest?.token, isOpen, isAuthenticated, isModerator]);
 
   const handleLogin = async () => {
     setLoginError(null);
@@ -1126,10 +1134,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               <Lock className="w-8 h-8 text-black stroke-[2.5]" />
             </div>
             <h3 className="font-display font-black text-2xl uppercase text-black">
-              ADMINISTRATOR VERIFICATION REQUIRED
+              STAFF VERIFICATION REQUIRED
             </h3>
             <p className="font-sans text-sm text-neutral-600 max-w-md">
-              Sign in with an authorized administrator Google account to access the {brandName} Editorial Studio and persist global content.
+              Sign in with an authorized administrator account, or a moderator account explicitly added by a master administrator. Moderator accounts receive only the moderation tools assigned to them.
             </p>
             
             {loginError && (
@@ -1144,7 +1152,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               className="mt-4 px-8 py-4 bg-[var(--color-primary)] border-4 border-black font-display font-black text-sm uppercase neo-shadow-sm hover:bg-[var(--color-secondary)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all disabled:opacity-50 flex items-center space-x-2"
             >
               <Shield className="w-5 h-5" />
-              <span>{isLoggingIn ? 'AUTHENTICATING...' : 'SIGN IN WITH AUTHORIZED GOOGLE ACCOUNT'}</span>
+              <span>{isLoggingIn ? 'AUTHENTICATING...' : 'SIGN IN WITH AUTHORIZED STAFF GOOGLE ACCOUNT'}</span>
             </button>
           </div>
         ) : (
@@ -1220,7 +1228,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                 <span className="hidden sm:inline">SOCIAL MOD</span>
               </button>
 
-              <button
+              {!isModerator && <button
                 onClick={() => setActiveTab('control')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
                   activeTab === 'control' ? 'bg-[var(--color-primary)] text-black' : 'hover:bg-neutral-100'
@@ -1228,7 +1236,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               >
                 <Database className="w-4 h-4" />
                 <span className="hidden sm:inline">MASTER CONTROL</span>
-              </button>
+              </button>}
             </div>
 
             {/* TAB: SETTINGS */}

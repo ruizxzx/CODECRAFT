@@ -38,6 +38,7 @@ import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
+import { isPlatformModerator } from './lib/social';
 import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor, subscribeCommunityProfile } from './lib/community';
 import { subscribeReadingQueue, toggleReadingQueue, subscribeThemePreference } from './lib/account';
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
@@ -115,7 +116,21 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCmsOpen, setIsCmsOpen] = useState(false);
+  const [canAccessCms, setCanAccessCms] = useState(false);
+  const [cmsEditorRequest, setCmsEditorRequest] = useState<{ mode: 'new' | 'edit'; article?: Article; token: number } | null>(null);
   const [isRssOpen, setIsRssOpen] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      if (!user) { if (!cancelled) setCanAccessCms(false); return; }
+      const master = checkIsAdmin(user.email);
+      let moderator = false;
+      if (!master) moderator = await isPlatformModerator(user.uid);
+      if (!cancelled) setCanAccessCms(master || moderator);
+    });
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
+
 
   // Bookmarked / Saved articles state
   const [savedSlugs, setSavedSlugs] = useState<string[]>(() => {
@@ -381,7 +396,8 @@ export default function App() {
         setActiveArticleSlug(username);
         setCurrentPage('community_profile');
       } else if (hash === 'cms' || hash === 'admin') {
-        setCurrentPage('cms');
+        if (canAccessCms) setCurrentPage('cms');
+        else { setCurrentPage('home'); window.history.replaceState(null, '', window.location.pathname + window.location.search); }
         setActiveArticleSlug(null);
       }
     };
@@ -389,7 +405,7 @@ export default function App() {
     handleHashChange();
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, []);
+  }, [canAccessCms]);
 
   const navigateTo = (page: PageView, param?: string) => {
     if (page === 'article' && param) {
@@ -534,6 +550,18 @@ export default function App() {
   };
 
   const isMasterAdmin = checkIsAdmin(userAuth?.email);
+  const openAdminStudioForNewArticle = () => {
+    if (!isMasterAdmin) return;
+    setCmsEditorRequest({ mode: 'new', token: Date.now() });
+    setIsCmsOpen(true);
+  };
+
+  const openAdminStudioForEditArticle = (article: Article) => {
+    if (!isMasterAdmin) return;
+    setCmsEditorRequest({ mode: 'edit', article, token: Date.now() });
+    setIsCmsOpen(true);
+  };
+
   const inMaintenance = !!siteConfig.maintenanceMode && !isMasterAdmin;
 
   const activeArticle = articles.find((a) => a.slug === activeArticleSlug);
@@ -568,7 +596,7 @@ export default function App() {
         onNavigate={navigateTo}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-        onOpenCms={() => setIsCmsOpen(true)}
+        onOpenCms={canAccessCms ? () => setIsCmsOpen(true) : undefined}
         savedCount={savedSlugs.length + savedCommunityPostIds.length}
         siteConfig={siteConfig}
         userProfile={userProfile}
@@ -633,6 +661,10 @@ export default function App() {
                 onSelectCategory={setSelectedCategory}
                 siteConfig={siteConfig}
                 onNavigate={navigateTo}
+                isMasterAdmin={isMasterAdmin}
+                onWriteNew={openAdminStudioForNewArticle}
+                onEditArticle={openAdminStudioForEditArticle}
+                onDeleteArticle={handleDeleteArticle}
               />
             )}
 
@@ -802,6 +834,7 @@ export default function App() {
         onUpdateSiteConfig={handleUpdateSiteConfig}
         bentoLinks={bentoLinks}
         onUpdateBentoLinks={handleUpdateBentoLinks}
+        initialArticleRequest={cmsEditorRequest}
       />
 
       <RssModal
@@ -824,7 +857,7 @@ export default function App() {
       {/* Footer */}
       <Footer
         onNavigate={navigateTo}
-        onOpenCms={() => setIsCmsOpen(true)}
+        onOpenCms={canAccessCms ? () => setIsCmsOpen(true) : undefined}
         onOpenRssModal={() => setIsRssOpen(true)}
         siteConfig={siteConfig}
         articles={articles}
