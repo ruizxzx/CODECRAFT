@@ -486,7 +486,7 @@ service cloud.firestore {
           || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['repostsCount', 'updatedAt']))
-        );
+        ));
       allow update: if !isSignedIn()
         && incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
         && incoming().get('viewsCount', 0) == existing().get('viewsCount', 0) + 1

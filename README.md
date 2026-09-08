@@ -21,3 +21,8 @@ Authoritative anti-fraud analytics at large scale should eventually move view co
 ### Validation
 - Source inspection performed across Firebase, account, CMS, article/post view flows, header/settings, CSS and Firestore rules.
 - `vite build` could not be executed in this environment because the supplied dependency tree has no installed Vite binary.
+
+
+## V52.1 Hotfix
+- Fixed an unmatched parenthesis in `firestore.rules` that caused Firebase to reject the rules at line 490 with `Unexpected allow`.
+- No feature behavior was intentionally changed.
