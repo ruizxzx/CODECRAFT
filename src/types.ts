@@ -40,6 +40,11 @@ export interface Series {
   tags?: string[];
   articleCount: number;
   estimatedMinutes?: number;
+  status?: 'draft' | 'published' | 'archived';
+  visibility?: 'public' | 'unlisted' | 'private';
+  accentColor?: string;
+  coverImageAlt?: string;
+  viewsCount?: number;
   createdAt: string;
   updatedAt: string;
 }

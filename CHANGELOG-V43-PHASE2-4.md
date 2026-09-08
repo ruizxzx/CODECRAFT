@@ -26,3 +26,13 @@
 ## Validation
 - TypeScript/TSX syntax validation passed for all modified files using the TypeScript compiler parser.
 - Full dependency install and Vite production build were not available in this environment because `npm ci` timed out before dependencies completed.
+
+## V44 — Production Series Experience
+- Redesigned public Series Library and detail pages.
+- Added direct series-page controls for authorized owners/admins.
+- Added series metadata editor: title, slug, description, cover, tags, estimated duration.
+- Added admin-only Parts Manager with add/remove/reorder controls and persisted part ordering.
+- Added reader progress tracking per series with resume/start actions.
+- Added search/filter/sort for series curriculum.
+- Added share/copy series URL action and accessible status/error messaging.
+- Added cover-driven series cards and dashboard stats.
