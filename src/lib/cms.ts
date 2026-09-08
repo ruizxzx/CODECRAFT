@@ -382,6 +382,47 @@ async function getDeletedSlugs(): Promise<Set<string>> {
   return deletedSet;
 }
 
+
+function normalizeArticleRecord(raw: any, fallbackId = ''): Article {
+  const data = raw && typeof raw === 'object' ? raw : {};
+  const fallbackAuthor = data.author && typeof data.author === 'object' ? data.author : {};
+  const id = String(data.id || fallbackId || data.slug || '');
+  const slug = String(data.slug || fallbackId || id);
+  const content = Array.isArray(data.content)
+    ? data.content.filter((block: any) => block && typeof block === 'object')
+    : (Array.isArray(data.contentBlocks)
+        ? data.contentBlocks.filter((block: any) => block && typeof block === 'object')
+        : []);
+  const tags = Array.isArray(data.tags)
+    ? data.tags.map((tag: any) => String(tag || '').trim()).filter(Boolean)
+    : [];
+  const author = {
+    name: String(fallbackAuthor.name || data.authorName || 'OFFSCRPT'),
+    role: String(fallbackAuthor.role || data.authorRole || 'Author'),
+    avatar: String(fallbackAuthor.avatar || data.authorAvatar || ''),
+    bio: String(fallbackAuthor.bio || ''),
+    uid: fallbackAuthor.uid || data.authorId || undefined,
+    username: fallbackAuthor.username || data.authorUsername || undefined,
+    isVerified: Boolean(fallbackAuthor.isVerified ?? data.isVerified ?? false),
+    verificationColor: fallbackAuthor.verificationColor || data.verificationColor || undefined,
+  };
+  return {
+    ...data,
+    id,
+    slug,
+    title: String(data.title || 'Untitled Dispatch'),
+    excerpt: String(data.excerpt || ''),
+    coverImage: String(data.coverImage || ''),
+    coverImageAlt: String(data.coverImageAlt || data.title || ''),
+    category: String(data.category || 'Technology'),
+    tags,
+    publishedAt: String(data.publishedAt || data.createdAt || ''),
+    readingTimeMinutes: Math.max(1, Number(data.readingTimeMinutes || 1)),
+    author,
+    content,
+  } as Article;
+}
+
 function mergeArticlesWithInitial(cloudArticles: Article[], deletedSlugs: Set<string>): Article[] {
   const cloudSlugs = new Set(cloudArticles.map(a => a.slug));
   const fallbackOnly = INITIAL_ARTICLES.filter(a => !cloudSlugs.has(a.slug) && !deletedSlugs.has(a.slug));
@@ -480,7 +521,7 @@ export function subscribeArticles(callback: (articles: Article[]) => void): () =
     const deletedSlugs = await getDeletedSlugs();
     const visible = latestCloudArticles.filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
     const hydrated = await hydrateArticleAuthors(visible).then(hydratePublishedSourcePosts);
-    if(!disposed) callback(mergeArticlesWithInitial(hydrated, deletedSlugs));
+    if(!disposed) callback(mergeArticlesWithInitial(hydrated, deletedSlugs).map(a => normalizeArticleRecord(a, a.id || a.slug)));
   };
   const resetSourceListeners = (articles:Article[]) => {
     sourceUnsubs.forEach(u=>u()); sourceUnsubs=[];
@@ -494,7 +535,7 @@ export function subscribeArticles(callback: (articles: Article[]) => void): () =
   };
   const unsubArticles=onSnapshot(articlesRef, async snap=>{
     if(disposed) return;
-    latestCloudArticles=snap.docs.map(d=>{const data=d.data();return {...data,id:(data as any).id||d.id,slug:(data as any).slug||d.id} as Article;});
+    latestCloudArticles=snap.docs.map(d=>normalizeArticleRecord(d.data(), d.id));
     latestCloudArticles.sort((a,b)=>new Date(b.publishedAt||0).getTime()-new Date(a.publishedAt||0).getTime());
     resetSourceListeners(latestCloudArticles);
     await emit();
@@ -508,7 +549,7 @@ export function subscribeArticles(callback: (articles: Article[]) => void): () =
 export async function fetchAllArticlesForAdmin(): Promise<Article[]> {
   if (!checkIsAdmin(auth.currentUser?.email)) throw new Error('Master admin access required.');
   const snap = await getDocs(collection(db, 'articles'));
-  const articles = snap.docs.map(d => ({ ...d.data(), id: (d.data() as any).id || d.id, slug: (d.data() as any).slug || d.id } as Article));
+  const articles = snap.docs.map(d => normalizeArticleRecord(d.data(), d.id));
   const hydrated = await hydrateArticleAuthors(articles);
   return hydrated.sort((a,b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime());
 }
@@ -520,11 +561,7 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
     if (!snap.empty) {
       const cloudArticles = snap.docs.map(d => {
         const data = d.data();
-        return {
-          ...data,
-          id: data.id || d.id,
-          slug: data.slug || d.id
-        } as Article;
+        return normalizeArticleRecord(data, d.id);
       }).filter(a => !deletedSlugs.has(a.slug) && a.isPublished !== false);
       cloudArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
       const hydrated = await hydratePublishedSourcePosts(await hydrateArticleAuthors(cloudArticles));

@@ -124,7 +124,11 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [allSeries, setAllSeries] = useState<import('../types').Series[]>([]);
   const [resolvedOriginalAuthor, setResolvedOriginalAuthor] = useState<any>(article.originalAuthor || article.author);
 
-  const toc = article.content
+  const safeContent = Array.isArray(article.content) ? article.content : [];
+  const safeTags = Array.isArray(article.tags) ? article.tags : [];
+  const safeAuthor = (article.author && typeof article.author === 'object') ? article.author : {name:'OFFSCRPT', role:'Author', avatar:'', bio:''};
+
+  const toc = safeContent
     .map((b,i)=>({ b, i, id: `article-block-${i}-${slugifyHeading(String(b.content || 'section'))}` }))
     .filter(x=>x.b.type==='heading2'||x.b.type==='heading3');
   const [activeTocId, setActiveTocId] = useState<string>('');
@@ -584,14 +588,14 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         {/* Author Metadata Strip */}
         <div className="p-4 bg-white neo-border neo-shadow mb-10 flex flex-wrap items-center justify-between gap-4">
           <UserIdentity
-            name={resolvedOriginalAuthor?.name || article.author.name}
-            username={resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername}
-            avatar={resolvedOriginalAuthor?.avatar || article.author.avatar}
-            uid={resolvedOriginalAuthor?.uid || article.author.uid}
-            verified={resolvedOriginalAuthor?.isVerified ?? article.author.isVerified}
-            verificationColor={resolvedOriginalAuthor?.verificationColor || article.author.verificationColor}
+            name={resolvedOriginalAuthor?.name || safeAuthor.name}
+            username={resolvedOriginalAuthor?.username || safeAuthor.username || siteConfig.authorProfileUsername}
+            avatar={resolvedOriginalAuthor?.avatar || safeAuthor.avatar}
+            uid={resolvedOriginalAuthor?.uid || safeAuthor.uid}
+            verified={resolvedOriginalAuthor?.isVerified ?? safeAuthor.isVerified}
+            verificationColor={resolvedOriginalAuthor?.verificationColor || safeAuthor.verificationColor}
             size="lg"
-            onClick={() => { const authorHandle = resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername; if (authorHandle && onOpenAuthorProfile) onOpenAuthorProfile(authorHandle); }}
+            onClick={() => { const authorHandle = resolvedOriginalAuthor?.username || safeAuthor.username || siteConfig.authorProfileUsername; if (authorHandle && onOpenAuthorProfile) onOpenAuthorProfile(authorHandle); }}
           />
 
           <div className="flex items-center space-x-4 text-xs font-mono font-bold text-neutral-700">
@@ -684,7 +688,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Article Body - Rich Medium/Editorial Typography */}
         <div ref={articleContentRef} className={`space-y-7 ${fontSize === 'large' ? 'text-xl leading-relaxed' : 'text-lg leading-relaxed'} font-serif text-neutral-900`}>
-          {article.content.map((block, index) => {
+          {safeContent.map((block, index) => {
             if (block.type === 'paragraph') {
               return (
                 <p key={index} className="text-neutral-800 leading-relaxed">
@@ -916,7 +920,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           <span className="font-mono text-xs font-bold text-neutral-500 uppercase mr-1">
             CATEGORIZED UNDER:
           </span>
-          {article.tags.map((tag) => (
+          {safeTags.map((tag) => (
             <span
               key={tag}
               className="px-3 py-1 bg-white text-black neo-border-2 font-mono text-xs font-bold neo-shadow-sm"
@@ -978,23 +982,23 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Author Bio Box */}
         <div className="p-8 bg-gray-50 neo-border neo-shadow">
-          <button type="button" onClick={() => { const authorHandle = article.author.username || siteConfig.authorProfileUsername; if (authorHandle && onOpenAuthorProfile) onOpenAuthorProfile(authorHandle); }} className="w-full flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6 text-left">
+          <button type="button" onClick={() => { const authorHandle = safeAuthor.username || siteConfig.authorProfileUsername; if (authorHandle && onOpenAuthorProfile) onOpenAuthorProfile(authorHandle); }} className="w-full flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6 text-left">
             <img
-              src={siteConfig?.authorAvatarUrl || article.author.avatar}
-              alt={siteConfig?.authorName || article.author.name}
+              src={siteConfig?.authorAvatarUrl || safeAuthor.avatar}
+              alt={siteConfig?.authorName || safeAuthor.name}
               className="w-20 h-20 neo-border object-cover shrink-0 bg-white"
             />
             <div className="space-y-2">
               <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                 <h4 className="font-display font-black text-2xl text-black uppercase">
-                  WRITTEN BY {siteConfig?.authorName || article.author.name}
+                  WRITTEN BY {siteConfig?.authorName || safeAuthor.name}
                 </h4>
                 <span className="font-mono text-[10px] font-bold bg-[var(--color-primary)] text-black px-2 py-0.5 border-2 border-black uppercase">
                   {siteConfig?.authorRole || 'FOUNDER'}
                 </span>
               </div>
               <p className="font-sans text-neutral-700 text-sm leading-relaxed">
-                {siteConfig?.aboutMeBio || article.author.bio || "Dedicated to demystifying high-scale software engineering, cutting through hype, and sharing reproducible architectural blueprints."}
+                {siteConfig?.aboutMeBio || safeAuthor.bio || "Dedicated to demystifying high-scale software engineering, cutting through hype, and sharing reproducible architectural blueprints."}
               </p>
             </div>
           </button>

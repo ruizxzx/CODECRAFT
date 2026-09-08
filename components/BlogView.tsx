@@ -38,12 +38,12 @@ export const BlogView: React.FC<BlogViewProps> = ({
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [showSavedOnly, setShowSavedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<'newest' | 'reading-time' | 'popular'>('newest');
-  const categories = useMemo(() => Array.from(new Set([...CATEGORIES, ...(siteConfig.customCategories || []), ...articles.map(a => a.category)])), [siteConfig.customCategories, articles]);
+  const categories = useMemo(() => Array.from(new Set([...CATEGORIES, ...(siteConfig.customCategories || []), ...articles.map(a => a.category).filter(Boolean)])), [siteConfig.customCategories, articles]);
 
   // Extract all unique tags
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
-    articles.forEach((art) => art.tags.forEach((t) => tagSet.add(t)));
+    articles.forEach((art) => (Array.isArray(art.tags) ? art.tags : []).forEach((t) => tagSet.add(String(t))));
     return Array.from(tagSet);
   }, [articles]);
 
@@ -59,15 +59,15 @@ export const BlogView: React.FC<BlogViewProps> = ({
         return false;
       }
       // Tag filter
-      if (selectedTag && !art.tags.includes(selectedTag)) {
+      if (selectedTag && !(Array.isArray(art.tags) ? art.tags : []).includes(selectedTag)) {
         return false;
       }
       // Query filter
       if (searchQuery.trim() !== '') {
         const q = searchQuery.toLowerCase();
-        const matchesTitle = art.title.toLowerCase().includes(q);
-        const matchesExcerpt = art.excerpt.toLowerCase().includes(q);
-        const matchesTags = art.tags.some((t) => t.toLowerCase().includes(q));
+        const matchesTitle = String(art.title || '').toLowerCase().includes(q);
+        const matchesExcerpt = String(art.excerpt || '').toLowerCase().includes(q);
+        const matchesTags = (Array.isArray(art.tags) ? art.tags : []).some((t) => String(t).toLowerCase().includes(q));
         if (!matchesTitle && !matchesExcerpt && !matchesTags) return false;
       }
       return true;

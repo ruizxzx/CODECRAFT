@@ -115,7 +115,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
           <div>
             {/* Tags */}
             <div className="flex flex-wrap gap-1.5 mb-6">
-              {article.tags.slice(0, 3).map((tag) => (
+              {(Array.isArray(article.tags) ? article.tags : []).slice(0, 3).map((tag) => (
                 <span
                   key={tag}
                   className="px-2 py-0.5 bg-gray-100 text-black neo-border-2 font-mono text-xs font-semibold"

@@ -39,7 +39,6 @@ import { CreatorView } from './components/CreatorView';
 import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
 import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
-import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
@@ -48,7 +47,6 @@ import { subscribeReadingQueue, toggleReadingQueue, subscribeThemePreference } f
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
 import { notifyToast } from './lib/toast';
-import { recordArticleAnalyticsEvent } from './lib/analytics';
 import { recordArticleAnalyticsEvent } from './lib/analytics';
 
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';

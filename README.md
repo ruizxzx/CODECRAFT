@@ -61,3 +61,8 @@ Advanced discovery and creator profiles.
 - Both trackers now share a precise document-coordinate model; 100% is reached when the Reader Reactions panel reaches the bottom edge of the viewport.
 - The progress engine recalculates on scroll, resize, orientation changes, media/font layout changes, and delayed layout shifts.
 - The end boundary used by Resume Reading matches the reading-progress boundary.
+
+
+## V65 stability hotfix
+
+V65 hardens the Blog and Article rendering path against legacy/malformed Firestore article documents by normalizing cloud records before they reach React and by adding defensive fallbacks for article arrays and author metadata. This prevents one malformed historical article from crashing the entire Blog or Article view.
