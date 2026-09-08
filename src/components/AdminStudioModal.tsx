@@ -20,6 +20,7 @@ import {
   Sparkles,
   AlertTriangle,
   Image as ImageIcon,
+  Video,
   Type,
   Quote,
   List,
@@ -845,6 +846,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       ? { type, codeBlock: { language: 'typescript', code: '' } }
       : type === 'image'
         ? { type, imageUrl: '', imageAlt: 'Article image', imageCaption: '', imageHref: '' }
+        : type === 'video'
+          ? { type, videoUrl: '', videoTitle: '', videoCaption: '' }
         : type === 'link'
           ? { type, linkText: 'OPEN LINK', href: '' }
           : type === 'button'
@@ -875,6 +878,18 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
   const removeContentBlock = (index: number) => {
     setContentBlocks(prev => prev.length === 1 ? [{ type: 'paragraph', content: '' }] : prev.filter((_, i) => i !== index));
+  };
+
+  const insertInlineLink = (blockIndex: number, currentText: string) => {
+    const el = document.activeElement as HTMLTextAreaElement | null;
+    const start = el && typeof el.selectionStart === 'number' ? el.selectionStart : currentText.length;
+    const end = el && typeof el.selectionEnd === 'number' ? el.selectionEnd : currentText.length;
+    const selected = currentText.slice(start, end).trim();
+    const label = selected || 'linked text';
+    const url = window.prompt('URL (https://..., /internal-path, mailto:...):', 'https://');
+    if (!url || url.trim() === 'https://') return;
+    const nextValue = `${currentText.slice(0, start)}[${label}](${url.trim()})${currentText.slice(end)}`;
+    updateContentBlock(blockIndex, { content: nextValue });
   };
 
   const handleBlockDrop = (targetIndex: number) => {
@@ -1476,7 +1491,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {([
-                            ['paragraph','TEXT'],['heading2','H2'],['heading3','H3'],['image','IMAGE'],['link','LINK'],['button','BUTTON'],['code','CODE'],['quote','QUOTE'],['callout','CALLOUT'],['list','LIST'],['takeaways','TAKEAWAYS']
+                            ['paragraph','TEXT'],['heading2','H2'],['heading3','H3'],['image','IMAGE'],['video','VIDEO'],['link','LINK'],['button','BUTTON'],['code','CODE'],['quote','QUOTE'],['callout','CALLOUT'],['list','LIST'],['takeaways','TAKEAWAYS']
                           ] as const).map(([type,label]) => (
                             <button key={type} type="button" onClick={() => addContentBlock(type)} className="px-2.5 py-1.5 border-2 border-black bg-white font-mono text-[10px] font-bold uppercase hover:bg-[var(--color-primary)]">+ {label}</button>
                           ))}
@@ -1512,6 +1527,12 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                 <input value={block.imageCaption || ''} onChange={(e)=>updateContentBlock(index,{imageCaption:e.target.value})} placeholder="Caption (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
                                 <input value={block.imageHref || ''} onChange={(e)=>updateContentBlock(index,{imageHref:e.target.value})} placeholder="Optional image click-through URL" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
                               </div>
+                            ) : block.type === 'video' ? (
+                              <div className="space-y-2">
+                                <input type="url" value={block.videoUrl || ''} onChange={(e)=>updateContentBlock(index,{videoUrl:e.target.value})} placeholder="YouTube / Vimeo / direct .mp4 / .webm URL" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
+                                <input value={block.videoTitle || ''} onChange={(e)=>updateContentBlock(index,{videoTitle:e.target.value})} placeholder="Accessible video title" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
+                                <input value={block.videoCaption || ''} onChange={(e)=>updateContentBlock(index,{videoCaption:e.target.value})} placeholder="Caption (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
+                              </div>
                             ) : block.type === 'link' ? (
                               <div className="grid gap-2"><input value={block.linkText || ''} onChange={(e)=>updateContentBlock(index,{linkText:e.target.value})} placeholder="Visible linked text" className="w-full px-3 py-2 border-2 border-black font-sans text-sm" /><input value={block.href || ''} onChange={(e)=>updateContentBlock(index,{href:e.target.value})} placeholder="https://example.com or /blog" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /></div>
                             ) : block.type === 'button' ? (
@@ -1525,7 +1546,12 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                             ) : block.type === 'list' || block.type === 'takeaways' ? (
                               <div className="space-y-2">{(block.items || ['']).map((item,itemIndex)=><div key={itemIndex} className="flex gap-2"><input value={item} onChange={(e)=>{const items=[...(block.items||[])];items[itemIndex]=e.target.value;updateContentBlock(index,{items})}} placeholder={`${block.type === 'list' ? 'List' : 'Takeaway'} item ${itemIndex+1}`} className="flex-1 px-3 py-2 border-2 border-black text-sm" /><button type="button" onClick={()=>updateContentBlock(index,{items:(block.items||[]).filter((_,i)=>i!==itemIndex)})} className="px-2 border-2 border-black"><Minus className="w-3 h-3" /></button></div>)}<button type="button" onClick={()=>updateContentBlock(index,{items:[...(block.items||[]),'']})} className="px-3 py-1.5 border-2 border-black font-mono text-[10px] font-bold uppercase">+ ITEM</button></div>
                             ) : (
-                              <div className="space-y-2"><textarea rows={block.type === 'paragraph' ? 6 : 3} value={block.content || ''} onChange={(e)=>updateContentBlock(index,{content:e.target.value})} placeholder={block.type === 'heading2' ? 'Section heading...' : block.type === 'heading3' ? 'Subheading...' : 'Write this block...'} className={`w-full px-3 py-2 border-2 border-black bg-white ${block.type === 'paragraph' ? 'font-serif text-sm' : 'font-display font-bold'}`} /></div>
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap gap-1.5 items-center">
+                                  <button type="button" onMouseDown={(e)=>e.preventDefault()} onClick={()=>insertInlineLink(index, block.content || '')} className="px-2 py-1 border-2 border-black bg-white font-mono text-[10px] font-black uppercase hover:bg-[var(--color-secondary)]">LINK SELECTED TEXT</button>
+                                  <span className="px-2 py-1 border-2 border-dashed border-neutral-400 font-mono text-[10px] text-neutral-500">Raw URLs auto-link on the published article.</span>
+                                </div>
+                                <textarea rows={block.type === 'paragraph' ? 7 : 3} value={block.content || ''} onChange={(e)=>updateContentBlock(index,{content:e.target.value})} placeholder={block.type === 'heading2' ? 'Section heading...' : block.type === 'heading3' ? 'Subheading...' : 'Write this block...'} className={`w-full px-3 py-2 border-2 border-black bg-white ${block.type === 'paragraph' ? 'font-serif text-sm' : 'font-display font-bold'}`} /></div>
                             )}
                           </div>
                         ))}

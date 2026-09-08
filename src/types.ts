@@ -7,7 +7,7 @@ export interface CodeSnippet {
 }
 
 export interface ArticleContentBlock {
-  type: 'paragraph' | 'heading2' | 'heading3' | 'callout' | 'quote' | 'code' | 'image' | 'list' | 'takeaways' | 'link' | 'button';
+  type: 'paragraph' | 'heading2' | 'heading3' | 'callout' | 'quote' | 'code' | 'image' | 'video' | 'list' | 'takeaways' | 'link' | 'button';
   content?: string;
   items?: string[];
   calloutType?: 'info' | 'warning' | 'tip' | 'insight';
@@ -17,6 +17,9 @@ export interface ArticleContentBlock {
   imageAlt?: string;
   imageCaption?: string;
   imageHref?: string;
+  videoUrl?: string;
+  videoTitle?: string;
+  videoCaption?: string;
   linkText?: string;
   href?: string;
   buttonText?: string;

@@ -16,9 +16,12 @@ import {
   Linkedin, 
   ExternalLink,
   ChevronRight,
+  ChevronDown,
+  ArrowUp,
   Sparkles,
   Layers,
   Terminal,
+  Link2,
   List,
   HeartPulse
 } from 'lucide-react';
@@ -30,6 +33,37 @@ import { getArticleLikeStatus, toggleArticleLike, getPost, getCommunityProfile }
 import { recordArticleView, ARTICLE_REACTIONS, getArticleReaction, setArticleReaction, getSeriesArticles } from '../lib/cms';
 import type { ArticleReaction } from '../lib/cms';
 import { useAuthState } from 'react-firebase-hooks/auth';
+
+function slugifyHeading(value: string): string {
+  return String(value || 'section')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'section';
+}
+
+function getVideoEmbedUrl(url: string): string | null {
+  const value = String(url || '').trim();
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.hostname.includes('youtube.com')) {
+      const id = parsed.searchParams.get('v');
+      return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}` : null;
+    }
+    if (parsed.hostname === 'youtu.be') {
+      const id = parsed.pathname.replace(/^\//, '').split('/')[0];
+      return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}` : null;
+    }
+    if (parsed.hostname.includes('vimeo.com')) {
+      const id = parsed.pathname.split('/').filter(Boolean)[0];
+      return id ? `https://player.vimeo.com/video/${encodeURIComponent(id)}` : null;
+    }
+  } catch {}
+  return null;
+}
 
 interface ArticleViewProps {
   article: Article;
@@ -177,7 +211,47 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     .sort((x,y) => y.score - x.score || new Date(y.a.publishedAt).getTime() - new Date(x.a.publishedAt).getTime())
     .slice(0, 3)
     .map(x=>x.a);
-  const toc = article.content.map((b,i)=>({b,i})).filter(x=>x.b.type==='heading2'||x.b.type==='heading3');
+  const toc = article.content
+    .map((b,i)=>({ b, i, id: `article-block-${i}-${slugifyHeading(String(b.content || 'section'))}` }))
+    .filter(x=>x.b.type==='heading2'||x.b.type==='heading3');
+  const [activeTocId, setActiveTocId] = useState<string>('');
+  const [tocOpen, setTocOpen] = useState(true);
+  const [copiedTocId, setCopiedTocId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toc.length) return;
+    const hash = window.location.hash.replace(/^#/, '');
+    if (!hash) return;
+    window.setTimeout(() => document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  }, [article.slug, toc.length]);
+
+  useEffect(() => {
+    if (!toc.length) return;
+    const elements = toc.map(({ id }) => document.getElementById(id)).filter(Boolean) as HTMLElement[];
+    if (!elements.length) return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter(entry => entry.isIntersecting).sort((a,b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visible[0]?.target?.id) setActiveTocId(visible[0].target.id);
+    }, { rootMargin: '-120px 0px -65% 0px', threshold: [0, 0.1, 0.5] });
+    elements.forEach((element) => observer.observe(element));
+    setActiveTocId(elements[0].id);
+    return () => observer.disconnect();
+  }, [article.slug, article.content]);
+
+  const jumpToHeading = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${id}`);
+    setActiveTocId(id);
+  };
+
+  const copyHeadingLink = async (id: string) => {
+    const url = `${window.location.origin}${window.location.pathname}${window.location.search}#${id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedTocId(id);
+      window.setTimeout(() => setCopiedTocId(null), 1600);
+    } catch {}
+  };
 
   return (
     <div className="w-full bg-white min-h-screen">
@@ -325,11 +399,30 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         )}
 
         {toc.length > 0 && (
-          <nav className="mb-10 border-4 border-black bg-neutral-50 p-4 neo-shadow">
-            <div className="font-display font-black uppercase mb-3">Table of contents</div>
-            <div className="grid gap-1">
-              {toc.map(({b,i})=><button key={i} onClick={()=>document.getElementById(`article-block-${i}`)?.scrollIntoView({behavior:'smooth',block:'start'})} className={`text-left font-mono text-xs py-1 ${b.type==='heading3'?'pl-5':'font-black'}`}><RichText text={b.content} /></button>)}
+          <nav className="mb-10 border-4 border-black bg-neutral-50 neo-shadow" aria-label="Table of contents">
+            <div className="flex items-center justify-between gap-3 p-4 border-b-2 border-black">
+              <div>
+                <div className="font-display font-black uppercase">Table of contents</div>
+                <div className="font-mono text-[10px] text-neutral-500 uppercase">{toc.length} sections · active section follows your scroll</div>
+              </div>
+              <button type="button" onClick={() => setTocOpen(value => !value)} className="border-2 border-black p-2 bg-white hover:bg-[var(--color-primary)]" aria-expanded={tocOpen}>
+                <ChevronDown className={`w-4 h-4 transition-transform ${tocOpen ? '' : '-rotate-90'}`} />
+              </button>
             </div>
+            {tocOpen && (
+              <div className="p-3 grid gap-1">
+                {toc.map(({b,i,id}, tocIndex)=>(
+                  <div key={id} className={`flex items-center gap-1 border-2 border-transparent ${activeTocId===id?'bg-[var(--color-primary)] border-black':''}`}>
+                    <button type="button" onClick={()=>jumpToHeading(id)} className={`min-w-0 flex-1 text-left font-mono text-xs py-2 px-2 ${b.type==='heading3'?'pl-6 text-neutral-700':'font-black'}`} aria-current={activeTocId===id?'location':undefined}>
+                      <span className="mr-2 text-neutral-500">{String(tocIndex+1).padStart(2,'0')}</span><span><RichText text={b.content} /></span>
+                    </button>
+                    <button type="button" onClick={()=>copyHeadingLink(id)} className="mr-1 p-1.5 border-2 border-black bg-white shrink-0" title="Copy section link" aria-label={`Copy link to ${String(b.content || 'section')}`}>
+                      {copiedTocId===id ? <Check className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </nav>
         )}
 
@@ -362,7 +455,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               return (
                 <h2 
                   key={index} 
-                  id={`article-block-${index}`}
+                  id={`article-block-${index}-${slugifyHeading(String(block.content || 'section'))}`}
                   className="font-display font-black text-2xl sm:text-3xl text-black tracking-tight mt-12 pt-6 border-t-2 border-black/20 uppercase"
                 >
                   <RichText text={block.content} />
@@ -374,7 +467,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               return (
                 <h3 
                   key={index} 
-                  id={`article-block-${index}`}
+                  id={`article-block-${index}-${slugifyHeading(String(block.content || 'section'))}`}
                   className="font-display font-black text-xl sm:text-2xl text-black mt-8"
                 >
                   <RichText text={block.content} />
@@ -435,6 +528,22 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                     <RichText text={block.buttonText || block.content || 'OPEN'} /> <ExternalLink className="w-4 h-4" />
                   </a>
                 </div>
+              );
+            }
+
+            if (block.type === 'video' && block.videoUrl) {
+              const embedUrl = getVideoEmbedUrl(block.videoUrl);
+              return (
+                <figure key={index} className="my-10 neo-border neo-shadow overflow-hidden bg-black">
+                  {embedUrl ? (
+                    <div className="aspect-video w-full">
+                      <iframe src={embedUrl} title={block.videoTitle || article.title} className="w-full h-full border-0" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen />
+                    </div>
+                  ) : (
+                    <video src={block.videoUrl} controls preload="metadata" className="w-full h-auto max-h-[680px]" />
+                  )}
+                  {block.videoCaption && <figcaption className="p-3 bg-neutral-100 border-t-2 border-black font-mono text-xs text-neutral-700 italic"><RichText text={block.videoCaption} /></figcaption>}
+                </figure>
               );
             }
 

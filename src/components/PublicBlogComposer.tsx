@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArticleContentBlock, CommunityPost, CommunityUser } from '../types';
 import { createPost, updatePost, getPost, saveCommunityDraft, clearCommunityDraft } from '../lib/community';
 import { createCommunityPost, updateCommunityPost, SocialCommunity } from '../lib/social';
-import { Plus, Trash2, ArrowUp, ArrowDown, BookOpen, Image as ImageIcon, Code2, Quote, Lightbulb, List, CheckCircle2, Eye, Save, Link2, MousePointer2 } from 'lucide-react';
+import { Plus, Trash2, ArrowUp, ArrowDown, BookOpen, Image as ImageIcon, Video, Code2, Quote, Lightbulb, List, CheckCircle2, Eye, Save, Link2, MousePointer2 } from 'lucide-react';
 
 type Props = {
   userProfile: CommunityUser;
@@ -19,6 +19,7 @@ const blockTypes: Array<[ArticleContentBlock['type'], string, React.ComponentTyp
   ['heading2', 'SECTION', BookOpen],
   ['heading3', 'SUBSECTION', BookOpen],
   ['image', 'IMAGE', ImageIcon],
+  ['video', 'VIDEO', Video],
   ['link', 'LINK', Link2],
   ['button', 'BUTTON', MousePointer2],
   ['code', 'CODE', Code2],
@@ -99,9 +100,21 @@ export const PublicBlogComposer: React.FC<Props> = ({
     });
   };
 
+  const insertInlineLink = (blockIndex: number, currentText: string) => {
+    const el = document.activeElement as HTMLTextAreaElement | null;
+    const start = el && typeof el.selectionStart === 'number' ? el.selectionStart : currentText.length;
+    const end = el && typeof el.selectionEnd === 'number' ? el.selectionEnd : currentText.length;
+    const selected = currentText.slice(start, end).trim();
+    const label = selected || 'linked text';
+    const url = window.prompt('URL (https://..., /internal-path, mailto:...):', 'https://');
+    if (!url || url.trim() === 'https://') return;
+    updateBlock(blockIndex, { content: `${currentText.slice(0, start)}[${label}](${url.trim()})${currentText.slice(end)}` });
+  };
+
   const addBlock = (type: ArticleContentBlock['type']) => {
     const block: ArticleContentBlock = { type, content: '' };
     if (type === 'image') Object.assign(block, { imageUrl: '', imageAlt: '', imageCaption: '', imageHref: '' });
+    if (type === 'video') Object.assign(block, { videoUrl: '', videoTitle: '', videoCaption: '' });
     if (type === 'link') Object.assign(block, { linkText: 'Open link', href: '' });
     if (type === 'button') Object.assign(block, { buttonText: 'OPEN LINK', href: '', buttonStyle: 'primary' });
     if (type === 'code') Object.assign(block, { codeBlock: { language: 'typescript', code: '', filename: '' } });
@@ -234,6 +247,13 @@ export const PublicBlogComposer: React.FC<Props> = ({
           <input value={block.imageUrl || ''} onChange={(e) => updateBlock(index, { imageUrl: e.target.value })} placeholder="Image URL" className="w-full border-2 border-black p-2 font-mono text-xs" />
           <input value={block.imageAlt || ''} onChange={(e) => updateBlock(index, { imageAlt: e.target.value })} placeholder="Alt text" className="w-full border-2 border-black p-2 font-mono text-xs" />
           <input value={block.imageCaption || ''} onChange={(e) => updateBlock(index, { imageCaption: e.target.value })} placeholder="Caption" className="w-full border-2 border-black p-2 font-mono text-xs" />
+          <input value={block.imageHref || ''} onChange={(e) => updateBlock(index, { imageHref: e.target.value })} placeholder="Optional image click-through URL" className="w-full border-2 border-black p-2 font-mono text-xs" />
+        </>
+      ) : block.type === 'video' ? (
+        <>
+          <input type="url" value={block.videoUrl || ''} onChange={(e) => updateBlock(index, { videoUrl: e.target.value })} placeholder="YouTube / Vimeo / direct .mp4 / .webm URL" className="w-full border-2 border-black p-2 font-mono text-xs" />
+          <input value={block.videoTitle || ''} onChange={(e) => updateBlock(index, { videoTitle: e.target.value })} placeholder="Accessible video title" className="w-full border-2 border-black p-2 font-mono text-xs" />
+          <input value={block.videoCaption || ''} onChange={(e) => updateBlock(index, { videoCaption: e.target.value })} placeholder="Caption (optional)" className="w-full border-2 border-black p-2 font-mono text-xs" />
         </>
       ) : block.type === 'code' ? (
         <>
@@ -273,7 +293,10 @@ export const PublicBlogComposer: React.FC<Props> = ({
           <button type="button" onClick={() => updateBlock(index, { items: [...(block.items || []), ''] })} className="border-2 border-black px-3 py-1 font-mono text-[10px]">+ ITEM</button>
         </div>
       ) : (
-        <textarea value={block.content || ''} onChange={(e) => updateBlock(index, { content: e.target.value })} placeholder={block.type === 'heading2' ? 'Section heading' : block.type === 'heading3' ? 'Subheading' : 'Write…'} className={`w-full border-2 border-black p-2 min-h-20 ${block.type === 'paragraph' ? 'font-serif' : 'font-display font-bold'}`} />
+        <div className="space-y-2">
+          <button type="button" onMouseDown={(e)=>e.preventDefault()} onClick={() => insertInlineLink(index, block.content || '')} className="px-2 py-1 border-2 border-black bg-white font-mono text-[10px] font-black uppercase">LINK SELECTED TEXT</button>
+          <textarea value={block.content || ''} onChange={(e) => updateBlock(index, { content: e.target.value })} placeholder={block.type === 'heading2' ? 'Section heading' : block.type === 'heading3' ? 'Subheading' : 'Write…'} className={`w-full border-2 border-black p-2 min-h-20 ${block.type === 'paragraph' ? 'font-serif' : 'font-display font-bold'}`} />
+        </div>
       )}
     </div>
   );
@@ -317,7 +340,7 @@ export const PublicBlogComposer: React.FC<Props> = ({
             <h1 className="font-display font-black text-3xl uppercase">{title || 'UNTITLED BLOG'}</h1>
             {excerpt && <p className="text-sm text-neutral-600">{excerpt}</p>}
             {coverImage && <img src={coverImage} alt={coverImageAlt || ''} className="w-full max-h-96 object-cover border-2 border-black" />}
-            <div className="space-y-4">{blocks.map((block, index) => <div key={index}>{block.type === 'heading2' ? <h2 className="font-display font-black text-2xl">{block.content}</h2> : block.type === 'heading3' ? <h3 className="font-display font-black text-xl">{block.content}</h3> : block.type === 'code' ? <pre className="border-2 border-black bg-black text-white p-3 overflow-auto font-mono text-xs">{block.codeBlock?.code}</pre> : block.type === 'quote' ? <blockquote className="border-l-4 border-black pl-3 italic">{block.content}</blockquote> : block.type === 'list' || block.type === 'takeaways' ? <ul className="list-disc ml-5">{(block.items || []).map((item, i) => <li key={i}>{item}</li>)}</ul> : block.type === 'image' && block.imageUrl ? <figure>{block.imageHref ? <a href={block.imageHref}><img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full border-2 border-black" /></a> : <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full border-2 border-black" />}{block.imageCaption && <figcaption className="font-mono text-[10px] mt-1">{block.imageCaption}</figcaption>}</figure> : block.type === 'link' ? <a href={block.href || '#'} className="font-sans font-black underline">{block.linkText || block.href}</a> : block.type === 'button' ? <a href={block.href || '#'} className="inline-block px-4 py-2 border-2 border-black bg-[var(--color-primary)] font-display font-black uppercase">{block.buttonText || 'OPEN LINK'}</a> : <p className="whitespace-pre-wrap leading-relaxed">{block.content}</p>}</div>)}</div>
+            <div className="space-y-4">{blocks.map((block, index) => <div key={index}>{block.type === 'heading2' ? <h2 className="font-display font-black text-2xl">{block.content}</h2> : block.type === 'heading3' ? <h3 className="font-display font-black text-xl">{block.content}</h3> : block.type === 'code' ? <pre className="border-2 border-black bg-black text-white p-3 overflow-auto font-mono text-xs">{block.codeBlock?.code}</pre> : block.type === 'quote' ? <blockquote className="border-l-4 border-black pl-3 italic">{block.content}</blockquote> : block.type === 'list' || block.type === 'takeaways' ? <ul className="list-disc ml-5">{(block.items || []).map((item, i) => <li key={i}>{item}</li>)}</ul> : block.type === 'image' && block.imageUrl ? <figure>{block.imageHref ? <a href={block.imageHref}><img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full border-2 border-black" /></a> : <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full border-2 border-black" />}{block.imageCaption && <figcaption className="font-mono text-[10px] mt-1">{block.imageCaption}</figcaption>}</figure> : block.type === 'video' && block.videoUrl ? <figure><video src={block.videoUrl} controls className="w-full border-2 border-black" />{block.videoCaption && <figcaption className="font-mono text-[10px] mt-1">{block.videoCaption}</figcaption>}</figure> : block.type === 'link' ? <a href={block.href || '#'} className="font-sans font-black underline">{block.linkText || block.href}</a> : block.type === 'button' ? <a href={block.href || '#'} className="inline-block px-4 py-2 border-2 border-black bg-[var(--color-primary)] font-display font-black uppercase">{block.buttonText || 'OPEN LINK'}</a> : <p className="whitespace-pre-wrap leading-relaxed">{block.content}</p>}</div>)}</div>
           </div>}
 
           {error && <div className="border-2 border-red-500 bg-red-100 p-3 font-mono text-xs font-bold">{error}</div>}
