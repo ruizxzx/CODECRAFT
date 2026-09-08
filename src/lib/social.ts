@@ -409,5 +409,33 @@ export async function adminSetRootPostFeatured(postId:string,featured:boolean){ 
 export async function getAdminMessages():Promise<SocialMessage[]>{ await requireStaff(); const s=await getDocs(query(collection(db,'messages'),limit(500))); return s.docs.map(map).sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime()) as SocialMessage[]; }
 export async function adminUpdateMessage(mid:string,content:string){ await requireStaff(); await updateDoc(doc(db,'messages',mid),{content:content.trim().slice(0,5000)}); }
 export async function adminDeleteMessage(mid:string){ await requireStaff(); await deleteDoc(doc(db,'messages',mid)); }
-export async function adminUpdateUser(uid:string,data:{displayName?:string;bio?:string;photoURL?:string;coverImageUrl?:string;websiteUrl?:string;location?:string;socialX?:string;socialGithub?:string;socialTelegram?:string;socialInstagram?:string;role?:string;isAuthor?:boolean;isVerified?:boolean;verificationColor?:string;isBlocked?:boolean}){ await requireStaff(); await updateDoc(doc(db,'users',uid),{...data,updatedAt:serverTimestamp()}); }
+export async function adminUpdateUser(uid:string,data:{displayName?:string;bio?:string;photoURL?:string;coverImageUrl?:string;websiteUrl?:string;location?:string;socialX?:string;socialGithub?:string;socialTelegram?:string;socialInstagram?:string;role?:string;isAuthor?:boolean;isVerified?:boolean;verificationColor?:string;isBlocked?:boolean}){
+ await requireStaff();
+ const ref=doc(db,'users',uid);
+ const before=await getDoc(ref);
+ if(!before.exists()) throw new Error('User profile not found.');
+ const current=before.data() as CommunityUser;
+ const clean:any={...data,updatedAt:serverTimestamp()};
+ await updateDoc(ref,clean);
+ if(data.displayName!==undefined || data.photoURL!==undefined || data.isVerified!==undefined || data.verificationColor!==undefined){
+  try {
+   const writes:any[]=[];
+   const posts=await getDocs(query(collection(db,'posts'),where('authorId','==',uid)));
+   posts.docs.forEach(d=>writes.push({ref:d.ref,data:{authorName:data.displayName ?? current.displayName,authorAvatar:data.photoURL ?? current.photoURL ?? '',authorUsername:current.username,isVerified:data.isVerified ?? !!current.isVerified,verificationColor:data.verificationColor ?? current.verificationColor ?? '#2196F3',updatedAt:serverTimestamp()}}));
+   let comments;
+   try { comments=await getDocs(query(collectionGroup(db,'comments'),where('authorId','==',uid))); } catch { const all=await getDocs(collectionGroup(db,'comments')); comments={docs:all.docs.filter(d=>d.data()?.authorId===uid)} as any; }
+   comments.docs.forEach((d:any)=>writes.push({ref:d.ref,data:{authorName:data.displayName ?? current.displayName,authorAvatar:data.photoURL ?? current.photoURL ?? '',authorUsername:current.username,isVerified:data.isVerified ?? !!current.isVerified,verificationColor:data.verificationColor ?? current.verificationColor ?? '#2196F3',updatedAt:serverTimestamp()}}));
+   // Main publication articles also denormalize author identity. Refresh only
+   // articles belonging to the edited account; never rewrite unrelated authors.
+   const articles=await getDocs(collection(db,'articles'));
+   articles.docs.forEach(d=>{
+    const a:any=d.data()?.author || {};
+    if(a.uid===uid || String(a.username||'').toLowerCase()===String(current.username||'').toLowerCase()){
+      writes.push({ref:d.ref,data:{author:{...a,uid,username:current.username,name:data.displayName ?? current.displayName,avatar:data.photoURL ?? current.photoURL ?? '',isVerified:data.isVerified ?? !!current.isVerified,verificationColor:data.verificationColor ?? current.verificationColor ?? '#2196F3'},updatedAt:serverTimestamp()}});
+    }
+   });
+   for(let i=0;i<writes.length;i+=450){ const b=writeBatch(db); writes.slice(i,i+450).forEach((w:any)=>b.update(w.ref,w.data)); await b.commit(); }
+  } catch(err) { console.warn('Admin profile saved but author snapshots could not be refreshed:',err); }
+ }
+}
 export async function adminDeleteUserProfile(uid:string){ await requireStaff(); await deleteDoc(doc(db,'users',uid)); }

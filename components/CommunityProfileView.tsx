@@ -3,9 +3,9 @@ import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
 import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments, getUserFollowers, getUserFollowing, ProfileListEntry, subscribeCommunityProfile } from '../lib/community';
-import { auth, checkIsAdmin } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
-import { fetchArticles, getSiteConfig, saveSiteConfig } from '../lib/cms';
+import { fetchArticles } from '../lib/cms';
 import { syncUserIdentityAcrossContent } from '../lib/community';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { getSeriesList } from '../lib/series';
@@ -107,11 +107,10 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     return !q || user.username.toLowerCase().includes(q) || user.displayName.toLowerCase().includes(q);
   });
   const activeUser = auth.currentUser || userAuth;
-  const isAdmin = checkIsAdmin(activeUser?.email);
-  // The reserved @krishsarkar author profile may be stored under a canonical
-  // author UID that differs from the currently signed-in trusted admin UID.
-  // Trusted admins are therefore allowed to manage that canonical profile.
-  const isOwner = !!activeUser && !!profile && (activeUser.uid === profile.uid || (isAdmin && profile.username.toLowerCase() === 'krishsarkar'));
+  // Profile Settings is strictly account-scoped. Publication author settings
+  // are managed separately in Admin Studio and must never overwrite a user's
+  // personal account display name.
+  const isOwner = !!activeUser && !!profile && activeUser.uid === profile.uid;
 
   useEffect(() => {
     let cancelled = false;
@@ -214,28 +213,11 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       try { await updateProfile(activeUser, { displayName: nextDisplayName, photoURL: nextPhotoURL || null }); }
       catch (authError) { console.warn('Firebase Auth profile update skipped; Firestore profile is still saved:', authError); }
 
-      // The canonical admin author is also represented in siteConfig. Keep that
-      // publication identity synchronized so a later admin login cannot overwrite
-      // the profile edit with stale CMS values.
-      if (isAdmin && profile.username.toLowerCase() === 'krishsarkar') {
-        try {
-          const currentConfig = await getSiteConfig();
-          await saveSiteConfig({
-            ...currentConfig,
-            authorName: nextDisplayName,
-            authorAvatarUrl: nextPhotoURL,
-            aboutMeBio: bioInput.trim().slice(0, 500),
-          });
-        } catch (siteConfigError) {
-          console.warn('Profile saved, but publication author CMS sync failed:', siteConfigError);
-        }
-      }
-
       // Use the complete identity payload required by propagation. This work is
       // intentionally isolated from the primary save and is retried by realtime views.
       let propagated = true;
       try {
-        const syncResult = await syncUserIdentityAcrossContent(activeUser.uid, {
+        const syncResult = await syncUserIdentityAcrossContent(profile.uid, {
           displayName: nextDisplayName, photoURL: nextPhotoURL, username: profile.username,
           isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3'
         });

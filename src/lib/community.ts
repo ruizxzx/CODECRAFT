@@ -344,7 +344,7 @@ export async function createCommunityProfile(data: Omit<CommunityUser, 'createdA
 export async function updateCommunityProfile(uid: string, data: Partial<CommunityUser>) {
   const p = `users/${uid}`;
   try {
-    if (!uid || !isValidId(uid)) throw new Error('Invalid profile ID.');
+    if (typeof uid !== 'string' || !uid.trim() || uid.length > 128 || uid.includes('/')) throw new Error('Invalid profile ID.');
     const current = auth.currentUser;
     const adminMayManageCanonicalAuthor = !!current && checkIsAdmin(current.email) && (await getCommunityProfile(uid))?.username?.toLowerCase() === 'krishsarkar';
     if (!current || (current.uid !== uid && !adminMayManageCanonicalAuthor)) {
