@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { CATEGORIES } from '../data/articles';
 import { CarouselSlide } from '../types';
+import { SeriesStrip } from './SeriesStrip';
 
 interface HomeViewProps {
   articles: Article[];
@@ -400,6 +401,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
           ))}
         </div>
       </section>
+
+      <SeriesStrip articles={articles} onNavigate={onNavigate} />
 
       {/* Featured Community Posts */}
       {featuredCommunityPosts.length > 0 && (

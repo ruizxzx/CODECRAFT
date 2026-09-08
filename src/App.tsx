@@ -291,12 +291,6 @@ export default function App() {
       } else if (hash.startsWith('creator/')) {
         setCurrentPage('creator');
         setActiveArticleSlug(hash.replace('creator/', ''));
-      } else if (hash === 'series' || hash.startsWith('series/')) {
-        setCurrentPage('series');
-        setActiveArticleSlug(hash.startsWith('series/') ? hash.replace('series/', '') : null);
-      } else if (hash.startsWith('creator/')) {
-        setCurrentPage('creator');
-        setActiveArticleSlug(hash.replace('creator/', ''));
       } else if (hash === 'explore' || hash.startsWith('explore/')) {
         setCurrentPage('explore');
         setActiveArticleSlug(hash.startsWith('explore/') ? hash.replace('explore/', '') : null);
@@ -530,6 +524,7 @@ export default function App() {
                 selectedCategory={selectedCategory}
                 onSelectCategory={setSelectedCategory}
                 siteConfig={siteConfig}
+                onNavigate={navigateTo}
               />
             )}
 
@@ -541,6 +536,7 @@ export default function App() {
                   onBack={() => navigateTo('blog')}
                   onSelectArticle={(slug) => navigateTo('article', slug)}
                   onOpenSeries={(seriesId) => navigateTo('series', seriesId)}
+                  onViewAllSeries={() => navigateTo('series')}
                   onOpenAuthorProfile={(username) => navigateTo('community_profile', username)}
                   isSaved={savedSlugs.includes(activeArticle.slug)}
                   onToggleSave={handleToggleSave}

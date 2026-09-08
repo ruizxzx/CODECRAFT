@@ -3,6 +3,7 @@ import { Article, Category, SiteConfig } from '../types';
 import { CATEGORIES } from '../data/articles';
 import { ArticleCard } from './ArticleCard';
 import { Search, Filter, Bookmark, Sparkles, BookOpen, Layers, ArrowUpDown } from 'lucide-react';
+import { SeriesStrip } from './SeriesStrip';
 
 interface BlogViewProps {
   articles: Article[];
@@ -12,6 +13,7 @@ interface BlogViewProps {
   selectedCategory: string;
   onSelectCategory: (cat: string) => void;
   siteConfig: SiteConfig;
+  onNavigate: (page: any, slug?: string) => void;
 }
 
 export const BlogView: React.FC<BlogViewProps> = ({
@@ -22,6 +24,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
   selectedCategory,
   onSelectCategory,
   siteConfig,
+  onNavigate,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -106,6 +109,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
           </p>
         </div>
       </section>
+
+      <SeriesStrip articles={articles} onNavigate={onNavigate} compact />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
         

@@ -56,6 +56,31 @@ export async function getArticleReadingProgress(slug: string): Promise<ArticleRe
   return { slug, percent: Number(data.percent || 0), completed: !!data.completed, updatedAt: data.updatedAt?.toDate?.()?.toISOString?.(), lastSection: data.lastSection || '' };
 }
 
+export function subscribeSeriesReadingProgress(
+  seriesArticles: Article[],
+  callback: (progress: Record<string, ArticleReadingProgress>) => void,
+): () => void {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !seriesArticles.length) { callback({}); return () => {}; }
+  const wanted = new Set(seriesArticles.map(a => a.slug));
+  return onSnapshot(collection(db, 'users', uid, 'readingProgress'), snap => {
+    const result: Record<string, ArticleReadingProgress> = {};
+    snap.docs.forEach(d => {
+      const data = d.data() as any;
+      const slug = data.slug || d.id;
+      if (!wanted.has(slug)) return;
+      result[slug] = {
+        slug,
+        percent: Math.max(0, Math.min(100, Number(data.percent || 0))),
+        completed: !!data.completed,
+        updatedAt: data.updatedAt?.toDate?.()?.toISOString?.(),
+        lastSection: data.lastSection || '',
+      };
+    });
+    callback(result);
+  }, () => callback({}));
+}
+
 export async function getSeriesReadingProgress(seriesArticles: Article[]): Promise<Record<string, ArticleReadingProgress>> {
   const uid = auth.currentUser?.uid;
   if (!uid || !seriesArticles.length) return {};

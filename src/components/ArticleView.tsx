@@ -73,6 +73,7 @@ interface ArticleViewProps {
   onBack: () => void;
   onSelectArticle: (slug: string) => void;
   onOpenSeries?: (seriesId: string) => void;
+  onViewAllSeries?: () => void;
   onOpenAuthorProfile?: (username: string) => void;
   isSaved: boolean;
   onToggleSave: (slug: string) => void;
@@ -85,6 +86,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   onBack,
   onSelectArticle,
   onOpenSeries,
+  onViewAllSeries,
   onOpenAuthorProfile,
   isSaved,
   onToggleSave,
@@ -95,6 +97,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [engagement, setEngagement] = useState<ArticleEngagementStats>({ likes: 0, applauds: 0, comments: 0, reactions: {} });
   const [savedCloudProgress, setSavedCloudProgress] = useState(0);
   const [resumeVisible, setResumeVisible] = useState(false);
+  const [articleCompleted, setArticleCompleted] = useState(false);
+  const [completeBusy, setCompleteBusy] = useState(false);
   const lastSavedProgressRef = React.useRef(-1);
   const saveTimerRef = React.useRef<number | null>(null);
   const [hasClapped, setHasClapped] = useState(false);
@@ -115,8 +119,9 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
   useEffect(() => { void recordArticleView(article.slug, user?.uid); }, [article.slug, user?.uid]);
   useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
-  useEffect(() => { let active = true; if (!user) { setSavedCloudProgress(0); return; } getArticleReadingProgress(article.slug).then(p => { if (active && p) { setSavedCloudProgress(p.percent); setResumeVisible(p.percent >= 10 && p.percent < 90); } }).catch(() => {}); return () => { active = false; }; }, [article.slug, user]);
+  useEffect(() => { let active = true; if (!user) { setSavedCloudProgress(0); return; } getArticleReadingProgress(article.slug).then(p => { if (active && p) { setSavedCloudProgress(p.percent); setArticleCompleted(!!p.completed); setResumeVisible(p.percent >= 10 && p.percent < 100 && !p.completed); } }).catch(() => {}); return () => { active = false; }; }, [article.slug, user]);
 
+  useEffect(() => { lastSavedProgressRef.current = -1; setScrollProgress(0); setArticleCompleted(false); }, [article.slug]);
   useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
   useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
   useEffect(() => {
@@ -195,8 +200,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   }, [article.slug, user, activeTocId]);
 
   useEffect(() => {
-    if (!user || scrollProgress < 95) return;
-    void saveArticleReadingProgress(article.slug, 100, activeTocId || '', true).catch(() => {});
+    if (!user || scrollProgress < 99) return;
+    void saveArticleReadingProgress(article.slug, 100, activeTocId || '', true).then(() => setArticleCompleted(true)).catch(() => {});
   }, [scrollProgress, article.slug, user, activeTocId]);
 
   const resumeArticle = () => {
@@ -209,6 +214,24 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     navigator.clipboard.writeText(code);
     setCopiedCodeIdx(idx);
     setTimeout(() => setCopiedCodeIdx(null), 2000);
+  };
+
+  const handleMarkComplete = async () => {
+    let currentUser = user;
+    if (!currentUser) {
+      try { currentUser = await loginWithGoogle(); } catch { return; }
+    }
+    if (!currentUser) return;
+    setCompleteBusy(true);
+    try {
+      await saveArticleReadingProgress(article.slug, 100, activeTocId || 'completed', true);
+      setSavedCloudProgress(100);
+      setScrollProgress(100);
+      setArticleCompleted(true);
+      setResumeVisible(false);
+    } catch (error) {
+      console.error('Could not mark article complete:', error);
+    } finally { setCompleteBusy(false); }
   };
 
   const handleShareLink = () => {
@@ -683,8 +706,10 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             <div className="font-mono text-[10px] font-black uppercase">{article.seriesName || 'SERIES'} · PART {Math.max(1,idx+1)} / {seriesArticles.length}</div>
             <div className="font-display font-black text-2xl uppercase mt-1">{next ? `Next: ${next.title}` : 'You reached the end.'}</div>
             <div className="flex flex-wrap gap-2 mt-4">
+              {!articleCompleted && <button onClick={handleMarkComplete} disabled={completeBusy} className="border-2 border-black bg-white text-black px-4 py-3 font-mono text-[10px] font-black uppercase">{completeBusy ? 'SAVING…' : '✓ MARK AS COMPLETE'}</button>}
+              {articleCompleted && <span className="border-2 border-black bg-[var(--color-success)] text-black px-4 py-3 font-mono text-[10px] font-black uppercase">✓ COMPLETED</span>}
               {next && <button onClick={()=>onSelectArticle(next.slug)} className="border-2 border-black bg-black text-white px-4 py-3 font-mono text-[10px] font-black uppercase">NEXT PART →</button>}
-              <button onClick={()=>onBack} className="border-2 border-black bg-white text-black px-4 py-3 font-mono text-[10px] font-black uppercase">VIEW ALL SERIES</button>
+              <button onClick={()=>onViewAllSeries ? onViewAllSeries() : onOpenSeries?.('')} className="border-2 border-black bg-white text-black px-4 py-3 font-mono text-[10px] font-black uppercase">VIEW ALL SERIES</button>
             </div>
           </div>;
         })()}

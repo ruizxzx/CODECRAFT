@@ -63,7 +63,9 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const user = useAuthUser();
-  const loading = !user && auth.currentUser === null;
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => auth.onAuthStateChanged(() => setAuthReady(true)), []);
+  const loading = !authReady;
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);

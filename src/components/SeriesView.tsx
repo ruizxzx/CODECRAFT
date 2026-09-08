@@ -4,7 +4,7 @@ import { deleteSeries, getSeriesList, reorderSeriesArticles, setArticleSeriesMem
 import { auth, checkIsAdmin } from '../lib/firebase';
 import { useAuthUser } from '../lib/useAuthUser';
 import { UserIdentity } from './UserIdentity';
-import { calculateArticleReadingTime, getSeriesReadingProgress, getSeriesDerivedStats, ArticleReadingProgress } from '../lib/reading';
+import { calculateArticleReadingTime, getSeriesReadingProgress, getSeriesDerivedStats, ArticleReadingProgress, subscribeSeriesReadingProgress } from '../lib/reading';
 import {
   ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Check, ChevronDown, ChevronUp,
   Edit3, ExternalLink, Filter, Layers, ListChecks, Play, Save, Search, Settings2,
@@ -58,10 +58,12 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
   useEffect(() => {
     if (!active) return;
     let alive = true;
+    setProgress({});
     getSeriesReadingProgress(active.items).then(p => { if (alive) setProgress(p); }).catch(()=>{});
+    const unsubProgress = subscribeSeriesReadingProgress(active.items, p => alive && setProgress(p));
     if (user) { getSeriesFollowStatus(active.id, user.uid).then(v=>alive&&setFollowed(v)).catch(()=>setFollowed(false)); } else setFollowed(false);
     const unsubFollowers = subscribeSeriesFollowerCount(active.id, v=>alive&&setFollowers(v));
-    return () => { alive = false; unsubFollowers(); };
+    return () => { alive = false; unsubFollowers(); unsubProgress(); };
   }, [active?.id, active?.items.length, user?.uid]);
 
   const computedLibrary = useMemo(() => {
@@ -105,10 +107,21 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
   const removeSeries = async () => { if(!active||!canEditSeries||busy)return; if(!window.confirm(`Delete “${active.title}”? Articles will remain published.`))return; setBusy(true); try{await deleteSeries(active.id);onNavigate('series');await load();}catch(e:any){setError(e?.message||'Could not delete series.');}finally{setBusy(false);} };
 
   useEffect(() => { if(!active)return; const onKey=(e:KeyboardEvent)=>{ if(['INPUT','TEXTAREA'].includes((e.target as HTMLElement)?.tagName||''))return; if(e.key.toLowerCase()==='r') startOrResume(); if(e.key.toLowerCase()==='f'&&user) void toggleFollow(); }; window.addEventListener('keydown',onKey); return()=>window.removeEventListener('keydown',onKey); });
-  const startOrResume = () => { if(!active)return; const next=active.items.find(a=>!progress[a.slug]?.completed)||active.items[0]; if(next)onNavigate('article',next.slug); };
+  const startOrResume = () => {
+    if (!active) return;
+    const next = active.items.find(a => (progress[a.slug]?.percent || 0) > 0 && !progress[a.slug]?.completed)
+      || active.items.find(a => !progress[a.slug]?.completed)
+      || active.items[0];
+    if (next) onNavigate('article', next.slug);
+  };
 
   if (active) {
-    const stats=getSeriesDerivedStats(active.items); const completedCount=active.items.filter(a=>progress[a.slug]?.completed).length; const pct=stats.parts?Math.round(completedCount/stats.parts*100):0; const remainingParts=Math.max(0,stats.parts-completedCount); const remainingMinutes=active.items.filter(a=>!progress[a.slug]?.completed).reduce((n,a)=>n+safeMinutes(a),0); const creatorName=active.ownerName||'Creator';
+    const stats=getSeriesDerivedStats(active.items);
+    const completedCount=active.items.filter(a=>progress[a.slug]?.completed).length;
+    const overallPct=stats.parts ? Math.round(active.items.reduce((sum,a)=>sum + Math.max(0, Math.min(100, Number(progress[a.slug]?.percent || 0))),0) / stats.parts) : 0;
+    const remainingParts=Math.max(0,stats.parts-completedCount);
+    const remainingMinutes=active.items.filter(a=>!progress[a.slug]?.completed).reduce((n,a)=>n+Math.max(0, Math.round(safeMinutes(a) * (1-(Number(progress[a.slug]?.percent||0)/100)))),0);
+    const creatorName=active.ownerName||'Creator';
     const availableToAdd=canManageParts?articles.filter(a=>!active.items.some(x=>x.slug===a.slug)):[];
     return <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 print:max-w-none">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 print:hidden">
@@ -136,9 +149,9 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
           <p className="mt-4 max-w-3xl text-base sm:text-lg text-neutral-200 leading-relaxed">{active.description}</p>
           <div className="mt-5 max-w-sm"><UserIdentity name={creatorName} username={active.ownerUsername} uid={active.ownerId} size="md"/></div>
           <div className="mt-7 max-w-3xl border-2 border-white/40 p-4 bg-black/30">
-            <div className="flex items-center justify-between font-mono text-[10px] uppercase"><span>{completedCount}/{stats.parts} parts completed</span><span>{pct}%</span></div>
-            <div className="h-4 border-2 border-white mt-2 bg-white/10"><div className="h-full bg-[var(--color-primary)]" style={{width:`${pct}%`}}/></div>
-            <div className="mt-3 flex flex-wrap gap-2 font-mono text-[10px] uppercase text-neutral-300"><span>{remainingParts} parts left</span><span>•</span><span>{formatDuration(remainingMinutes)} remaining</span><span>•</span><span>{pct===100?'SERIES COMPLETE':'CLOUD SYNC ENABLED'}</span></div>
+            <div className="flex items-center justify-between font-mono text-[10px] uppercase"><span>{completedCount}/{stats.parts} parts completed</span><span>{overallPct}% read</span></div>
+            <div className="h-4 border-2 border-white mt-2 bg-white/10"><div className="h-full bg-[var(--color-primary)]" style={{width:`${overallPct}%`}}/></div>
+            <div className="mt-3 flex flex-wrap gap-2 font-mono text-[10px] uppercase text-neutral-300"><span>{remainingParts} parts left</span><span>•</span><span>{formatDuration(remainingMinutes)} remaining</span><span>•</span><span>{overallPct===100?'SERIES COMPLETE':'AUTO PROGRESS · CLOUD SYNC'}</span></div>
           </div>
           {active.tags?.length?<div className="mt-5 flex flex-wrap gap-2">{active.tags.map(tag=><span key={tag} className="border border-white/60 px-2 py-1 font-mono text-[9px] uppercase">#{tag}</span>)}</div>:null}
         </div>
@@ -147,11 +160,12 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
         <Metric icon={<Layers/>} label="PARTS" value={String(stats.parts)} />
         <Metric icon={<Clock3/>} label="TOTAL READ" value={formatDuration(stats.minutes)} />
-        <Metric icon={<CircleCheck/>} label="COMPLETED" value={`${completedCount}/${stats.parts}`} />
+        <Metric icon={<CircleCheck/>} label="PROGRESS" value={`${overallPct}%`} />
         <Metric icon={<Users/>} label="FOLLOWERS" value={String(followers)} />
       </div>
 
-      {pct===100&&<div className="mt-4 border-4 border-black bg-[var(--color-success)] p-5 neo-shadow"><div className="flex items-center gap-2 font-display font-black text-2xl uppercase"><Sparkles className="w-5 h-5"/> SERIES COMPLETE</div><p className="font-mono text-xs uppercase mt-2">You completed every part. Your progress is synced to your account.</p></div>}
+      {completedCount===stats.parts&&stats.parts>0&&<div className="mt-4 border-4 border-black bg-[var(--color-success)] p-5 neo-shadow"><div className="flex items-center gap-2 font-display font-black text-2xl uppercase"><Sparkles className="w-5 h-5"/> SERIES COMPLETE</div><p className="font-mono text-xs uppercase mt-2">Every part is explicitly completed. Your progress is synced to your account.</p></div>}
+      {overallPct > 0 && overallPct < 100 && <div className="mt-4 border-2 border-black bg-white p-4 font-mono text-[10px] uppercase"><strong>HOW PROGRESS WORKS:</strong> scrolling updates each article's reading percentage automatically. Use <strong>MARK AS COMPLETE</strong> at the end of an article when you are done. Your progress follows your account across devices.</div>}
 
       <section className="mt-5 border-4 border-black bg-white neo-shadow print:shadow-none">
         <div className="border-b-2 border-black p-4 flex flex-wrap items-center justify-between gap-3">
@@ -181,6 +195,8 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
       </section>
 
       {managingParts&&canManageParts&&<section className="mt-4 border-4 border-black bg-white p-4 sm:p-5 neo-shadow print:hidden"><div className="font-display font-black uppercase text-xl">Add a part</div><p className="font-mono text-[10px] text-neutral-500 mt-1 uppercase">Choose an existing published article. The article stays intact; only its series membership changes.</p><div className="mt-3 flex flex-wrap gap-2">{availableToAdd.slice(0,20).map(a=><button key={a.slug} disabled={busy} onClick={()=>void addArticleToSeries(a.slug)} className="border-2 border-black px-3 py-2 bg-white hover:bg-[var(--color-primary)] text-left"><span className="block font-display font-black text-sm uppercase">{a.title}</span><span className="block font-mono text-[8px] mt-1">{safeMinutes(a)} MIN · {a.category}</span></button>)}{!availableToAdd.length&&<div className="font-mono text-[10px] uppercase text-neutral-500">No available articles.</div>}</div></section>}
+
+      <div className="mt-6 flex justify-center print:hidden"><button onClick={()=>onNavigate('series')} className="border-2 border-black bg-[var(--color-primary)] px-5 py-3 font-mono text-[10px] font-black uppercase inline-flex items-center gap-2 hover:bg-black hover:text-white transition-colors"><Layers className="w-4 h-4"/> VIEW ALL SERIES</button></div>
 
       <div className="mt-5 grid md:grid-cols-3 gap-3 print:hidden"><InfoCard icon={<Zap/>} title="Keyboard" text="Press R to resume the next unfinished part. Press F to save or unsave the series when signed in."/><InfoCard icon={<CloudIcon/>} title="Cloud synced" text="Completion and reading checkpoints are stored per account, not only in this browser."/><InfoCard icon={<ExternalLink/>} title="Shareable path" text="Send one URL for the whole curriculum; each part remains individually addressable."/></div>
     </div>;
