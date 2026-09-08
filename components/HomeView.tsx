@@ -24,6 +24,8 @@ import {
 import { CATEGORIES } from '../data/articles';
 import { CarouselSlide } from '../types';
 import { SeriesStrip } from './SeriesStrip';
+import { PersonalizedHomeSections } from './PersonalizedHomeSections';
+import { subscribeSeriesList } from '../lib/series';
 
 interface HomeViewProps {
   articles: Article[];
@@ -34,6 +36,7 @@ interface HomeViewProps {
   onSelectCategory: (cat: string) => void;
   siteConfig: SiteConfig;
   continueReadingArticle: Article | null;
+  userAuth?: any;
 }
 
 const CarouselComponent: React.FC<{ slides: CarouselSlide[] }> = ({ slides }) => {
@@ -122,9 +125,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onSelectCategory,
   siteConfig,
   continueReadingArticle,
+  userAuth,
 }) => {
   const [featuredCommunityPosts, setFeaturedCommunityPosts] = useState<CommunityPost[]>([]);
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([]);
+  const [series, setSeries] = useState<import('../types').Series[]>([]);
+  useEffect(() => subscribeSeriesList(setSeries), []);
 
   useEffect(() => {
     const fetchCommunityPosts = async () => {
@@ -218,6 +224,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </section>
       )}
+
+      <PersonalizedHomeSections articles={articles} series={series} userAuth={userAuth} onNavigate={onNavigate} />
 
       {/* 2. High Density Main Split: 2/3 Featured Column & 1/3 Dispatch Updates / Newsletter */}
       {featuredArticle && (

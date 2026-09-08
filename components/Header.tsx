@@ -27,7 +27,9 @@ import {
   Bell,
   Compass,
   Layers,
-  History as HistoryIcon
+  History as HistoryIcon,
+  Activity,
+  BarChart3
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -450,6 +452,15 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center gap-2.5"><HistoryIcon className="w-4 h-4 stroke-[2.5]"/><span>Reading History</span></div><ArrowRight className="w-4 h-4"/>
             </button>
           </div>
+
+          {/* My OFFSCRPT */}
+          {user && <div>
+            <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">My OFFSCRPT</h3>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => handleNavClick('activity')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'activity' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Activity className="w-4 h-4"/> Activity</span><ArrowRight className="w-4 h-4"/></button>
+              <button onClick={() => handleNavClick('creator_studio')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'creator_studio' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><BarChart3 className="w-4 h-4"/> Creator Studio</span><ArrowRight className="w-4 h-4"/></button>
+            </div>
+          </div>}
 
           {/* Editorial Pages */}
           <div>

@@ -236,7 +236,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'preferences';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'activity' | 'creator_studio' | 'preferences';
 
 export interface CommunityUser {
   uid: string;

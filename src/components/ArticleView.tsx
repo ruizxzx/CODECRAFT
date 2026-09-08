@@ -101,6 +101,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [engagement, setEngagement] = useState<ArticleEngagementStats>({ likes: 0, applauds: 0, comments: 0, reactions: {} });
   const [savedCloudProgress, setSavedCloudProgress] = useState(0);
+  const savedCheckpointRef = React.useRef<{scrollY?:number; viewportHeight?:number; lastSection?:string; device?:string; source?:string; seriesId?:string; seriesOrder?:number}>({});
   const [resumeVisible, setResumeVisible] = useState(false);
   const [articleCompleted, setArticleCompleted] = useState(false);
   const [completeBusy, setCompleteBusy] = useState(false);
@@ -133,7 +134,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
   useEffect(() => { void recordArticleView(article.slug, user?.uid); }, [article.slug, user?.uid]);
   useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
-  useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); setSavedCloudProgress(pct); maxAutoProgressRef.current = pct; setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
+  useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); savedCheckpointRef.current = { scrollY: p?.scrollY, viewportHeight: p?.viewportHeight, lastSection: p?.lastSection, device: p?.device, source: p?.source, seriesId: p?.seriesId, seriesOrder: p?.seriesOrder }; setSavedCloudProgress(pct); maxAutoProgressRef.current = pct; setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct, { lastSection:p?.lastSection, scrollY:p?.scrollY, device:p?.device, source:p?.source }).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
 
   useEffect(() => { lastSavedProgressRef.current = -1; maxAutoProgressRef.current = 0; completionCommittedRef.current = false; setScrollProgress(0); setPagePosition(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
   useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
@@ -256,8 +257,9 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             setScrollProgress(current => Math.max(current, cloudProgress));
             if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
             saveTimerRef.current = window.setTimeout(() => {
-              void saveArticleReadingProgress(article.slug, cloudProgress, activeTocIdRef.current || '', false).catch(() => {});
-              void recordArticleHistory(article, cloudProgress).catch(() => {});
+              const details = { scrollY: window.scrollY, viewportHeight: window.innerHeight, device: `${navigator.platform || 'unknown'} · ${window.innerWidth}x${window.innerHeight}`, source: 'article-scroll', seriesId: article.seriesId || '', seriesOrder: article.seriesOrder || 0 };
+              void saveArticleReadingProgress(article.slug, cloudProgress, activeTocIdRef.current || '', false, details).catch(() => {});
+              void recordArticleHistory(article, cloudProgress, { ...details, lastSection: activeTocIdRef.current || '' }).catch(() => {});
             }, 350);
           }
         }
@@ -268,10 +270,10 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       if (user && !articleCompleted && rawProgress >= 100 && !completionCommittedRef.current) {
         if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
         completionCommittedRef.current = true;
-        void saveArticleReadingProgress(article.slug, 100, activeTocIdRef.current || 'end', false)
+        void saveArticleReadingProgress(article.slug, 100, activeTocIdRef.current || 'end', false, { scrollY: window.scrollY, viewportHeight: window.innerHeight, device: `${navigator.platform || 'unknown'} · ${window.innerWidth}x${window.innerHeight}`, source: 'article-scroll', seriesId: article.seriesId || '', seriesOrder: article.seriesOrder || 0 })
           .then(() => { if (!disposed) { maxAutoProgressRef.current = 100; setSavedCloudProgress(100); } })
           .catch(() => { completionCommittedRef.current = false; });
-        void recordArticleHistory(article, 100).catch(() => {});
+        void recordArticleHistory(article, 100, { lastSection: activeTocIdRef.current || 'end', scrollY: window.scrollY, device: `${navigator.platform || 'unknown'} · ${window.innerWidth}x${window.innerHeight}`, source: 'article-scroll', seriesId: article.seriesId || '', seriesOrder: article.seriesOrder || 0 }).catch(() => {});
       }
     };
 
@@ -319,13 +321,20 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   }, [article.slug, user?.uid, progressHydrated]);
 
   const resumeArticle = () => {
+    const checkpoint = savedCheckpointRef.current;
     const startEl = articleContentRef.current;
     const endEl = articleContentEndRef.current;
     if (!startEl || !endEl || savedCloudProgress <= 0 || savedCloudProgress >= 100) { setResumeVisible(false); return; }
-    const startY = startEl.getBoundingClientRect().top + window.scrollY;
-    const endY = endEl.getBoundingClientRect().top + window.scrollY;
-    const travel = Math.max(1, endY - startY - window.innerHeight);
-    window.scrollTo({ top: startY + travel * (savedCloudProgress / 100), behavior: 'smooth' });
+    const targetY = Number(checkpoint.scrollY || 0);
+    if (targetY > 0) {
+      window.scrollTo({ top: targetY, behavior: 'smooth' });
+    } else {
+      const startY = startEl.getBoundingClientRect().top + window.scrollY;
+      const endY = endEl.getBoundingClientRect().top + window.scrollY;
+      const travel = Math.max(1, endY - startY - window.innerHeight);
+      window.scrollTo({ top: startY + travel * (savedCloudProgress / 100), behavior: 'smooth' });
+    }
+    if (checkpoint.lastSection) window.setTimeout(() => document.getElementById(checkpoint.lastSection || '')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 220);
     setResumeVisible(false);
   };
 
@@ -343,7 +352,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     if (!currentUser) return;
     setCompleteBusy(true);
     try {
-      await saveArticleReadingProgress(article.slug, 100, activeTocId || 'completed', true);
+      await saveArticleReadingProgress(article.slug, 100, activeTocId || 'completed', true, { scrollY: window.scrollY, viewportHeight: window.innerHeight, device: `${navigator.platform || 'unknown'} · ${window.innerWidth}x${window.innerHeight}`, source: 'manual-complete', seriesId: article.seriesId || '', seriesOrder: article.seriesOrder || 0 });
       setSavedCloudProgress(100);
       maxAutoProgressRef.current = 100;
       setScrollProgress(100);

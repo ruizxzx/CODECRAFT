@@ -1,5 +1,6 @@
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
@@ -8,6 +9,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
   serverTimestamp,
   setDoc,
 } from 'firebase/firestore';
@@ -157,16 +159,22 @@ export type AccountActivity = {
 export async function getUnifiedAccountActivity(): Promise<AccountActivity[]> {
   const uid = auth.currentUser?.uid;
   if (!uid) return [];
-  const [historySnap, saveSnap, notificationSnap] = await Promise.all([
-    getDocs(query(collection(db, 'users', uid, 'history'), orderBy('viewedAt', 'desc'), limit(30))).catch(() => ({ docs: [] } as any)),
-    getDocs(query(collection(db, 'users', uid, 'saves'), orderBy('createdAt', 'desc'), limit(30))).catch(() => ({ docs: [] } as any)),
-    getDocs(query(collection(db, 'users', uid, 'notifications'), orderBy('createdAt', 'desc'), limit(30))).catch(() => ({ docs: [] } as any)),
+  const [historySnap, saveSnap, notificationSnap, draftsSnap, articleSnap, seriesFollowSnap] = await Promise.all([
+    getDocs(query(collection(db, 'users', uid, 'history'), orderBy('viewedAt', 'desc'), limit(40))).catch(() => ({ docs: [] } as any)),
+    getDocs(query(collection(db, 'users', uid, 'saves'), orderBy('createdAt', 'desc'), limit(40))).catch(() => ({ docs: [] } as any)),
+    getDocs(query(collection(db, 'users', uid, 'notifications'), orderBy('createdAt', 'desc'), limit(40))).catch(() => ({ docs: [] } as any)),
+    getDocs(query(collection(db, 'users', uid, 'drafts'), orderBy('updatedAt', 'desc'), limit(20))).catch(() => ({ docs: [] } as any)),
+    getDocs(query(collection(db, 'articles'), limit(250))).catch(() => ({ docs: [] } as any)),
+    getDocs(query(collectionGroup(db, 'followers'), where('userId', '==', uid), limit(50))).catch(() => ({ docs: [] } as any)),
   ]);
   const activities: AccountActivity[] = [];
-  historySnap.docs.forEach((d: any) => { const x = d.data(); activities.push({ id: `read:${d.id}`, kind: 'read', title: x.title || 'Article', subtitle: `Read ${Math.round(Number(x.progress || 0))}%`, at: iso(x.viewedAt), targetSlug: x.slug, targetType: 'article' }); });
-  saveSnap.docs.forEach((d: any) => { const x = d.data(); activities.push({ id: `save:${d.id}`, kind: 'saved', title: x.title || 'Saved item', subtitle: `Saved ${x.itemType || 'item'}`, at: iso(x.createdAt), targetSlug: x.itemId, targetType: x.itemType }); });
-  notificationSnap.docs.forEach((d: any) => { const x = d.data(); activities.push({ id: `notification:${d.id}`, kind: 'notification', title: x.message || 'Notification', subtitle: x.actorUsername ? `From @${x.actorUsername}` : 'Notification', at: iso(x.createdAt), targetSlug: x.targetId, targetType: x.targetType }); });
-  return activities.filter((x) => x.at).sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime()).slice(0, 60);
+  historySnap.docs.forEach((d: any) => { const x = d.data(); activities.push({ id:`read:${d.id}`, kind:'read', title:x.title||'Article', subtitle:x.progress >= 100 ? 'Completed article' : `Read ${Math.round(Number(x.progress||0))}%`, at:iso(x.viewedAt), targetSlug:x.slug, targetType:'article' }); });
+  saveSnap.docs.forEach((d: any) => { const x=d.data(); activities.push({ id:`save:${d.id}`, kind:'saved', title:x.title||'Saved item', subtitle:`Saved ${x.itemType||'item'}`, at:iso(x.createdAt), targetSlug:x.itemId, targetType:x.itemType }); });
+  notificationSnap.docs.forEach((d: any) => { const x=d.data(); activities.push({ id:`notification:${d.id}`, kind:'notification', title:x.message||'Notification', subtitle:x.actorUsername ? `From @${x.actorUsername}` : 'Notification', at:iso(x.createdAt), targetSlug:x.targetId, targetType:x.targetType }); });
+  draftsSnap.docs.forEach((d: any) => { const x=d.data(); activities.push({ id:`draft:${d.id}`, kind:'notification', title:x.title||'Untitled draft', subtitle:'Draft autosaved to cloud', at:iso(x.updatedAt), targetType:'draft' }); });
+  seriesFollowSnap.docs.forEach((d:any) => { const x=d.data(); const seriesId=d.ref.parent.parent?.id || x.seriesId || ''; activities.push({ id:`series-follow:${d.id}`, kind:'notification', title:String(x.seriesName || seriesId || 'Series'), subtitle:'Following series', at:iso(x.createdAt), targetSlug:seriesId, targetType:'series' }); });
+  articleSnap.docs.forEach((d:any) => { const x=d.data(); const au=x.author||{}; if (au.uid!==uid) return; if (x.isPublished===false || x.mainPublicationStatus==='unpublished') return; activities.push({ id:`published:${d.id}`, kind:'notification', title:x.title||'Published article', subtitle:'Published article', at:iso(x.publishedAt||x.updatedAt), targetSlug:d.id, targetType:'article' }); });
+  return activities.filter(x=>x.at).sort((a,b)=>new Date(b.at||0).getTime()-new Date(a.at||0).getTime()).slice(0,80);
 }
 
 export function mergeDashboardData(

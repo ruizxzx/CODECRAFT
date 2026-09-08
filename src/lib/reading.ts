@@ -8,6 +8,12 @@ export interface ArticleReadingProgress {
   completed: boolean;
   updatedAt?: string;
   lastSection?: string;
+  scrollY?: number;
+  viewportHeight?: number;
+  device?: string;
+  source?: string;
+  seriesId?: string;
+  seriesOrder?: number;
 }
 
 export interface ArticleHistoryItem {
@@ -21,6 +27,10 @@ export interface ArticleHistoryItem {
   authorAvatar?: string;
   viewedAt?: string;
   progress?: number;
+  lastSection?: string;
+  scrollY?: number;
+  device?: string;
+  source?: string;
 }
 
 export interface ArticleEngagementStats {
@@ -47,20 +57,28 @@ export function calculateArticleReadingTime(articleOrBlocks: Article | ArticleCo
   return Math.max(1, Math.ceil(effectiveWords / 200));
 }
 
-export async function saveArticleReadingProgress(slug: string, percent: number, lastSection = '', completed = percent >= 90): Promise<void> {
+export async function saveArticleReadingProgress(
+  slug: string,
+  percent: number,
+  lastSection = '',
+  completed = percent >= 90,
+  details: { scrollY?: number; viewportHeight?: number; device?: string; source?: string; seriesId?: string; seriesOrder?: number } = {}
+): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (!uid || !slug) return;
   const ref = doc(db, 'users', uid, 'readingProgress', slug);
   const existing = await getDoc(ref);
-  // A manual/completed state is sticky until the explicit reset action.
-  // Automatic scroll checkpoints must never downgrade it.
   if (existing.exists() && existing.data()?.completed === true && !completed) return;
   const safePercent = completed ? 100 : Math.max(0, Math.min(100, Math.round(percent)));
   await setDoc(ref, {
-    slug,
-    percent: safePercent,
-    completed: !!completed,
+    slug, percent: safePercent, completed: !!completed,
     lastSection: String(lastSection || '').slice(0, 200),
+    scrollY: Math.max(0, Math.min(100000000, Number(details.scrollY || 0))),
+    viewportHeight: Math.max(1, Math.min(20000, Number(details.viewportHeight || 0))),
+    device: String(details.device || '').slice(0, 120),
+    source: String(details.source || 'article').slice(0, 80),
+    seriesId: String(details.seriesId || '').slice(0, 200),
+    seriesOrder: Number(details.seriesOrder || 0),
     updatedAt: serverTimestamp(),
   }, { merge: true });
 }
@@ -75,20 +93,23 @@ function historyDocId(slug: string): string {
   return encodeURIComponent(slug).slice(0, 1500);
 }
 
-export async function recordArticleHistory(article: Pick<Article, 'slug'|'title'|'excerpt'|'coverImage'|'category'|'author'>, progress = 0): Promise<void> {
+export async function recordArticleHistory(
+  article: Pick<Article, 'slug'|'title'|'excerpt'|'coverImage'|'category'|'author'>,
+  progress = 0,
+  details: { lastSection?: string; scrollY?: number; device?: string; source?: string; seriesId?: string; seriesOrder?: number } = {}
+): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (!uid || !article.slug) return;
   const author = article.author || ({} as Article['author']);
   await setDoc(doc(db, 'users', uid, 'history', historyDocId(article.slug)), {
-    slug: article.slug,
-    title: article.title,
-    excerpt: String(article.excerpt || '').slice(0, 320),
-    coverImage: article.coverImage || '',
-    category: article.category || '',
-    authorName: author.name || '',
-    authorUsername: author.username || '',
-    authorAvatar: author.avatar || '',
+    slug: article.slug, title: article.title, excerpt: String(article.excerpt || '').slice(0, 320),
+    coverImage: article.coverImage || '', category: article.category || '', authorName: author.name || '',
+    authorUsername: author.username || '', authorAvatar: author.avatar || '',
     progress: Math.max(0, Math.min(100, Math.round(progress))),
+    lastSection: String(details.lastSection || '').slice(0, 200),
+    scrollY: Math.max(0, Math.min(100000000, Number(details.scrollY || 0))),
+    device: String(details.device || '').slice(0, 120), source: String(details.source || 'article').slice(0, 80),
+    seriesId: String(details.seriesId || '').slice(0, 200), seriesOrder: Number(details.seriesOrder || 0),
     viewedAt: serverTimestamp(),
   }, { merge: true });
 }
@@ -109,6 +130,7 @@ export function subscribeArticleHistory(callback: (items: ArticleHistoryItem[]) 
       authorUsername: data.authorUsername || '',
       authorAvatar: data.authorAvatar || '',
       progress: Math.max(0, Math.min(100, Number(data.progress || 0))),
+      lastSection: data.lastSection || '', scrollY: Number(data.scrollY || 0), device: data.device || '', source: data.source || '', seriesId: data.seriesId || '', seriesOrder: Number(data.seriesOrder || 0),
       viewedAt: data.viewedAt?.toDate?.()?.toISOString?.(),
     };
   })), () => callback([]));
@@ -130,6 +152,7 @@ export async function getArticleHistory(maxItems = 50): Promise<ArticleHistoryIt
       authorUsername: data.authorUsername || '',
       authorAvatar: data.authorAvatar || '',
       progress: Math.max(0, Math.min(100, Number(data.progress || 0))),
+      lastSection: data.lastSection || '', scrollY: Number(data.scrollY || 0), device: data.device || '', source: data.source || '', seriesId: data.seriesId || '', seriesOrder: Number(data.seriesOrder || 0),
       viewedAt: data.viewedAt?.toDate?.()?.toISOString?.(),
     };
   });
@@ -154,7 +177,7 @@ export async function getArticleReadingProgress(slug: string): Promise<ArticleRe
   const snap = await getDoc(doc(db, 'users', uid, 'readingProgress', slug));
   if (!snap.exists()) return null;
   const data = snap.data() as any;
-  return { slug, percent: Number(data.percent || 0), completed: !!data.completed, updatedAt: data.updatedAt?.toDate?.()?.toISOString?.(), lastSection: data.lastSection || '' };
+  return { slug, percent: Number(data.percent || 0), completed: !!data.completed, updatedAt: data.updatedAt?.toDate?.()?.toISOString?.(), lastSection: data.lastSection || '', scrollY: Number(data.scrollY || 0), viewportHeight: Number(data.viewportHeight || 0), device: data.device || '', source: data.source || '', seriesId: data.seriesId || '', seriesOrder: Number(data.seriesOrder || 0) };
 }
 
 export function subscribeSeriesReadingProgress(
@@ -176,6 +199,7 @@ export function subscribeSeriesReadingProgress(
         completed: !!data.completed,
         updatedAt: data.updatedAt?.toDate?.()?.toISOString?.(),
         lastSection: data.lastSection || '',
+        scrollY: Number(data.scrollY || 0), viewportHeight: Number(data.viewportHeight || 0), device: data.device || '', source: data.source || '', seriesId: data.seriesId || '', seriesOrder: Number(data.seriesOrder || 0),
       };
     });
     callback(result);

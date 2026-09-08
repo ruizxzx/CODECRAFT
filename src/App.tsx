@@ -30,6 +30,8 @@ import { CommunityProfileView } from './components/CommunityProfileView';
 import { SavedView } from './components/SavedView';
 import { NotificationsView } from './components/NotificationsView';
 import { AccountDashboardView } from './components/AccountDashboardView';
+import { ActivityCenterView } from './components/ActivityCenterView';
+import { CreatorDashboardView } from './components/CreatorDashboardView';
 import { PreferencesView } from './components/PreferencesView';
 import { ExploreView } from './components/ExploreView';
 import { SeriesView } from './components/SeriesView';
@@ -366,6 +368,12 @@ export default function App() {
       } else if (hash === 'dashboard' || hash === 'my') {
         setCurrentPage('dashboard');
         setActiveArticleSlug(null);
+      } else if (hash === 'activity') {
+        setCurrentPage('activity');
+        setActiveArticleSlug(null);
+      } else if (hash === 'creator-studio' || hash === 'creator_studio') {
+        setCurrentPage('creator_studio');
+        setActiveArticleSlug(null);
       } else if (hash === 'preferences' || hash === 'settings') {
         setCurrentPage('preferences');
         setActiveArticleSlug(null);
@@ -662,6 +670,7 @@ export default function App() {
                 }}
                 siteConfig={siteConfig}
                 continueReadingArticle={articles.find((article) => article.slug === continueReadingSlug) || null}
+                userAuth={userAuth}
               />
             )}
 
@@ -684,6 +693,14 @@ export default function App() {
 
             {currentPage === 'dashboard' && (
               <AccountDashboardView articles={articles} userProfile={userProfile} onNavigate={navigateTo} />
+            )}
+
+            {currentPage === 'activity' && (
+              <ActivityCenterView articles={articles} userProfile={userProfile} onNavigate={navigateTo} />
+            )}
+
+            {currentPage === 'creator_studio' && (
+              <CreatorDashboardView articles={articles} userProfile={userProfile} onNavigate={navigateTo} />
             )}
 
             {currentPage === 'preferences' && (

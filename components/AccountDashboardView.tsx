@@ -74,7 +74,11 @@ export const AccountDashboardView: React.FC<Props> = ({ onNavigate, articles, us
   return <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-14">
     <header className="border-4 border-black bg-[var(--color-primary)] neo-shadow-lg p-5 sm:p-8 mb-8 flex flex-wrap items-end justify-between gap-6">
       <div><div className="font-mono text-[10px] uppercase font-black">ACCOUNT CONTROL CENTER</div><h1 className="font-display font-black text-4xl sm:text-6xl uppercase leading-none mt-2">MY OFFSCRPT</h1><p className="mt-3 max-w-xl">Everything you save, read, follow and configure — synced to your account.</p></div>
-      <button onClick={()=>userProfile?.username && onNavigate('community_profile', userProfile.username)} className="border-2 border-black bg-white px-4 py-3 font-mono text-[10px] font-black uppercase inline-flex items-center gap-2"><User className="w-4 h-4"/> @{userProfile?.username || user.displayName || 'ACCOUNT'}</button>
+      <div className="flex flex-wrap gap-2 items-center">
+        <button onClick={()=>userProfile?.username && onNavigate('community_profile', userProfile.username)} className="border-2 border-black bg-white px-4 py-3 font-mono text-[10px] font-black uppercase inline-flex items-center gap-2"><User className="w-4 h-4"/> @{userProfile?.username || user.displayName || 'ACCOUNT'}</button>
+        <button onClick={()=>onNavigate('activity')} className="border-2 border-black bg-white px-4 py-3 font-mono text-[10px] font-black uppercase inline-flex items-center gap-2"><Activity className="w-4 h-4"/> ACTIVITY</button>
+        <button onClick={()=>onNavigate('creator_studio')} className="border-2 border-black bg-black text-white px-4 py-3 font-mono text-[10px] font-black uppercase">CREATOR STUDIO</button>
+      </div>
     </header>
 
     {loading ? <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin"/></div> : <>
