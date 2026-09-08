@@ -183,7 +183,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'notifications' | 'explore' | 'social' | 'series' | 'creator';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator';
 
 export interface CommunityUser {
   uid: string;

@@ -20,6 +20,8 @@ import { ContactView } from './components/ContactView';
 import { LinksView } from './components/LinksView';
 import { Footer } from './components/Footer';
 import { SearchModal } from './components/SearchModal';
+import { CommandPalette } from './components/CommandPalette';
+import { HistoryView } from './components/HistoryView';
 import { AdminStudioModal } from './components/AdminStudioModal';
 import { RssModal } from './components/RssModal';
 import { CommunityView } from './components/CommunityView';
@@ -81,6 +83,7 @@ export default function App() {
 
   // Modals state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCmsOpen, setIsCmsOpen] = useState(false);
   const [isRssOpen, setIsRssOpen] = useState(false);
 
@@ -282,6 +285,9 @@ export default function App() {
       } else if (hash === 'saved') {
         setCurrentPage('saved');
         setActiveArticleSlug(null);
+      } else if (hash === 'history') {
+        setCurrentPage('history');
+        setActiveArticleSlug(null);
       } else if (hash === 'notifications') {
         setCurrentPage('notifications');
         setActiveArticleSlug(null);
@@ -296,7 +302,7 @@ export default function App() {
         setActiveArticleSlug(hash.startsWith('explore/') ? hash.replace('explore/', '') : null);
       } else if (hash === 'social' || hash === 'community' || hash === 'community/new') {
         setCurrentPage('social');
-        setActiveArticleSlug(null);
+        setActiveArticleSlug(hash === 'community/new' ? 'new' : null);
       } else if (hash.startsWith('community/post/')) {
         const id = hash.replace('community/post/', '');
         setActiveArticleSlug(id); // reusing activeArticleSlug state to hold param
@@ -342,9 +348,9 @@ export default function App() {
       setCurrentPage('explore');
       window.location.hash = param ? `explore/${param.replace(/^#/, '')}` : 'explore';
     } else if (page === 'community' || page === 'social') {
-      setActiveArticleSlug(null);
+      setActiveArticleSlug(param || null);
       setCurrentPage('social');
-      window.location.hash = 'social';
+      window.location.hash = param ? `community/${param}` : 'social';
     } else {
       setActiveArticleSlug(null);
       setCurrentPage(page);
@@ -444,6 +450,18 @@ export default function App() {
   const inMaintenance = !!siteConfig.maintenanceMode && !isMasterAdmin;
 
   const activeArticle = articles.find((a) => a.slug === activeArticleSlug);
+  useEffect(() => {
+    const handleGlobalShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsSearchOpen(false);
+        setIsCommandPaletteOpen(true);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalShortcut);
+    return () => window.removeEventListener('keydown', handleGlobalShortcut);
+  }, []);
+
 
   useEffect(() => {
     if (userAuth && currentPage === 'article' && activeArticle) {
@@ -460,6 +478,7 @@ export default function App() {
         currentPage={currentPage}
         onNavigate={navigateTo}
         onOpenSearch={() => setIsSearchOpen(true)}
+        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
         onOpenCms={() => setIsCmsOpen(true)}
         savedCount={savedSlugs.length + savedCommunityPostIds.length}
         siteConfig={siteConfig}
@@ -581,6 +600,8 @@ export default function App() {
               />
             )}
 
+            {currentPage === 'history' && <HistoryView onNavigate={navigateTo} />}
+
             {currentPage === 'notifications' && (
               <NotificationsView userProfile={userProfile} onNavigate={navigateTo} />
             )}
@@ -643,6 +664,17 @@ export default function App() {
       </main>
 
       {/* Global Modals */}
+      <CommandPalette
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onOpenSearch={() => setIsSearchOpen(true)}
+        onNavigate={navigateTo}
+        onCreatePost={async () => {
+          if (!userAuth) { try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch { return; } }
+          navigateTo('community', 'new');
+        }}
+      />
+
       <SearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}

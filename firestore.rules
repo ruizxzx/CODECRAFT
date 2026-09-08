@@ -129,6 +129,19 @@ service cloud.firestore {
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
 
+      match /history/{historyId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn()
+          && request.auth.uid == userId
+          && incoming().slug is string
+          && incoming().slug.size() <= 512
+          && incoming().title is string
+          && incoming().title.size() <= 300
+          && incoming().get('progress', 0) is number
+          && incoming().get('viewedAt', request.time) is timestamp;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
       match /upvotes/{postId} {
         allow read: if true;
         allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().postId == postId;

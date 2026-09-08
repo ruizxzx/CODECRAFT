@@ -32,7 +32,7 @@ import { auth, loginWithGoogle } from '../lib/firebase';
 import { useAuthUser } from '../lib/useAuthUser';
 import { getArticleLikeStatus, toggleArticleLike, getPost, getCommunityProfile } from '../lib/community';
 import { recordArticleView, ARTICLE_REACTIONS, getArticleReaction, setArticleReaction, getSeriesArticles } from '../lib/cms';
-import { calculateArticleReadingTime, getArticleReadingProgress, saveArticleReadingProgress, ArticleEngagementStats, subscribeArticleEngagementStats } from '../lib/reading';
+import { calculateArticleReadingTime, getArticleReadingProgress, saveArticleReadingProgress, resetArticleReadingProgress, recordArticleHistory, ArticleEngagementStats, subscribeArticleEngagementStats } from '../lib/reading';
 import { UserIdentity } from './UserIdentity';
 import type { ArticleReaction } from '../lib/cms';
 
@@ -104,6 +104,9 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [hasClapped, setHasClapped] = useState(false);
   const [fontSize, setFontSize] = useState<'normal' | 'large'>('normal');
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [progressHydrated, setProgressHydrated] = useState(false);
+  const articleContentRef = React.useRef<HTMLDivElement | null>(null);
+  const articleContentEndRef = React.useRef<HTMLDivElement | null>(null);
   const user = useAuthUser();
   const [reaction, setReaction] = useState<ArticleReaction|null>(null);
   const [reactionBusy, setReactionBusy] = useState(false);
@@ -119,9 +122,9 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
   useEffect(() => { void recordArticleView(article.slug, user?.uid); }, [article.slug, user?.uid]);
   useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
-  useEffect(() => { let active = true; if (!user) { setSavedCloudProgress(0); return; } getArticleReadingProgress(article.slug).then(p => { if (active && p) { setSavedCloudProgress(p.percent); setArticleCompleted(!!p.completed); setResumeVisible(p.percent >= 10 && p.percent < 100 && !p.completed); } }).catch(() => {}); return () => { active = false; }; }, [article.slug, user]);
+  useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); setSavedCloudProgress(pct); setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
 
-  useEffect(() => { lastSavedProgressRef.current = -1; setScrollProgress(0); setArticleCompleted(false); }, [article.slug]);
+  useEffect(() => { lastSavedProgressRef.current = -1; setScrollProgress(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
   useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
   useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
   useEffect(() => {
@@ -179,34 +182,51 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     }
   }, [article.slug, user]);
 
-  // Track reading progress locally and in the signed-in account. Writes are debounced and only sent when progress moves meaningfully.
+  // Reading progress is measured only across the article content, not the page footer/reactions.
   useEffect(() => {
     const handleScroll = () => {
-      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (totalHeight <= 0) return;
-      const currentProgress = Math.min(100, Math.max(0, (window.scrollY / totalHeight) * 100));
+      const startEl = articleContentRef.current;
+      const endEl = articleContentEndRef.current;
+      if (!startEl || !endEl || !progressHydrated) return;
+      const startY = startEl.getBoundingClientRect().top + window.scrollY;
+      const endY = endEl.getBoundingClientRect().top + window.scrollY;
+      const travel = Math.max(1, endY - startY - window.innerHeight);
+      const currentProgress = articleCompleted ? 100 : Math.min(100, Math.max(0, ((window.scrollY - startY) / travel) * 100));
       setScrollProgress(currentProgress);
-      if (user && Math.abs(currentProgress - lastSavedProgressRef.current) >= 5) {
+      if (user && !articleCompleted && Math.abs(currentProgress - lastSavedProgressRef.current) >= 5) {
         lastSavedProgressRef.current = currentProgress;
         if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = window.setTimeout(() => {
-          void saveArticleReadingProgress(article.slug, currentProgress, activeTocId || '', currentProgress >= 90).catch(() => {});
-        }, 900);
+          void saveArticleReadingProgress(article.slug, currentProgress, activeTocId || '', false).catch(() => {});
+        }, 700);
+        void recordArticleHistory(article, currentProgress).catch(() => {});
+      }
+      if (user && !articleCompleted && endY - (window.scrollY + window.innerHeight) <= 24) {
+        void saveArticleReadingProgress(article.slug, 100, activeTocId || 'completed', true).then(() => { setArticleCompleted(true); setSavedCloudProgress(100); setScrollProgress(100); }).catch(() => {});
+        void recordArticleHistory(article, 100).catch(() => {});
       }
     };
     handleScroll();
     window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => { window.removeEventListener('scroll', handleScroll); if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current); };
-  }, [article.slug, user, activeTocId]);
+    window.addEventListener('resize', handleScroll);
+    return () => { window.removeEventListener('scroll', handleScroll); window.removeEventListener('resize', handleScroll); if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current); };
+  }, [article.slug, user?.uid, activeTocId, articleCompleted, progressHydrated]);
 
+  // Record an account-level history entry when an article is opened. The deterministic document id
+  // means repeated opens update one record instead of creating duplicates.
   useEffect(() => {
-    if (!user || scrollProgress < 99) return;
-    void saveArticleReadingProgress(article.slug, 100, activeTocId || '', true).then(() => setArticleCompleted(true)).catch(() => {});
-  }, [scrollProgress, article.slug, user, activeTocId]);
+    if (!user || !progressHydrated) return;
+    void recordArticleHistory(article, savedCloudProgress).catch(() => {});
+  }, [article.slug, user?.uid, progressHydrated]);
 
   const resumeArticle = () => {
-    const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
-    if (totalHeight > 0 && savedCloudProgress > 0) window.scrollTo({ top: totalHeight * (savedCloudProgress / 100), behavior: 'smooth' });
+    const startEl = articleContentRef.current;
+    const endEl = articleContentEndRef.current;
+    if (!startEl || !endEl || savedCloudProgress <= 0 || savedCloudProgress >= 100) { setResumeVisible(false); return; }
+    const startY = startEl.getBoundingClientRect().top + window.scrollY;
+    const endY = endEl.getBoundingClientRect().top + window.scrollY;
+    const travel = Math.max(1, endY - startY - window.innerHeight);
+    window.scrollTo({ top: startY + travel * (savedCloudProgress / 100), behavior: 'smooth' });
     setResumeVisible(false);
   };
 
@@ -231,6 +251,21 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       setResumeVisible(false);
     } catch (error) {
       console.error('Could not mark article complete:', error);
+    } finally { setCompleteBusy(false); }
+  };
+
+  const handleResetProgress = async () => {
+    if (!user || completeBusy) return;
+    setCompleteBusy(true);
+    try {
+      await resetArticleReadingProgress(article.slug);
+      setArticleCompleted(false);
+      setSavedCloudProgress(0);
+      setScrollProgress(0);
+      lastSavedProgressRef.current = -1;
+      void recordArticleHistory(article, 0).catch(() => {});
+    } catch (error) {
+      console.error('Could not reset article progress:', error);
     } finally { setCompleteBusy(false); }
   };
 
@@ -690,6 +725,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
             return null;
           })}
+          <div ref={articleContentEndRef} aria-hidden="true" className="h-px w-full" />
         </div>
 
         <div className="my-10 border-4 border-black bg-white p-5 neo-shadow">
@@ -707,12 +743,20 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             <div className="font-display font-black text-2xl uppercase mt-1">{next ? `Next: ${next.title}` : 'You reached the end.'}</div>
             <div className="flex flex-wrap gap-2 mt-4">
               {!articleCompleted && <button onClick={handleMarkComplete} disabled={completeBusy} className="border-2 border-black bg-white text-black px-4 py-3 font-mono text-[10px] font-black uppercase">{completeBusy ? 'SAVING…' : '✓ MARK AS COMPLETE'}</button>}
-              {articleCompleted && <span className="border-2 border-black bg-[var(--color-success)] text-black px-4 py-3 font-mono text-[10px] font-black uppercase">✓ COMPLETED</span>}
+              {articleCompleted && <><span className="border-2 border-black bg-[var(--color-success)] text-black px-4 py-3 font-mono text-[10px] font-black uppercase">✓ COMPLETED</span><button onClick={handleResetProgress} disabled={completeBusy} className="border-2 border-black bg-white text-black px-4 py-3 font-mono text-[10px] font-black uppercase hover:bg-red-100">↺ RESET & RECALCULATE</button></>}
               {next && <button onClick={()=>onSelectArticle(next.slug)} className="border-2 border-black bg-black text-white px-4 py-3 font-mono text-[10px] font-black uppercase">NEXT PART →</button>}
               <button onClick={()=>onViewAllSeries ? onViewAllSeries() : onOpenSeries?.('')} className="border-2 border-black bg-white text-black px-4 py-3 font-mono text-[10px] font-black uppercase">VIEW ALL SERIES</button>
             </div>
           </div>;
         })()}
+
+        <div className="mb-6 border-2 border-black bg-neutral-50 p-4 flex flex-wrap items-center justify-between gap-3">
+          <div><div className="font-mono text-[9px] uppercase text-neutral-500">ARTICLE PROGRESS</div><div className="font-display font-black text-2xl uppercase">{articleCompleted ? '100% COMPLETE' : `${Math.round(scrollProgress)}% READ`}</div></div>
+          <div className="flex flex-wrap gap-2">
+            {!articleCompleted && <button onClick={handleMarkComplete} disabled={completeBusy} className="border-2 border-black bg-[var(--color-primary)] px-4 py-3 font-mono text-[10px] font-black uppercase">{completeBusy ? 'SAVING…' : '✓ MARK AS COMPLETE'}</button>}
+            {articleCompleted && <button onClick={handleResetProgress} disabled={completeBusy} className="border-2 border-black bg-white px-4 py-3 font-mono text-[10px] font-black uppercase hover:bg-red-100">↺ RESET & RECALCULATE</button>}
+          </div>
+        </div>
 
         <div className="mb-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">APPLAUSE</div><div className="font-display font-black text-xl">{engagement.applauds}</div></div>

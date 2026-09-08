@@ -23,13 +23,15 @@ import {
   Smartphone,
   Bell,
   Compass,
-  Layers
+  Layers,
+  History as HistoryIcon
 } from 'lucide-react';
 
 interface HeaderProps {
   currentPage: PageView;
   onNavigate: (page: PageView, slug?: string) => void;
   onOpenSearch: () => void;
+  onOpenCommandPalette?: () => void;
   onOpenCms?: () => void;
   savedCount: number;
   siteConfig: SiteConfig;
@@ -54,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
   currentPage,
   onNavigate,
   onOpenSearch,
+  onOpenCommandPalette,
   onOpenCms,
   savedCount,
   siteConfig,
@@ -211,12 +214,12 @@ export const Header: React.FC<HeaderProps> = ({
             
             {/* Search Button */}
             <button
-              onClick={onOpenSearch}
+              onClick={() => onOpenCommandPalette ? onOpenCommandPalette() : onOpenSearch()}
               className="hidden md:flex px-2.5 py-1.5 sm:px-3 sm:py-2 bg-white border-2 border-black neo-shadow-sm hover:bg-[var(--color-primary)] active:translate-x-0.5 active:translate-y-0.5 transition-all items-center space-x-1.5 text-black font-display text-xs font-black uppercase"
-              title="Search Articles (Ctrl+K)"
+              title="Open command/search (Ctrl+K)"
             >
               <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
-              <span className="hidden sm:inline">SEARCH</span>
+              <span className="hidden sm:inline">COMMAND</span>
               <kbd className="hidden lg:inline-block px-1 bg-neutral-200 border border-black font-mono text-[9px] text-neutral-700">
                 ⌘K
               </kbd>
@@ -411,6 +414,14 @@ export const Header: React.FC<HeaderProps> = ({
                 );
               })}
             </div>
+          </div>
+
+          {/* Reader Library */}
+          <div>
+            <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">Your Library</h3>
+            <button onClick={() => handleNavClick('history')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black transition-all flex items-center justify-between ${currentPage === 'history' ? 'bg-[var(--color-primary)] text-black neo-shadow-sm' : 'bg-white text-black hover:bg-neutral-100 neo-shadow-sm'}`}>
+              <div className="flex items-center gap-2.5"><HistoryIcon className="w-4 h-4 stroke-[2.5]"/><span>Reading History</span></div><ArrowRight className="w-4 h-4"/>
+            </button>
           </div>
 
           {/* Editorial Pages */}

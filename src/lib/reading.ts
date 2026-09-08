@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, getCountFromServer, getDoc, setDoc, serverTimestamp, query, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDocs, getCountFromServer, getDoc, setDoc, deleteDoc, serverTimestamp, query, onSnapshot, limit, orderBy } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { Article, ArticleContentBlock } from '../types';
 
@@ -8,6 +8,19 @@ export interface ArticleReadingProgress {
   completed: boolean;
   updatedAt?: string;
   lastSection?: string;
+}
+
+export interface ArticleHistoryItem {
+  slug: string;
+  title: string;
+  excerpt?: string;
+  coverImage?: string;
+  category?: string;
+  authorName?: string;
+  authorUsername?: string;
+  authorAvatar?: string;
+  viewedAt?: string;
+  progress?: number;
 }
 
 export interface ArticleEngagementStats {
@@ -45,6 +58,89 @@ export async function saveArticleReadingProgress(slug: string, percent: number, 
     lastSection: String(lastSection || '').slice(0, 200),
     updatedAt: serverTimestamp(),
   }, { merge: true });
+}
+
+export async function resetArticleReadingProgress(slug: string): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !slug) return;
+  await deleteDoc(doc(db, 'users', uid, 'readingProgress', slug));
+}
+
+function historyDocId(slug: string): string {
+  return encodeURIComponent(slug).slice(0, 1500);
+}
+
+export async function recordArticleHistory(article: Pick<Article, 'slug'|'title'|'excerpt'|'coverImage'|'category'|'author'>, progress = 0): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !article.slug) return;
+  const author = article.author || ({} as Article['author']);
+  await setDoc(doc(db, 'users', uid, 'history', historyDocId(article.slug)), {
+    slug: article.slug,
+    title: article.title,
+    excerpt: String(article.excerpt || '').slice(0, 320),
+    coverImage: article.coverImage || '',
+    category: article.category || '',
+    authorName: author.name || '',
+    authorUsername: author.username || '',
+    authorAvatar: author.avatar || '',
+    progress: Math.max(0, Math.min(100, Math.round(progress))),
+    viewedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+export function subscribeArticleHistory(callback: (items: ArticleHistoryItem[]) => void, maxItems = 50): () => void {
+  const uid = auth.currentUser?.uid;
+  if (!uid) { callback([]); return () => {}; }
+  const q = query(collection(db, 'users', uid, 'history'), orderBy('viewedAt', 'desc'), limit(Math.max(1, Math.min(maxItems, 100))));
+  return onSnapshot(q, snap => callback(snap.docs.map(d => {
+    const data = d.data() as any;
+    return {
+      slug: data.slug || decodeURIComponent(d.id),
+      title: data.title || 'Untitled article',
+      excerpt: data.excerpt || '',
+      coverImage: data.coverImage || '',
+      category: data.category || '',
+      authorName: data.authorName || '',
+      authorUsername: data.authorUsername || '',
+      authorAvatar: data.authorAvatar || '',
+      progress: Math.max(0, Math.min(100, Number(data.progress || 0))),
+      viewedAt: data.viewedAt?.toDate?.()?.toISOString?.(),
+    };
+  })), () => callback([]));
+}
+
+export async function getArticleHistory(maxItems = 50): Promise<ArticleHistoryItem[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+  const snap = await getDocs(query(collection(db, 'users', uid, 'history'), orderBy('viewedAt', 'desc'), limit(Math.max(1, Math.min(maxItems, 100)))));
+  return snap.docs.map(d => {
+    const data = d.data() as any;
+    return {
+      slug: data.slug || decodeURIComponent(d.id),
+      title: data.title || 'Untitled article',
+      excerpt: data.excerpt || '',
+      coverImage: data.coverImage || '',
+      category: data.category || '',
+      authorName: data.authorName || '',
+      authorUsername: data.authorUsername || '',
+      authorAvatar: data.authorAvatar || '',
+      progress: Math.max(0, Math.min(100, Number(data.progress || 0))),
+      viewedAt: data.viewedAt?.toDate?.()?.toISOString?.(),
+    };
+  });
+}
+
+export async function deleteArticleHistoryItem(slug: string): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !slug) return;
+  await deleteDoc(doc(db, 'users', uid, 'history', historyDocId(slug)));
+}
+
+export async function clearArticleHistory(): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  const snap = await getDocs(collection(db, 'users', uid, 'history'));
+  await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
 }
 
 export async function getArticleReadingProgress(slug: string): Promise<ArticleReadingProgress | null> {
