@@ -161,7 +161,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenCms, onOpenRss
             <div className="font-mono text-xs font-bold text-[var(--color-success)] uppercase tracking-wider">{siteConfig.footerHubTitle || 'PUBLICATION HUB'}</div>
             <ul className="space-y-2 text-xs font-mono">
               {hubLinks.map(link => <li key={link.id}>{renderLink(link)}</li>)}
-              {onOpenCms && <li><button type="button" onClick={onOpenCms} className="text-neutral-500 hover:text-white transition-colors">ADMIN / MODERATOR PANEL</button></li>}
+              {onOpenCms && <li><button type="button" onClick={onOpenCms} className="text-neutral-500 hover:text-white transition-colors">ADMIN STUDIO / MODERATOR PANEL</button></li>}
             </ul>
           </div>
         </div>

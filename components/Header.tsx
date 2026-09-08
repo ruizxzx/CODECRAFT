@@ -482,7 +482,7 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <div className="flex items-center space-x-2">
                   <Settings className="w-4 h-4" />
-                  <span>OPEN ADMIN STUDIO</span>
+                  <span>ADMIN STUDIO</span>
                 </div>
                 <span className="font-mono text-[10px] bg-neutral-800 text-white px-2 py-0.5 border border-black">CMS</span>
               </button>

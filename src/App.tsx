@@ -596,7 +596,7 @@ export default function App() {
         onNavigate={navigateTo}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-        onOpenCms={canAccessCms ? () => setIsCmsOpen(true) : undefined}
+        onOpenCms={canAccessCms ? () => navigateTo('cms') : undefined}
         savedCount={savedSlugs.length + savedCommunityPostIds.length}
         siteConfig={siteConfig}
         userProfile={userProfile}
@@ -629,6 +629,20 @@ export default function App() {
               SYNCHRONIZING {siteConfig.logoPart1}{siteConfig.logoPart2} REPOSITORY
             </div>
           </div>
+        ) : currentPage === 'cms' ? (
+          <AdminStudioModal
+            isOpen={true}
+            pageMode
+            onClose={() => navigateTo('home')}
+            onArticlePublished={handleArticlePublished}
+            articles={articles}
+            onDeleteArticle={handleDeleteArticle}
+            siteConfig={siteConfig}
+            onUpdateSiteConfig={handleUpdateSiteConfig}
+            bentoLinks={bentoLinks}
+            onUpdateBentoLinks={handleUpdateBentoLinks}
+            initialArticleRequest={cmsEditorRequest}
+          />
         ) : (
           <>
             {inMaintenance ? (
@@ -820,7 +834,7 @@ export default function App() {
       />
 
       <AdminStudioModal
-        isOpen={isCmsOpen || currentPage === 'cms'}
+        isOpen={isCmsOpen && currentPage !== 'cms'}
         onClose={() => {
           setIsCmsOpen(false);
           if (currentPage === 'cms') {
@@ -857,7 +871,7 @@ export default function App() {
       {/* Footer */}
       <Footer
         onNavigate={navigateTo}
-        onOpenCms={canAccessCms ? () => setIsCmsOpen(true) : undefined}
+        onOpenCms={canAccessCms ? () => navigateTo('cms') : undefined}
         onOpenRssModal={() => setIsRssOpen(true)}
         siteConfig={siteConfig}
         articles={articles}

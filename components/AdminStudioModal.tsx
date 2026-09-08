@@ -75,6 +75,7 @@ interface AdminStudioModalProps {
   bentoLinks: BentoLink[];
   onUpdateBentoLinks: (links: BentoLink[]) => void;
   initialArticleRequest?: { mode: 'new' | 'edit'; article?: Article; token: number } | null;
+  pageMode?: boolean;
 }
 
 
@@ -89,7 +90,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   onUpdateSiteConfig,
   bentoLinks,
   onUpdateBentoLinks,
-  initialArticleRequest
+  initialArticleRequest,
+  pageMode = false
 }) => {
   const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -147,6 +149,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setIsAuthenticated(false);
     setCurrentUserEmail(null);
   };
+
+  const panelScrollClass = pageMode ? 'overflow-y-auto' : 'max-h-[70vh] overflow-y-auto';
 
   const [activeTab, setActiveTab] = useState<'settings' | 'create' | 'manage' | 'links' | 'carousel' | 'social' | 'control' | 'series'>('settings');
 
@@ -1092,8 +1096,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="w-full bg-neutral-100 min-h-[calc(100vh-64px)] py-8 sm:py-12 px-4 sm:px-6 lg:px-8 flex justify-center items-start">
-      <div className="w-full max-w-5xl bg-white border-4 border-black neo-shadow-lg overflow-hidden my-4 sm:my-8">
+    <div className={pageMode ? "w-full bg-neutral-100 min-h-[calc(100vh-64px)] py-6 sm:py-8 px-3 sm:px-5 lg:px-8" : "w-full bg-neutral-100 min-h-[calc(100vh-64px)] py-8 sm:py-12 px-4 sm:px-6 lg:px-8 flex justify-center items-start"}>
+      <div className={pageMode ? "w-full bg-white border-4 border-black neo-shadow-lg overflow-hidden" : "w-full max-w-5xl bg-white border-4 border-black neo-shadow-lg overflow-hidden my-4 sm:my-8"}>
         
         {/* Modal Header */}
         <div className="bg-[var(--color-secondary)] px-4 sm:px-6 py-4 border-b-4 border-black flex items-center justify-between">
@@ -1120,6 +1124,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
             )}
             <button
               onClick={onClose}
+              aria-label="Close admin studio"
               className="w-10 h-10 bg-white border-2 border-black flex items-center justify-center hover:bg-black hover:text-white transition-colors"
             >
               <X className="w-6 h-6" />
@@ -1241,7 +1246,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
             {/* TAB: SETTINGS */}
             {activeTab === 'settings' && (
-              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+              <div className={`p-6 ${panelScrollClass} space-y-6`}>
                 <div className="bg-[var(--color-secondary)]/30 p-3.5 neo-border-2 font-sans text-xs text-black space-y-1">
                   <div className="font-display font-black text-sm uppercase flex items-center space-x-1.5">
                     <Settings className="w-4 h-4 text-black" />
@@ -1672,7 +1677,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
             {/* TAB: CREATE / EDIT ARTICLE */}
             {activeTab === 'create' && (
-              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+              <div className={`p-6 ${panelScrollClass} space-y-6`}>
                 {draftRecoveryAvailable && !editingArticleSlug && (
                   <div className="border-2 border-black bg-[var(--color-success)] p-3 flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -1984,7 +1989,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
             {/* TAB: MANAGE ARTICLES */}
             {activeTab === 'manage' && (
-              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-4">
+              <div className={`p-6 ${panelScrollClass} space-y-4`}>
                 <div className="flex items-center justify-between border-b-2 border-black pb-2">
                   <h3 className="font-display font-black text-lg uppercase">
                     All Published Dispatches ({articles.length})
@@ -2069,7 +2074,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
             {/* TAB: BENTO LINKS */}
             {activeTab === 'links' && (
-              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+              <div className={`p-6 ${panelScrollClass} space-y-6`}>
                 <div className="bg-[var(--color-primary)]/20 p-3.5 neo-border-2 font-sans text-xs text-black space-y-1">
                   <div className="font-display font-black text-sm uppercase flex items-center space-x-1.5">
                     <LinkIcon className="w-4 h-4 text-black" />
@@ -2196,7 +2201,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
             {/* TAB: CAROUSEL */}
             {activeTab === 'series' && (
-              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+              <div className={`p-6 ${panelScrollClass} space-y-6`}>
                 <div className="border-4 border-black bg-[var(--color-primary)] p-5 neo-shadow"><div className="font-mono text-[10px]">PHASE 2 / STRUCTURED PUBLISHING</div><h2 className="font-display font-black text-3xl uppercase">SERIES MANAGER</h2><p className="text-sm mt-1">Create reusable reading paths, then assign articles to numbered parts from the article publisher.</p></div>
                 <form onSubmit={async e=>{e.preventDefault(); if(!seriesTitleInput.trim()) return; setSeriesBusy(true); try { const slug=(seriesSlugInput.trim()||seriesTitleInput.trim()).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60); const created=await createSeries({id:slug,slug,title:seriesTitleInput.trim(),description:seriesDescInput.trim(),coverImage:seriesCoverInput.trim()||undefined,ownerId:auth.currentUser!.uid,ownerUsername:'krishsarkar',ownerName:authorName}); setSeriesList(p=>[created,...p]); setSeriesTitleInput('');setSeriesSlugInput('');setSeriesDescInput('');setSeriesCoverInput(''); } catch(err:any){notifyToast(err?.message||'Failed to create series.')} finally{setSeriesBusy(false)}}} className="border-4 border-black p-4 bg-white space-y-3">
                   <h3 className="font-display font-black uppercase">CREATE SERIES</h3>
@@ -2210,7 +2215,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
             )}
 
             {activeTab === 'carousel' && (
-              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-8 bg-neutral-50">
+              <div className={`p-6 ${panelScrollClass} space-y-8 bg-neutral-50`}>
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="font-display font-black text-2xl uppercase tracking-tight">Featured Carousel Slides</h2>
