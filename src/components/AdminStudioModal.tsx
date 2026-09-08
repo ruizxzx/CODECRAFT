@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { calculateArticleReadingTime } from '../lib/reading';
 import { Article, Category, SiteConfig, BentoLink, CarouselSlide, CarouselElement } from '../types';
 import { 
@@ -593,6 +594,47 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
   const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false);
   const cropFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [draftRecoveryAvailable, setDraftRecoveryAvailable] = useState(false);
+  const adminDraftKey = `offscrpt:draft:admin:${auth.currentUser?.uid || 'session'}`;
+  const adminDraftRestoredRef = useRef(false);
+
+  useEffect(() => {
+    if (adminDraftRestoredRef.current || !auth.currentUser || editingArticleId) return;
+    adminDraftRestoredRef.current = true;
+    const restore = async () => {
+      try {
+        const raw = localStorage.getItem(adminDraftKey);
+        const local = raw ? JSON.parse(raw) : null;
+        const cloud = await getDraftSnapshot<any>('admin-article');
+        const draft = cloud || local;
+        if (draft?.title || draft?.excerpt || draft?.contentBlocks?.length) {
+          if (draft.title) setNewTitle(draft.title);
+          if (draft.category) setNewCategory(draft.category);
+          if (typeof draft.tags === 'string') setNewTags(draft.tags);
+          if (draft.excerpt) setNewExcerpt(draft.excerpt);
+          if (typeof draft.coverImage === 'string') setNewCoverImage(draft.coverImage);
+          if (typeof draft.coverAlt === 'string') setNewCoverAlt(draft.coverAlt);
+          if (typeof draft.coverCaption === 'string') setNewCoverCaption(draft.coverCaption);
+          if (typeof draft.seriesId === 'string') setNewSeriesId(draft.seriesId);
+          if (typeof draft.seriesName === 'string') setNewSeriesName(draft.seriesName);
+          if (draft.seriesOrder !== undefined && draft.seriesOrder !== '') setNewSeriesOrder(draft.seriesOrder);
+          if (Array.isArray(draft.contentBlocks) && draft.contentBlocks.length) setContentBlocks(draft.contentBlocks);
+          setDraftRecoveryAvailable(true);
+        }
+      } catch {}
+    };
+    void restore();
+  }, [adminDraftKey, editingArticleId]);
+
+  useEffect(() => {
+    if (!auth.currentUser || editingArticleId) return;
+    const hasContent = !!(newTitle.trim() || newExcerpt.trim() || contentBlocks.some((b) => (b.content || b.imageUrl || b.videoUrl || b.linkText || b.buttonText)));
+    if (!hasContent) return;
+    const payload = { title: newTitle, category: newCategory, tags: newTags, excerpt: newExcerpt, coverImage: newCoverImage, coverAlt: newCoverAlt, coverCaption: newCoverCaption, seriesId: newSeriesId, seriesName: newSeriesName, seriesOrder: newSeriesOrder, contentBlocks };
+    try { localStorage.setItem(adminDraftKey, JSON.stringify(payload)); } catch {}
+    const timer = window.setTimeout(() => { void saveDraftSnapshot('admin-article', payload).catch(() => {}); }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [adminDraftKey, editingArticleId, newTitle, newCategory, newTags, newExcerpt, newCoverImage, newCoverAlt, newCoverCaption, newSeriesId, newSeriesName, newSeriesOrder, contentBlocks]);
 
 
   // Author avatar upload & cloud sync state
@@ -783,6 +825,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
       await saveArticle(article);
       onArticlePublished(article);
+      await deleteDraftSnapshot('admin-article').catch(() => {});
+      try { localStorage.removeItem(adminDraftKey); } catch {}
+      setDraftRecoveryAvailable(false);
       setPublishSuccess(true);
       setTimeout(() => {
         setPublishSuccess(false);
@@ -831,6 +876,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   };
 
   const resetForm = () => {
+    void deleteDraftSnapshot('admin-article').catch(() => {});
+    try { localStorage.removeItem(adminDraftKey); } catch {}
+    setDraftRecoveryAvailable(false);
     setEditingArticleId(null);
     setEditingArticleSlug(null);
     setEditingPublishedAt(null);
@@ -1362,6 +1410,15 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
             {/* TAB: CREATE / EDIT ARTICLE */}
             {activeTab === 'create' && (
               <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+                {draftRecoveryAvailable && !editingArticleSlug && (
+                  <div className="border-2 border-black bg-[var(--color-success)] p-3 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="font-display font-black uppercase text-sm">RECOVERED UNSENT DRAFT</div>
+                      <div className="font-mono text-[9px] uppercase mt-1">Restored from your cloud/local backup.</div>
+                    </div>
+                    <button type="button" onClick={resetForm} className="border-2 border-black bg-white px-3 py-2 font-mono text-[9px] font-black uppercase">DISCARD DRAFT</button>
+                  </div>
+                )}
                 <div className="bg-[var(--color-primary)]/30 p-3.5 neo-border-2 font-sans text-xs text-black space-y-1">
                   <div className="font-display font-black text-sm uppercase flex items-center space-x-1.5">
                     <Smartphone className="w-4 h-4 text-black" />

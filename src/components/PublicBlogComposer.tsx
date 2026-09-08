@@ -3,6 +3,7 @@ import { calculateArticleReadingTime } from '../lib/reading';
 import { ArticleContentBlock, CommunityPost, CommunityUser } from '../types';
 import { createPost, updatePost, getPost, saveCommunityDraft, clearCommunityDraft } from '../lib/community';
 import { createCommunityPost, updateCommunityPost, SocialCommunity } from '../lib/social';
+import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { Plus, Trash2, ArrowUp, ArrowDown, BookOpen, Image as ImageIcon, Video, Code2, Quote, Lightbulb, List, CheckCircle2, Eye, Save, Link2, MousePointer2 } from 'lucide-react';
 
 type Props = {
@@ -76,6 +77,45 @@ export const PublicBlogComposer: React.FC<Props> = ({
       ? initialPost.contentBlocks
       : [{ type: 'paragraph', content: initialPost.content || '' }]);
   }, [initialPost, categories]);
+
+  const localDraftKey = `offscrpt:draft:blog:${userProfile.uid}`;
+  useEffect(() => {
+    if (initialPost) return;
+    let cancelled = false;
+    const restore = async () => {
+      try {
+        const raw = localStorage.getItem(localDraftKey);
+        const local = raw ? JSON.parse(raw) : null;
+        const cloud = await getDraftSnapshot<any>('public-blog');
+        const draft = cloud || local;
+        if (!cancelled && draft && (draft.title || draft.excerpt || draft.blocks?.length)) {
+          if (draft.title) setTitle(draft.title);
+          if (draft.excerpt) setExcerpt(draft.excerpt);
+          if (draft.category) setCategory(draft.category);
+          if (typeof draft.tags === 'string') setTags(draft.tags);
+          if (typeof draft.coverImage === 'string') setCoverImage(draft.coverImage);
+          if (typeof draft.coverImageAlt === 'string') setCoverImageAlt(draft.coverImageAlt);
+          if (typeof draft.coverImageCaption === 'string') setCoverImageCaption(draft.coverImageCaption);
+          if (typeof draft.seriesName === 'string') setSeriesName(draft.seriesName);
+          if (draft.seriesOrder !== undefined && draft.seriesOrder !== '') setSeriesOrder(String(draft.seriesOrder));
+          if (Array.isArray(draft.blocks) && draft.blocks.length) setBlocks(draft.blocks);
+          setStatus('Recovered unsent draft from cloud/local backup.');
+        }
+      } catch {}
+    };
+    void restore();
+    return () => { cancelled = true; };
+  }, [initialPost, userProfile.uid]);
+
+  useEffect(() => {
+    if (initialPost) return;
+    const hasContent = !!(title.trim() || excerpt.trim() || blocks.some(b => (b.content || b.linkText || b.buttonText || b.imageUrl || b.videoUrl)));
+    if (!hasContent) return;
+    const payload = { title, excerpt, category, tags, coverImage, coverImageAlt, coverImageCaption, seriesName, seriesOrder, blocks };
+    try { localStorage.setItem(localDraftKey, JSON.stringify(payload)); } catch {}
+    const timer = window.setTimeout(() => { void saveDraftSnapshot('public-blog', payload).catch(() => {}); }, 900);
+    return () => window.clearTimeout(timer);
+  }, [initialPost, localDraftKey, title, excerpt, category, tags, coverImage, coverImageAlt, coverImageCaption, seriesName, seriesOrder, blocks]);
 
   const readingTime = useMemo(() => {
     const words = textFromBlocks(blocks).split(/\s+/).filter(Boolean).length;
@@ -222,6 +262,8 @@ export const PublicBlogComposer: React.FC<Props> = ({
       }
 
       await clearCommunityDraft(userProfile.uid).catch(() => undefined);
+      await deleteDraftSnapshot('public-blog').catch(() => undefined);
+      try { localStorage.removeItem(localDraftKey); } catch {}
       onPublished(post);
       // Keep the success state visible long enough for the caller to render it.
       window.setTimeout(onClose, 250);

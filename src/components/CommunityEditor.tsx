@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost } from '../types';
 import { createPost, getCommunityDraft, saveCommunityDraft, clearCommunityDraft } from '../lib/community';
-import { X, Send, Loader2, BookOpen, MessageSquare, AtSign, Info } from 'lucide-react';
+import { X, Send, Loader2, BookOpen, MessageSquare, AtSign, Info, WifiOff } from 'lucide-react';
+import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 
 interface CommunityEditorProps {
   profile: CommunityUser;
@@ -23,27 +24,39 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
   const [isPublishing, setIsPublishing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const localDraftKey = `offscrpt:draft:community:${profile.uid}`;
 
   useEffect(() => {
     let cancelled = false;
-    getCommunityDraft(profile.uid).then(draft => {
-      if (!cancelled && draft) {
-        setType(draft.type || defaultType);
-        setTitle(draft.title || '');
-        setContent(draft.content || '');
-        setMediaInput((draft.mediaUrls || []).join('\n'));
-      }
-    }).catch(() => {}).finally(() => { if (!cancelled) setDraftLoaded(true); });
+    const restore = async () => {
+      try {
+        const raw = localStorage.getItem(localDraftKey);
+        const local = raw ? JSON.parse(raw) : null;
+        const [cloud, legacy] = await Promise.all([getDraftSnapshot<any>('community-editor'), getCommunityDraft(profile.uid)]);
+        const draft = cloud || legacy || local;
+        if (!cancelled && draft) {
+          setType(draft.type || defaultType);
+          setTitle(draft.title || '');
+          setContent(draft.content || '');
+          setMediaInput(draft.mediaInput || (draft.mediaUrls || []).join('\n'));
+        }
+      } catch {}
+      finally { if (!cancelled) setDraftLoaded(true); }
+    };
+    void restore();
     return () => { cancelled = true; };
-  }, [profile.uid, defaultType]);
+  }, [profile.uid, defaultType, localDraftKey]);
 
   useEffect(() => {
     if (!draftLoaded || (!title.trim() && !content.trim())) return;
+    const payload = { type, title, content, mediaInput, mediaUrls: mediaInput.split('\n').map(v => v.trim()).filter(Boolean).slice(0, 6) };
+    try { localStorage.setItem(localDraftKey, JSON.stringify(payload)); } catch {}
     const timer = window.setTimeout(() => {
-      saveCommunityDraft(profile.uid, { type, title, content, mediaUrls: mediaInput.split('\n').map(v => v.trim()).filter(Boolean).slice(0, 6) }).catch(() => {});
+      saveCommunityDraft(profile.uid, { type, title, content, mediaUrls: payload.mediaUrls }).catch(() => {});
+      saveDraftSnapshot('community-editor', payload).catch(() => {});
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [draftLoaded, profile.uid, type, title, content, mediaInput]);
+  }, [draftLoaded, profile.uid, localDraftKey, type, title, content, mediaInput]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +81,8 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
         mediaUrls: mediaInput.split('\n').map(v => v.trim()).filter(Boolean).slice(0, 6)
       });
       await clearCommunityDraft(profile.uid).catch(() => {});
+      await deleteDraftSnapshot('community-editor').catch(() => {});
+      try { localStorage.removeItem(localDraftKey); } catch {}
       onPublished(post);
     } catch (error) {
       console.error(error);

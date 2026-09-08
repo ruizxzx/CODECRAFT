@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Home, BookOpen, Layers, Bookmark, History, Bell, Compass, PlusCircle, X } from 'lucide-react';
+import { Search, Home, BookOpen, Layers, Bookmark, History, Bell, Compass, PlusCircle, X, Settings2, UserRound } from 'lucide-react';
 import { PageView } from '../types';
 
 interface Props { isOpen: boolean; onClose: ()=>void; onOpenSearch: ()=>void; onNavigate:(page:PageView,param?:string)=>void; onCreatePost?:()=>void; }
@@ -13,6 +13,8 @@ export const CommandPalette: React.FC<Props> = ({ isOpen, onClose, onOpenSearch,
   const commands:Command[] = useMemo(()=>[
     {id:'search',label:'Search OFFSCRPT',hint:'Articles, posts, people & tags',icon:Search,run:()=>{onClose();onOpenSearch();}},
     {id:'home',label:'Go Home',icon:Home,run:()=>{onClose();onNavigate('home');}},
+    {id:'dashboard',label:'My OFFSCRPT',hint:'Account dashboard',icon:UserRound,run:()=>{onClose();onNavigate('dashboard');}},
+    {id:'preferences',label:'Notification Settings',icon:Settings2,run:()=>{onClose();onNavigate('preferences');}},
     {id:'blog',label:'Open Blog',icon:BookOpen,run:()=>{onClose();onNavigate('blog');}},
     {id:'series',label:'Open Series',icon:Layers,run:()=>{onClose();onNavigate('series');}},
     {id:'saved',label:'Open Saved',icon:Bookmark,run:()=>{onClose();onNavigate('saved');}},

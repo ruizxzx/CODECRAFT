@@ -50,8 +50,13 @@ export function calculateArticleReadingTime(articleOrBlocks: Article | ArticleCo
 export async function saveArticleReadingProgress(slug: string, percent: number, lastSection = '', completed = percent >= 90): Promise<void> {
   const uid = auth.currentUser?.uid;
   if (!uid || !slug) return;
-  const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
-  await setDoc(doc(db, 'users', uid, 'readingProgress', slug), {
+  const ref = doc(db, 'users', uid, 'readingProgress', slug);
+  const existing = await getDoc(ref);
+  // A manual/completed state is sticky until the explicit reset action.
+  // Automatic scroll checkpoints must never downgrade it.
+  if (existing.exists() && existing.data()?.completed === true && !completed) return;
+  const safePercent = completed ? 100 : Math.max(0, Math.min(100, Math.round(percent)));
+  await setDoc(ref, {
     slug,
     percent: safePercent,
     completed: !!completed,

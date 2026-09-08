@@ -142,6 +142,33 @@ service cloud.firestore {
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
 
+      // Private, account-scoped reading queue. Deterministic document IDs prevent duplicates.
+      match /readingQueue/{queueId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn()
+          && request.auth.uid == userId
+          && incoming().itemId is string && incoming().itemId.size() <= 512
+          && incoming().itemType in ['article', 'post']
+          && incoming().title is string && incoming().title.size() <= 300
+          && incoming().createdAt is timestamp;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      // Private account preferences. Only the owning account can read/write these.
+      match /preferences/{preferenceId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn()
+          && request.auth.uid == userId
+          && preferenceId == 'notifications'
+          && incoming().get('comments', true) is bool
+          && incoming().get('replies', true) is bool
+          && incoming().get('mentions', true) is bool
+          && incoming().get('follows', true) is bool
+          && incoming().get('reactions', true) is bool
+          && incoming().get('productNews', true) is bool;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
       match /upvotes/{postId} {
         allow read: if true;
         allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().postId == postId;
@@ -361,6 +388,7 @@ service cloud.firestore {
         && incoming().slug == existing().slug
         && incoming().percent is number && incoming().percent >= 0 && incoming().percent <= 100
         && incoming().completed is bool
+        && !(existing().completed == true && incoming().completed == false)
         && incoming().updatedAt is timestamp
         && incoming().diff(existing()).affectedKeys().hasOnly(['slug','percent','completed','lastSection','updatedAt']);
       allow delete: if isSignedIn() && request.auth.uid == userId;

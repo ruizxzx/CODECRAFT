@@ -493,6 +493,12 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
                 ) : (
                   <div className="space-y-3">
+                    <button onClick={() => handleNavClick('dashboard')} className="w-full py-3 px-4 bg-black text-[var(--color-primary)] border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between neo-shadow-sm">
+                      <span>MY OFFSCRPT</span><ArrowRight className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleNavClick('preferences')} className="w-full py-3 px-4 bg-white border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between hover:bg-neutral-100">
+                      <span>NOTIFICATION SETTINGS</span><Settings className="w-4 h-4" />
+                    </button>
                     {userProfile ? (
                       <button
                         onClick={() => handleNavClick('community_profile', userProfile.username)}

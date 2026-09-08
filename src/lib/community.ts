@@ -4,6 +4,7 @@ import {
 } from 'firebase/firestore';
 import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, BookmarkCollection, CarouselSlide, Notification } from '../types';
 import { isPlatformModerator } from './social';
+import { getNotificationPreferences } from './account';
 
 
 function mapDocDates(data: any) {
@@ -42,8 +43,28 @@ export function extractHashtags(text: string): string[] {
 
 async function createNotification(userId: string, data: Omit<Notification, 'id' | 'createdAt' | 'read'>): Promise<void> {
   if (!userId || userId === data.actorId) return;
+  try {
+    const prefs = await getNotificationPreferencesForUser(userId);
+    const allowed = data.type === 'comment' ? prefs.comments
+      : data.type === 'reply' ? prefs.replies
+      : data.type === 'mention' ? prefs.mentions
+      : data.type === 'follow' ? prefs.follows
+      : ['upvote', 'verification', 'repost'].includes(data.type) ? prefs.reactions
+      : true;
+    if (!allowed) return;
+  } catch {}
   const id = generateId();
   await setDoc(doc(db, 'users', userId, 'notifications', id), { ...data, read: false, createdAt: serverTimestamp() });
+}
+
+async function getNotificationPreferencesForUser(userId: string) {
+  try {
+    const { getDoc } = await import('firebase/firestore');
+    const snap = await getDoc(doc(db, 'users', userId, 'preferences', 'notifications'));
+    return { comments: true, replies: true, mentions: true, follows: true, reactions: true, productNews: true, ...(snap.exists() ? snap.data() : {}) };
+  } catch {
+    return { comments: true, replies: true, mentions: true, follows: true, reactions: true, productNews: true };
+  }
 }
 
 async function createAdminNotification(data: any): Promise<void> {

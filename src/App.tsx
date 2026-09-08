@@ -29,6 +29,8 @@ import { CommunityPostView } from './components/CommunityPostView';
 import { CommunityProfileView } from './components/CommunityProfileView';
 import { SavedView } from './components/SavedView';
 import { NotificationsView } from './components/NotificationsView';
+import { AccountDashboardView } from './components/AccountDashboardView';
+import { PreferencesView } from './components/PreferencesView';
 import { ExploreView } from './components/ExploreView';
 import { SeriesView } from './components/SeriesView';
 import { CreatorView } from './components/CreatorView';
@@ -36,6 +38,7 @@ import { SocialHubView } from './components/SocialHubView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
+import { subscribeReadingQueue, toggleReadingQueue } from './lib/account';
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
 
@@ -109,6 +112,7 @@ export default function App() {
   const [userAuth, setUserAuth] = useState(auth.currentUser);
   const [userProfile, setUserProfile] = useState<CommunityUser | null>(null);
   const [continueReadingSlug, setContinueReadingSlug] = useState<string | null>(null);
+  const [readingQueueIds, setReadingQueueIds] = useState<string[]>([]);
   const [isHandleModalOpen, setIsHandleModalOpen] = useState(false);
 
   // Sync auth state & cloud saved items
@@ -195,6 +199,11 @@ export default function App() {
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    if (!userAuth?.uid) { setReadingQueueIds([]); return; }
+    return subscribeReadingQueue(items => setReadingQueueIds(items.filter(item => item.itemType === 'article').map(item => item.itemId)));
+  }, [userAuth?.uid]);
 
   // Dynamic theme colors synced to global site configuration
   useEffect(() => {
@@ -287,6 +296,12 @@ export default function App() {
         setActiveArticleSlug(null);
       } else if (hash === 'history') {
         setCurrentPage('history');
+        setActiveArticleSlug(null);
+      } else if (hash === 'dashboard' || hash === 'my') {
+        setCurrentPage('dashboard');
+        setActiveArticleSlug(null);
+      } else if (hash === 'preferences' || hash === 'settings') {
+        setCurrentPage('preferences');
         setActiveArticleSlug(null);
       } else if (hash === 'notifications') {
         setCurrentPage('notifications');
@@ -420,6 +435,21 @@ export default function App() {
     }
   };
 
+  const handleToggleQueue = async (slug: string) => {
+    if (!userAuth) {
+      try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch {}
+      return;
+    }
+    const queued = readingQueueIds.includes(slug);
+    setReadingQueueIds(prev => queued ? prev.filter(id => id !== slug) : [...prev, slug]);
+    try {
+      await toggleReadingQueue(slug, 'article', articles.find(a => a.slug === slug)?.title || slug, queued);
+    } catch (e) {
+      console.error('Reading queue sync failed:', e);
+      setReadingQueueIds(prev => queued ? [...prev, slug] : prev.filter(id => id !== slug));
+    }
+  };
+
   const handleArticlePublished = (newArticle: Article) => {
     setArticles((prev) => [newArticle, ...prev.filter((a) => a.slug !== newArticle.slug)]);
     navigateTo('article', newArticle.slug);
@@ -547,6 +577,14 @@ export default function App() {
               />
             )}
 
+            {currentPage === 'dashboard' && (
+              <AccountDashboardView articles={articles} userProfile={userProfile} onNavigate={navigateTo} />
+            )}
+
+            {currentPage === 'preferences' && (
+              <PreferencesView onNavigate={navigateTo} />
+            )}
+
             {currentPage === 'article' && (
               activeArticle ? (
                 <ArticleView
@@ -559,6 +597,8 @@ export default function App() {
                   onOpenAuthorProfile={(username) => navigateTo('community_profile', username)}
                   isSaved={savedSlugs.includes(activeArticle.slug)}
                   onToggleSave={handleToggleSave}
+                  isQueued={readingQueueIds.includes(activeArticle.slug)}
+                  onToggleQueue={handleToggleQueue}
                   siteConfig={siteConfig}
                 />
               ) : (

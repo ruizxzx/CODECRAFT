@@ -77,6 +77,8 @@ interface ArticleViewProps {
   onOpenAuthorProfile?: (username: string) => void;
   isSaved: boolean;
   onToggleSave: (slug: string) => void;
+  isQueued?: boolean;
+  onToggleQueue?: (slug: string) => void;
   siteConfig: SiteConfig;
 }
 
@@ -90,6 +92,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   onOpenAuthorProfile,
   isSaved,
   onToggleSave,
+  isQueued = false,
+  onToggleQueue,
   siteConfig,
 }) => {
   const [copiedCodeIdx, setCopiedCodeIdx] = useState<number | null>(null);
@@ -101,6 +105,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [completeBusy, setCompleteBusy] = useState(false);
   const lastSavedProgressRef = React.useRef(-1);
   const saveTimerRef = React.useRef<number | null>(null);
+  const maxAutoProgressRef = React.useRef(0);
   const [hasClapped, setHasClapped] = useState(false);
   const [fontSize, setFontSize] = useState<'normal' | 'large'>('normal');
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -122,9 +127,9 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
   useEffect(() => { void recordArticleView(article.slug, user?.uid); }, [article.slug, user?.uid]);
   useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
-  useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); setSavedCloudProgress(pct); setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
+  useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); setSavedCloudProgress(pct); maxAutoProgressRef.current = pct; setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
 
-  useEffect(() => { lastSavedProgressRef.current = -1; setScrollProgress(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
+  useEffect(() => { lastSavedProgressRef.current = -1; maxAutoProgressRef.current = 0; setScrollProgress(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
   useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
   useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
   useEffect(() => {
@@ -182,7 +187,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     }
   }, [article.slug, user]);
 
-  // Reading progress is measured only across the article content, not the page footer/reactions.
+  // Reading progress is measured against the actual rendered article-body wrapper.
+  // The endpoint is the last content line, so footer/reactions do not affect progress.
   useEffect(() => {
     const handleScroll = () => {
       const startEl = articleContentRef.current;
@@ -191,17 +197,23 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       const startY = startEl.getBoundingClientRect().top + window.scrollY;
       const endY = endEl.getBoundingClientRect().top + window.scrollY;
       const travel = Math.max(1, endY - startY - window.innerHeight);
-      const currentProgress = articleCompleted ? 100 : Math.min(100, Math.max(0, ((window.scrollY - startY) / travel) * 100));
+      const rawProgress = articleCompleted ? 100 : Math.round(Math.min(100, Math.max(0, ((window.scrollY - startY) / travel) * 100)));
+      // Reading progress is monotonic. Reopening/scrolling backwards must not
+      // erase a reader's latest checkpoint. Reset explicitly to start over.
+      const currentProgress = articleCompleted ? 100 : Math.max(rawProgress, maxAutoProgressRef.current);
+      maxAutoProgressRef.current = currentProgress;
       setScrollProgress(currentProgress);
-      if (user && !articleCompleted && Math.abs(currentProgress - lastSavedProgressRef.current) >= 5) {
+      if (user && !articleCompleted && currentProgress !== lastSavedProgressRef.current && (currentProgress === 0 || Math.abs(currentProgress - lastSavedProgressRef.current) >= 2)) {
         lastSavedProgressRef.current = currentProgress;
         if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = window.setTimeout(() => {
           void saveArticleReadingProgress(article.slug, currentProgress, activeTocId || '', false).catch(() => {});
-        }, 700);
-        void recordArticleHistory(article, currentProgress).catch(() => {});
+          void recordArticleHistory(article, currentProgress).catch(() => {});
+        }, 500);
       }
-      if (user && !articleCompleted && endY - (window.scrollY + window.innerHeight) <= 24) {
+      const atContentEnd = endY - (window.scrollY + window.innerHeight) <= 8;
+      if (user && !articleCompleted && atContentEnd) {
+        if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
         void saveArticleReadingProgress(article.slug, 100, activeTocId || 'completed', true).then(() => { setArticleCompleted(true); setSavedCloudProgress(100); setScrollProgress(100); }).catch(() => {});
         void recordArticleHistory(article, 100).catch(() => {});
       }
@@ -246,6 +258,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     try {
       await saveArticleReadingProgress(article.slug, 100, activeTocId || 'completed', true);
       setSavedCloudProgress(100);
+      maxAutoProgressRef.current = 100;
       setScrollProgress(100);
       setArticleCompleted(true);
       setResumeVisible(false);
@@ -260,6 +273,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     try {
       await resetArticleReadingProgress(article.slug);
       setArticleCompleted(false);
+      maxAutoProgressRef.current = 0;
       setSavedCloudProgress(0);
       setScrollProgress(0);
       lastSavedProgressRef.current = -1;
@@ -389,6 +403,18 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
             <span className="hidden md:inline">{isSaved ? 'SAVED' : 'SAVE'}</span>
           </button>
+
+          {/* Reading Queue */}
+          {user && onToggleQueue && (
+            <button
+              onClick={() => onToggleQueue(article.slug)}
+              className={`p-1.5 px-2.5 neo-border-2 font-display font-bold text-xs flex items-center space-x-1.5 transition-all active:translate-x-0.5 active:translate-y-0.5 ${isQueued ? 'bg-[var(--color-secondary)] text-black neo-shadow-sm' : 'bg-white hover:bg-neutral-100 text-neutral-800'}`}
+              title={isQueued ? 'Remove from reading queue' : 'Add to reading queue'}
+            >
+              <List className="w-4 h-4" />
+              <span className="hidden md:inline">{isQueued ? 'QUEUED' : 'READ LATER'}</span>
+            </button>
+          )}
 
           {/* Copy Link Share */}
           <button
@@ -538,7 +564,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         </div>
 
         {/* Article Body - Rich Medium/Editorial Typography */}
-        <div className={`space-y-7 ${fontSize === 'large' ? 'text-xl leading-relaxed' : 'text-lg leading-relaxed'} font-serif text-neutral-900`}>
+        <div ref={articleContentRef} className={`space-y-7 ${fontSize === 'large' ? 'text-xl leading-relaxed' : 'text-lg leading-relaxed'} font-serif text-neutral-900`}>
           {article.content.map((block, index) => {
             if (block.type === 'paragraph') {
               return (

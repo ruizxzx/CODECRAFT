@@ -25,3 +25,7 @@ Added series follower membership at:
 The progress collection is not publicly readable. Series follower documents are readable for aggregate-count queries but can only be created/deleted by the corresponding signed-in account.
 
 No rules were added that expose per-user article-view receipts.
+
+
+## V48 deployment note
+Deploy `firestore.rules` before using the V48 account dashboard, reading queue, notification preferences, and cloud draft recovery. Reading-progress rules also prevent an automatic checkpoint from downgrading a manually completed article; only the explicit reset/delete path can clear completion.
