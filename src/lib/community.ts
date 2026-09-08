@@ -314,7 +314,7 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
     displayName: user.displayName || username,
     photoURL: user.photoURL || '',
     bio: 'Software builder & writer',
-    themeColor: '#000000',
+    themeColor: '#D97706',
     role: checkIsAdmin(user.email) ? 'Master Admin' : '',
     platformRole: checkIsAdmin(user.email) ? 'master_admin' : 'member',
     email: user.email || '',

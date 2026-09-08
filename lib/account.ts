@@ -218,3 +218,26 @@ export function subscribeThemePreference(callback: (theme: ThemePreference) => v
     callback(snap.exists() && snap.data()?.theme === 'dark' ? 'dark' : 'light');
   }, () => callback(DEFAULT_THEME_PREFERENCE));
 }
+
+export async function saveDraftVersion(draftId: string, data: Record<string, unknown>) {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !draftId) throw new Error('Sign in required');
+  const ref = doc(collection(db, 'users', uid, 'drafts', draftId, 'versions'));
+  await setDoc(ref, { ...data, savedAt: serverTimestamp(), createdBy: uid }, { merge: true });
+  return ref.id;
+}
+
+export async function getDraftVersions<T extends Record<string, unknown> = Record<string, unknown>>(draftId: string): Promise<Array<T & { id: string }>> {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !draftId) return [];
+  try {
+    const snap = await getDocs(query(collection(db, 'users', uid, 'drafts', draftId, 'versions'), orderBy('savedAt', 'desc'), limit(30)));
+    return snap.docs.map(d => ({ id: d.id, ...(d.data() as T) }));
+  } catch { return []; }
+}
+
+export async function deleteDraftVersion(draftId: string, versionId: string) {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !draftId || !versionId) return;
+  await deleteDoc(doc(db, 'users', uid, 'drafts', draftId, 'versions', versionId));
+}

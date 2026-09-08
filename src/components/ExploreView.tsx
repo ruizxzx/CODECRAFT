@@ -16,7 +16,7 @@ interface Props {
   initialHashtag?: string;
 }
 
-type ExploreTab = 'for-you' | 'following' | 'latest' | 'trending';
+type ExploreTab = 'for-you' | 'following' | 'latest' | 'trending' | 'rising' | 'discussed' | 'editors';
 type ExploreItem =
   | { kind: 'article'; key: string; article: Article; score: number }
   | { kind: 'post'; key: string; post: CommunityPost; score: number }
@@ -73,7 +73,7 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
   const [questions, setQuestions] = useState<SocialQuestion[]>([]);
   const [topics, setTopics] = useState<SocialTopic[]>([]);
   const [creators, setCreators] = useState<CommunityUser[]>([]);
-  const [contentType, setContentType] = useState<'all'|'articles'|'posts'|'series'>('all');
+  const [contentType, setContentType] = useState<'all'|'articles'|'posts'|'series'|'creators'|'topics'>('all');
 
   useEffect(() => {
     setQuery(initialHashtag ? `#${initialHashtag.replace(/^#/, '')}` : '');
@@ -177,6 +177,9 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
       });
     }
     if (tab === 'trending') return copy.sort((a, b) => b.score - a.score);
+    if (tab === 'rising') return copy.sort((a,b)=>((b.kind==='article'?Number(b.article.viewsCount||0):b.kind==='post'?Number(b.post.viewsCount||0):Number(b.series.viewsCount||0))-(a.kind==='article'?Number(a.article.viewsCount||0):a.kind==='post'?Number(a.post.viewsCount||0):Number(a.series.viewsCount||0))));
+    if (tab === 'discussed') return copy.sort((a,b)=>((b.kind==='article'?Number((b.article as any).commentsCount||0):b.kind==='post'?Number(b.post.commentsCount||0):Number(b.series.followersCount||0))-(a.kind==='article'?Number((a.article as any).commentsCount||0):a.kind==='post'?Number(a.post.commentsCount||0):Number(a.series.followersCount||0))));
+    if (tab === 'editors') return copy.filter(item => item.kind==='article' ? !!item.article.featured : item.kind==='post' ? !!item.post.isFeatured : !!(item.series as any).featured).sort((a,b)=>b.score-a.score);
     if (tab === 'following') {
       return copy.filter(item => item.kind === 'article'
         ? followingIds.includes(articleAuthor(item.article).uid) || followingUsernames.includes(articleAuthor(item.article).username)
@@ -276,14 +279,14 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
 
       <div className="mb-6 flex flex-wrap gap-2 items-center">
         <span className="font-mono text-[9px] font-black uppercase px-3 py-2 border-2 border-black bg-white">FILTER</span>
-        {([['all','All'],['articles','Articles'],['posts','Posts'],['series','Series']] as const).map(([key,label])=><button key={key} onClick={()=>setContentType(key)} className={`border-2 border-black px-3 py-2 font-mono text-[9px] font-black uppercase ${contentType===key?'bg-[var(--color-primary)]':''}`}>{label}</button>)}
+        {([['all','All'],['articles','Articles'],['posts','Posts'],['series','Series'],['creators','Creators'],['topics','Topics']] as const).map(([key,label])=><button key={key} onClick={()=>setContentType(key)} className={`border-2 border-black px-3 py-2 font-mono text-[9px] font-black uppercase ${contentType===key?'bg-[var(--color-primary)]':''}`}>{label}</button>)}
         {query && <button onClick={()=>setQuery('')} className="border-2 border-black px-3 py-2 font-mono text-[9px] font-black uppercase bg-white">CLEAR</button>}
       </div>
 
       <div className="sticky top-[4.5rem] sm:top-[5.5rem] z-30 bg-white border-4 border-black neo-shadow-sm p-2 mb-7">
         <div className="flex overflow-x-auto gap-2">
           {([
-            ['for-you','For You',Sparkles], ['following','Following',Users], ['latest','Latest',Zap], ['trending','Trending',TrendingUp]
+            ['for-you','For You',Sparkles], ['following','Following',Users], ['latest','Latest',Zap], ['trending','Trending',TrendingUp], ['rising','Rising',ArrowUp], ['discussed','Most Discussed',MessageSquare], ['editors','Editor's Picks',Sparkles]
           ] as const).map(([key,label,Icon]) => (
             <button key={key} onClick={()=>setTab(key)} className={`shrink-0 px-4 py-2 border-2 border-black font-mono text-[10px] font-black uppercase inline-flex items-center gap-2 ${tab===key?'bg-[var(--color-primary)] text-black':'bg-white hover:bg-neutral-100'}`}>
               <Icon className="w-4 h-4"/>{label}

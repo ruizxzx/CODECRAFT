@@ -64,7 +64,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       if (!isEditing) {
         setDisplayNameInput(next.displayName || '');
         setBioInput(next.bio || '');
-        setThemeInput(next.themeColor || '#000000');
+        setThemeInput(next.themeColor || '#D97706');
         setPhotoUrlInput(next.photoURL || '');
         setCoverUrlInput(next.coverImageUrl || '');
         setWebsiteInput(next.websiteUrl || '');
@@ -320,7 +320,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <button onClick={() => onNavigate('community')} className="flex items-center space-x-2 font-mono text-xs font-bold uppercase mb-8 hover:text-[var(--color-primary)]"><ArrowLeft className="w-4 h-4" /><span>Community Hub</span></button>
       <div className="bg-white border-4 border-black neo-shadow-lg overflow-hidden mb-8">
-        <div className="h-32 sm:h-48 w-full border-b-4 border-black bg-cover bg-center" style={{ backgroundColor: profile.themeColor || '#000', backgroundImage: profile.coverImageUrl ? `url(${profile.coverImageUrl})` : undefined }} />
+        <div className="h-32 sm:h-48 w-full border-b-4 border-black bg-cover bg-center" style={{ backgroundColor: profile.themeColor || '#D97706', backgroundImage: profile.coverImageUrl ? `url(${profile.coverImageUrl})` : undefined }} />
         <div className="px-6 sm:px-10 pb-8 relative">
           <div className="flex justify-between items-end -mt-16 mb-6">
             <div className="relative group">

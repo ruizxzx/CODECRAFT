@@ -84,7 +84,7 @@ export const UniqueHandleModal: React.FC<UniqueHandleModalProps> = ({
         displayName: clean === 'krishsarkar' ? 'Krish Sarkar' : (currentUser.displayName || clean),
         photoURL: currentUser.photoURL || '',
         bio: bio.trim() || 'Software builder',
-        themeColor: '#000000',
+        themeColor: '#D97706',
       });
       onProfileCreated(profile);
       onClose();

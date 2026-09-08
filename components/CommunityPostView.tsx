@@ -11,6 +11,7 @@ import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, Arrow
 import { formatDisplayDate } from '../lib/dateUtils';
 import { CommunityPostExtras } from './CommunityPostExtras';
 import { RichText } from './RichText';
+import { MentionTextarea } from './MentionAutocomplete';
 
 interface CommunityPostViewProps {
   postId: string;

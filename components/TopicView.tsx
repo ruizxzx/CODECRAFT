@@ -5,6 +5,8 @@ import { getSeriesList } from '../lib/series';
 import { ArrowRight, Hash, Layers, MessageSquare, Search, TrendingUp, Bookmark } from 'lucide-react';
 import { useAuthUser } from '../lib/useAuthUser';
 import { getTopicFollowStatus, followTopic } from '../lib/personalization';
+import { db } from '../lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { notifyToast } from '../lib/toast';
 
 interface Props {
@@ -29,7 +31,9 @@ export const TopicView:React.FC<Props>=({slug,articles,onNavigate})=>{
   const user=useAuthUser();
   const [followed,setFollowed]=useState(false);
   const [followBusy,setFollowBusy]=useState(false);
-  useEffect(()=>{let a=true;if(!user){setFollowed(false);return()=>{a=false}};getTopicFollowStatus(topic).then(v=>a&&setFollowed(v)).catch(()=>{});return()=>{a=false}},[topic,user?.uid]);
+  const [followers,setFollowers]=useState(0);
+  useEffect(()=>{let a=true;if(!user){setFollowed(false);} else { getTopicFollowStatus(topic).then(v=>a&&setFollowed(v)).catch(()=>{});} getDoc(doc(db,'topics',topic)).then(s=>a&&setFollowers(Number(s.data()?.followersCount||0))).catch(()=>{}); return()=>{a=false}},[topic,user?.uid]);
+  /**/
   const toggleFollow=async()=>{if(!user){notifyToast('Sign in to follow topics.','info');return}setFollowBusy(true);try{const next=await followTopic(topic);setFollowed(next);notifyToast(next?`Following #${topic}.`:`Unfollowed #${topic}.`,'success')}catch(e:any){notifyToast(e?.message||'Could not update topic follow.','error')}finally{setFollowBusy(false)}};
 
   useEffect(()=>{
@@ -61,7 +65,7 @@ export const TopicView:React.FC<Props>=({slug,articles,onNavigate})=>{
       <div className="font-mono text-[10px] font-black uppercase flex items-center gap-2"><Hash className="w-4 h-4"/> Topic</div>
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-6 mt-2">
         <div><h1 className="font-display font-black text-5xl sm:text-7xl uppercase leading-none">#{topic}</h1><p className="mt-3 max-w-2xl text-sm">Everything connected to this topic across articles, posts and series.</p></div>
-        <div className="flex items-center gap-2"><div className="font-mono text-[10px] uppercase border-2 border-black bg-white px-3 py-2">{matched.total} MATCHES</div><button disabled={followBusy} onClick={()=>void toggleFollow()} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase inline-flex items-center gap-2 ${followed?'bg-[var(--color-primary)]':'bg-white'}`}><Bookmark className={`w-3 h-3 ${followed?'fill-current':''}`}/>{followed?'FOLLOWING':'FOLLOW TOPIC'}</button></div>
+        <div className="flex items-center gap-2"><div className="font-mono text-[10px] uppercase border-2 border-black bg-white px-3 py-2">{followers.toLocaleString()} FOLLOWERS</div><div className="font-mono text-[10px] uppercase border-2 border-black bg-white px-3 py-2">{matched.total} MATCHES</div><button disabled={followBusy} onClick={()=>void toggleFollow()} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase inline-flex items-center gap-2 ${followed?'bg-[var(--color-primary)]':'bg-white'}`}><Bookmark className={`w-3 h-3 ${followed?'fill-current':''}`}/>{followed?'FOLLOWING':'FOLLOW TOPIC'}</button></div>
       </div>
     </header>
     <div className="border-4 border-black bg-white p-3 flex flex-wrap gap-2">

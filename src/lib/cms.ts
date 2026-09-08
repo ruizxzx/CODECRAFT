@@ -226,10 +226,12 @@ export async function getSiteConfig(): Promise<SiteConfig> {
 
 export async function saveSiteConfig(config: SiteConfig): Promise<void> {
   const configDocRef = doc(db, 'siteConfig', 'global');
+  const beforeSnap = await getDoc(configDocRef).catch(()=>null);
   await setDoc(configDocRef, {
     ...config,
     updatedAt: serverTimestamp()
   }, { merge: true });
+  if (checkIsAdmin(auth.currentUser?.email)) { try { await writeAdminAudit('changed site config','siteConfig/global',beforeSnap?.exists?beforeSnap.data():null,config); } catch {} }
 }
 
 
@@ -655,6 +657,7 @@ export async function saveArticle(article: Article): Promise<Article> {
     createdAt: (article as any).createdAt || serverTimestamp()
   });
   await setDoc(articleDocRef, dataToSave, { merge: true });
+  if (checkIsAdmin(auth.currentUser?.email)) { try { await writeAdminAudit(isNewArticle?'created article':'updated article',`articles/${article.slug}`,existingSnap.exists()?existingSnap.data():null,article); } catch {} }
 
   // Every registered OFFSCRPT user receives an in-app notification when the admin
   // publishes a genuinely new article. Edits do not generate duplicate alerts.
@@ -887,7 +890,9 @@ export async function syncAuthorToAllCloudArticles(author: {
 
 export async function deleteArticle(slug: string): Promise<void> {
   if (!slug) return;
+  const before=await getDoc(doc(db,'articles',slug)).catch(()=>null);
   await deleteDoc(doc(db, 'articles', slug));
+  if(checkIsAdmin(auth.currentUser?.email)){ try { await writeAdminAudit('deleted article',`articles/${slug}`,before?.exists?before.data():null,null); } catch {} }
   await setDoc(doc(db, 'deleted_articles', slug), {
     slug,
     deletedAt: serverTimestamp()

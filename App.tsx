@@ -38,6 +38,8 @@ import { SeriesView } from './components/SeriesView';
 import { CreatorView } from './components/CreatorView';
 import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
+import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
+import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
@@ -46,6 +48,8 @@ import { subscribeReadingQueue, toggleReadingQueue, subscribeThemePreference } f
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
 import { notifyToast } from './lib/toast';
+import { recordArticleAnalyticsEvent } from './lib/analytics';
+import { recordArticleAnalyticsEvent } from './lib/analytics';
 
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
 const SAVED_COMMUNITY_KEY = 'krishficient_saved_community_v1';
@@ -386,9 +390,12 @@ export default function App() {
       } else if (hash.startsWith('creator/')) {
         setCurrentPage('creator');
         setActiveArticleSlug(hash.replace('creator/', ''));
-      } else if (hash.startsWith('topic/')) {
+      } else if ((hash.startsWith('topic/') || hash.startsWith('@topic/'))) {
         setCurrentPage('topic');
-        setActiveArticleSlug(hash.replace('topic/', ''));
+        setActiveArticleSlug(hash.startsWith('@topic/') ? hash.replace('@topic/', '') : hash.replace('topic/', ''));
+      } else if (hash === 'creators') {
+        setCurrentPage('creators');
+        setActiveArticleSlug(null);
       } else if (hash === 'explore' || hash.startsWith('explore/')) {
         setCurrentPage('explore');
         setActiveArticleSlug(hash.startsWith('explore/') ? hash.replace('explore/', '') : null);
@@ -436,6 +443,8 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('creator');
       window.location.hash = `creator/${param}`;
+    } else if (page === 'creators') {
+      setActiveArticleSlug(null); setCurrentPage('creators'); window.location.hash='creators';
     } else if (page === 'explore') {
       setActiveArticleSlug(param || null);
       setCurrentPage('explore');
@@ -477,6 +486,7 @@ export default function App() {
           !willBeSaved,
           targetArticle?.title || slug
         );
+        void recordArticleAnalyticsEvent(slug, 'bookmark', { active: willBeSaved, title: targetArticle?.title || slug }).catch(()=>{});
         notifyToast(willBeSaved ? 'Saved to your library.' : 'Removed from your saved items.', 'success');
       } catch (e) {
         console.error("Error saving dispatch to cloud:", e);
@@ -771,6 +781,10 @@ export default function App() {
             {currentPage === 'social' && (
               <SocialHubView userProfile={userProfile} onNavigate={navigateTo} siteConfig={siteConfig} />
             )}
+            {currentPage === 'creators' && (
+              <CreatorDiscoveryView articles={articles} onNavigate={navigateTo} />
+            )}
+
             {currentPage === 'explore' && (
               <ExploreView articles={articles} userAuth={userAuth} userProfile={userProfile} onNavigate={navigateTo} initialHashtag={activeArticleSlug || ''} />
             )}

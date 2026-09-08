@@ -3,6 +3,7 @@ import { CommunityUser, CommunityPost } from '../types';
 import { createPost, getCommunityDraft, saveCommunityDraft, clearCommunityDraft } from '../lib/community';
 import { X, Send, Loader2, BookOpen, MessageSquare, AtSign, Info, WifiOff } from 'lucide-react';
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
+import { MentionTextarea } from './MentionAutocomplete';
 
 interface CommunityEditorProps {
   profile: CommunityUser;
@@ -51,9 +52,10 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
     if (!draftLoaded || (!title.trim() && !content.trim())) return;
     const payload = { type, title, content, mediaInput, mediaUrls: mediaInput.split('\n').map(v => v.trim()).filter(Boolean).slice(0, 6) };
     try { localStorage.setItem(localDraftKey, JSON.stringify(payload)); } catch {}
+    setSyncState(navigator.onLine?'saving':'offline');
     const timer = window.setTimeout(() => {
-      saveCommunityDraft(profile.uid, { type, title, content, mediaUrls: payload.mediaUrls }).catch(() => {});
-      saveDraftSnapshot('community-editor', payload).catch(() => {});
+      Promise.all([saveCommunityDraft(profile.uid, { type, title, content, mediaUrls: payload.mediaUrls }), saveDraftSnapshot('community-editor', payload)])
+        .then(()=>setSyncState('synced')).catch(()=>setSyncState('failed'));
     }, 700);
     return () => window.clearTimeout(timer);
   }, [draftLoaded, profile.uid, localDraftKey, type, title, content, mediaInput]);
@@ -126,9 +128,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
               <span>@{profile.username}</span>
             </span>
           </div>
-          <div className="text-neutral-600">
-            Posting in Community feed · use @handle to mention someone
-          </div>
+          <div className="text-neutral-600 flex items-center gap-2"><span>{syncState==='saving'?'⟳ SAVING...':syncState==='offline'?'⚠ OFFLINE · SAVED LOCALLY':syncState==='failed'?'! SYNC FAILED · RETRY':'● CLOUD SYNCED'}</span> · use @handle to mention someone</div>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
@@ -191,17 +191,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
               <label className="font-mono text-xs font-bold uppercase">Content</label>
               <span className="font-mono text-[11px] text-neutral-500">{content.length} characters</span>
             </div>
-            <textarea 
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder={
-                type === 'blog' 
-                  ? "Write your full engineering write-up here. Break it down with sections, code insights, and key architecture takeaways..."
-                  : "Share your thoughts, ask technical questions, or propose a debate topic for the community..."
-              }
-              className="w-full px-4 py-3 border-2 border-black font-sans text-sm sm:text-base min-h-[260px] focus:outline-none focus:bg-neutral-50 leading-relaxed"
-              required
-            />
+            <MentionTextarea value={content} setValue={setContent} placeholder={type === 'blog' ? 'Write your full engineering write-up here. Use @handle to mention someone...' : 'Share your thoughts, ask technical questions, or propose a debate topic...'} rows={10} className="w-full px-4 py-3 border-2 border-black font-sans text-sm sm:text-base min-h-[260px] focus:outline-none focus:bg-neutral-50 leading-relaxed" required />
           </div>
 
           {errorMessage && (

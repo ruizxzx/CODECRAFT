@@ -36,6 +36,7 @@ import { getSeriesList } from '../lib/series';
 import { calculateArticleReadingTime, getArticleReadingProgress, saveArticleReadingProgress, resetArticleReadingProgress, recordArticleHistory, ArticleEngagementStats, subscribeArticleEngagementStats } from '../lib/reading';
 import { UserIdentity } from './UserIdentity';
 import type { ArticleReaction } from '../lib/cms';
+import { recordArticleAnalyticsEvent, upsertArticleAnalyticsSession } from '../lib/analytics';
 
 function slugifyHeading(value: string): string {
   return String(value || 'section')
@@ -133,6 +134,15 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [copiedTocId, setCopiedTocId] = useState<string | null>(null);
 
   useEffect(() => { void recordArticleView(article.slug, user?.uid); }, [article.slug, user?.uid]);
+  const analyticsProgressRef = React.useRef(0); analyticsProgressRef.current = scrollProgress;
+  const analyticsCompleteRef = React.useRef(false); analyticsCompleteRef.current = articleCompleted;
+  useEffect(() => {
+    let disposed=false; const started=Date.now(); let lastWrite=0; const returnKey=`offscrpt:return-reader:${user?.uid||'anon'}`;
+    let returning=false; try{ returning=localStorage.getItem(returnKey)==='1'; localStorage.setItem(returnKey,'1'); }catch{}
+    const flush=()=>{ if(disposed) return; const duration=Date.now()-started; if(Date.now()-lastWrite<10000) return; lastWrite=Date.now(); void upsertArticleAnalyticsSession(article.slug,{durationMs:duration,maxScrollPercent:analyticsProgressRef.current,completed:analyticsCompleteRef.current,currentSection:activeTocIdRef.current,scrollY:window.scrollY,seriesId:article.seriesId||'',seriesOrder:article.seriesOrder||0,source:'article',returnReader:returning}).catch(()=>{}); };
+    const timer=window.setInterval(flush,15000); const onHide=()=>{ if(document.visibilityState==='hidden') flush(); }; document.addEventListener('visibilitychange',onHide); window.addEventListener('pagehide',onHide); flush();
+    return()=>{window.clearInterval(timer);document.removeEventListener('visibilitychange',onHide);window.removeEventListener('pagehide',onHide);flush();disposed=true;};
+  }, [article.slug,user?.uid]);
   useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
   useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); savedCheckpointRef.current = { scrollY: p?.scrollY, viewportHeight: p?.viewportHeight, lastSection: p?.lastSection, device: p?.device, source: p?.source, seriesId: p?.seriesId, seriesOrder: p?.seriesOrder }; setSavedCloudProgress(pct); maxAutoProgressRef.current = pct; setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct, { lastSection:p?.lastSection, scrollY:p?.scrollY, device:p?.device, source:p?.source }).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
 
@@ -381,6 +391,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   };
 
   const handleShareLink = () => {
+    void recordArticleAnalyticsEvent(article.slug,'share',{method:'copy'}).catch(()=>{});
     navigator.clipboard.writeText(window.location.href);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
@@ -401,6 +412,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
     try {
       const newLiked = await toggleArticleLike(article.slug, currentUser.uid, hasClapped);
+      void recordArticleAnalyticsEvent(article.slug,'reaction',{reaction:'applause',active:newLiked}).catch(()=>{});
       setHasClapped(newLiked);
       setEngagement(prev => ({ ...prev, likes: Math.max(0, prev.likes + (newLiked ? 1 : -1)), applauds: Math.max(0, prev.applauds + (newLiked ? 1 : -1)) }));
     } catch (err) {

@@ -9,6 +9,7 @@ import { ArticleComment } from '../types';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { RichText } from './RichText';
 import { UserIdentity } from './UserIdentity';
+import { MentionTextarea } from './MentionAutocomplete';
 
 interface CommentsSectionProps {
   articleSlug: string;
@@ -136,15 +137,7 @@ export const CommentsSection: React.FC<CommentsSectionProps> = ({ articleSlug })
               <label className="block font-mono text-xs font-bold text-neutral-600 uppercase mb-1">
                 COMMENT
               </label>
-              <textarea
-                required
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Share your thoughts, architectural counter-arguments, or production metrics..."
-                rows={4}
-                maxLength={2000}
-                className="w-full px-4 py-3 bg-white neo-border-2 font-sans font-medium text-black focus:outline-none focus:bg-[var(--color-primary)]/10 resize-y"
-              />
+              <MentionTextarea value={newComment} setValue={setNewComment} placeholder="Share your thoughts, architectural counter-arguments, or production metrics..." rows={4} maxLength={2000} className="w-full px-4 py-3 bg-white neo-border-2 font-sans font-medium text-black focus:outline-none focus:bg-[var(--color-primary)]/10 resize-y" />
             </div>
 
             {error && (
