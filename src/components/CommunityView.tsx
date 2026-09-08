@@ -449,7 +449,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       </div>
                       <div className="flex items-center space-x-1 font-bold">
                         <MessageSquare className="w-3.5 h-3.5" />
-                        <span>{post.commentsCount || 0}</span>
+                        <span>{Number(post.viewsCount || 0).toLocaleString()} VIEWS · {post.commentsCount || 0}</span>
                       </div>
                       <div className="flex items-center space-x-1 font-bold"><Repeat2 className="w-3.5 h-3.5" /><span>{post.repostsCount || 0}</span></div>
                     </div>

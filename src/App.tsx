@@ -38,7 +38,7 @@ import { SocialHubView } from './components/SocialHubView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
-import { subscribeReadingQueue, toggleReadingQueue } from './lib/account';
+import { subscribeReadingQueue, toggleReadingQueue, subscribeThemePreference } from './lib/account';
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
 
@@ -218,6 +218,20 @@ export default function App() {
     siteConfig.themeAccentColor,
     siteConfig.themeSuccessColor
   ]);
+
+  // Account theme preference is persisted locally for instant startup and cloud-synced when signed in.
+  useEffect(() => {
+    const apply = (theme: 'light' | 'dark') => {
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+      try { localStorage.setItem('offscrpt:theme', theme); } catch {}
+    };
+    try {
+      const cached = localStorage.getItem('offscrpt:theme');
+      if (cached === 'dark' || cached === 'light') apply(cached);
+    } catch {}
+    if (!userAuth?.uid) return;
+    return subscribeThemePreference(apply);
+  }, [userAuth?.uid]);
 
   // Keep the browser favicon synchronized with the cloud-managed site logo.
   useEffect(() => {

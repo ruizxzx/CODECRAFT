@@ -131,6 +131,8 @@ export interface SiteConfig {
   themeSecondaryColor?: string;
   themeAccentColor?: string;
   themeSuccessColor?: string;
+  readingProgressPageColor?: string;
+  readingProgressPersistentColor?: string;
   
   // Footer
   footerNewsletterTitle?: string;
@@ -255,6 +257,7 @@ export interface CommunityPost {
   commentsCount: number;
   repostsCount?: number;
   isFeatured: boolean;
+  viewsCount?: number;
   createdAt: string;
   updatedAt: string;
   quoteText?: string;

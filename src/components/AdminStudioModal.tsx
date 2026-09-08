@@ -32,12 +32,15 @@ import {
   Trash,
   BadgeCheck,
   MousePointer2,
-  Layers
+  Layers,
+  History
 } from 'lucide-react';
 import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
 import { isPlatformModerator } from '../lib/social';
 import { 
   saveArticle, 
+  getArticleRevisions,
+  restoreArticleRevision,
   deleteArticle, 
   saveSiteConfig,
   getSiteConfig,
@@ -595,6 +598,11 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false);
   const cropFileInputRef = useRef<HTMLInputElement | null>(null);
   const [draftRecoveryAvailable, setDraftRecoveryAvailable] = useState(false);
+  const [draftSaveState, setDraftSaveState] = useState<'idle'|'saving'|'saved'|'offline'>('idle');
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [revisionArticle, setRevisionArticle] = useState<Article | null>(null);
+  const [revisions, setRevisions] = useState<any[]>([]);
+  const [revisionBusy, setRevisionBusy] = useState(false);
   const adminDraftKey = `offscrpt:draft:admin:${auth.currentUser?.uid || 'session'}`;
   const adminDraftRestoredRef = useRef(false);
 
@@ -627,12 +635,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   }, [adminDraftKey, editingArticleId]);
 
   useEffect(() => {
+    const on=()=>setOnline(true); const off=()=>setOnline(false);
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return ()=>{ window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+
+  useEffect(() => {
     if (!auth.currentUser || editingArticleId) return;
     const hasContent = !!(newTitle.trim() || newExcerpt.trim() || contentBlocks.some((b) => (b.content || b.imageUrl || b.videoUrl || b.linkText || b.buttonText)));
     if (!hasContent) return;
     const payload = { title: newTitle, category: newCategory, tags: newTags, excerpt: newExcerpt, coverImage: newCoverImage, coverAlt: newCoverAlt, coverCaption: newCoverCaption, seriesId: newSeriesId, seriesName: newSeriesName, seriesOrder: newSeriesOrder, contentBlocks };
     try { localStorage.setItem(adminDraftKey, JSON.stringify(payload)); } catch {}
-    const timer = window.setTimeout(() => { void saveDraftSnapshot('admin-article', payload).catch(() => {}); }, 1000);
+    setDraftSaveState(online ? 'saving' : 'offline');
+    const timer = window.setTimeout(() => { void saveDraftSnapshot('admin-article', payload).then(() => setDraftSaveState('saved')).catch(() => setDraftSaveState('offline')); }, 900);
     return () => window.clearTimeout(timer);
   }, [adminDraftKey, editingArticleId, newTitle, newCategory, newTags, newExcerpt, newCoverImage, newCoverAlt, newCoverCaption, newSeriesId, newSeriesName, newSeriesOrder, contentBlocks]);
 
@@ -758,6 +773,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     }
   };
 
+  const openRevisionHistory = async (article: Article) => {
+    setRevisionArticle(article); setRevisionBusy(true);
+    try { setRevisions(await getArticleRevisions(article.slug)); } catch (e) { console.warn('Revision history load failed', e); setRevisions([]); }
+    finally { setRevisionBusy(false); }
+  };
+
+  const restoreRevision = async (revisionId: string) => {
+    if (!revisionId || !window.confirm('Restore this revision? The current article will be snapshotted before restore.')) return;
+    setRevisionBusy(true);
+    try { const restored = await restoreArticleRevision(revisionId); onArticlePublished(restored); setRevisionArticle(null); setRevisions([]); } catch (e:any) { alert(e.message || 'Revision restore failed.'); }
+    finally { setRevisionBusy(false); }
+  };
+
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim() || !newExcerpt.trim()) return;
@@ -808,7 +836,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         seriesId: newSeriesId.trim() || undefined,
         seriesName: newSeriesName.trim() || undefined,
         seriesOrder: newSeriesOrder === '' ? undefined : Number(newSeriesOrder),
-        viewsCount: 1,
+        ...(editingArticleSlug ? {} : { viewsCount: 0 }),
         clapsCount: 0,
         author: {
           uid: authorProfile.uid,
@@ -1210,7 +1238,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
                   {/* AUTHOR / ABOUT */}
                   <div className="space-y-4 p-4 bg-gray-50 border-2 border-black">
-                    <div className="flex items-center justify-between border-b-2 border-black pb-2">
+                    <div className="border-2 border-black bg-neutral-50 p-4 flex flex-wrap items-center justify-between gap-3"><div><div className="font-mono text-[9px] uppercase text-neutral-500">CREATOR STUDIO</div><div className="font-display font-black text-xl uppercase">DRAFT MANAGEMENT</div><div className="font-mono text-[9px] mt-1">STATUS: {draftSaveState === 'saved' ? 'CLOUD SAVED' : draftSaveState === 'saving' ? 'SAVING…' : !online ? 'OFFLINE — LOCAL BACKUP ACTIVE' : draftRecoveryAvailable ? 'RECOVERABLE DRAFT' : 'NO ACTIVE DRAFT'}</div></div><div className="flex gap-2">{draftRecoveryAvailable && <button onClick={()=>setActiveTab('create')} className="border-2 border-black bg-[var(--color-primary)] px-3 py-2 font-mono text-[9px] font-black">RESUME DRAFT</button>}{draftRecoveryAvailable && <button onClick={resetForm} className="border-2 border-black bg-white px-3 py-2 font-mono text-[9px] font-black">DISCARD DRAFT</button>}</div></div>
+                <div className="flex items-center justify-between border-b-2 border-black pb-2">
                       <div>
                         <h4 className="font-display font-black text-lg uppercase text-black">Author &amp; About Profile</h4>
                         <p className="font-mono text-xs text-neutral-600">
@@ -1748,9 +1777,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           <span className="bg-black text-white font-mono text-[9px] font-bold px-1.5 py-0.5 uppercase">
                             {art.category}
                           </span>
-                          <span className="font-mono text-[10px] text-neutral-500">
-                            {art.publishedAt}
-                          </span>
+                          <span className="font-mono text-[10px] text-neutral-500">{art.publishedAt}</span><span className="font-mono text-[10px] font-black text-neutral-500">{Number(art.viewsCount||0).toLocaleString()} VIEWS</span>
                           {(art.featured || art.pinned) && (
                             <span className="bg-[var(--color-primary)] text-black font-mono text-[9px] font-bold px-1.5 py-0.5 border border-black uppercase flex items-center space-x-1">
                               <Sparkles className="w-2.5 h-2.5 fill-black text-black" />
@@ -1791,6 +1818,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           <Edit2 className="w-3.5 h-3.5" />
                           <span>EDIT</span>
                         </button>
+                        <button onClick={() => openRevisionHistory(art)} className="px-3 py-1.5 bg-white border-2 border-black font-mono text-xs font-bold uppercase hover:bg-[var(--color-secondary)] transition-colors"><History className="w-3.5 h-3.5 inline mr-1"/>HISTORY</button>
                         <button
                           onClick={() => handleDeleteArticleClick(art.slug)}
                           className="px-3 py-1.5 bg-[var(--color-accent)] border-2 border-black font-mono text-xs font-bold uppercase text-black hover:bg-black hover:text-white transition-colors flex items-center space-x-1"

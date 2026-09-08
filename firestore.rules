@@ -157,15 +157,16 @@ service cloud.firestore {
       // Private account preferences. Only the owning account can read/write these.
       match /preferences/{preferenceId} {
         allow read: if isSignedIn() && request.auth.uid == userId;
-        allow create, update: if isSignedIn()
-          && request.auth.uid == userId
-          && preferenceId == 'notifications'
-          && incoming().get('comments', true) is bool
-          && incoming().get('replies', true) is bool
-          && incoming().get('mentions', true) is bool
-          && incoming().get('follows', true) is bool
-          && incoming().get('reactions', true) is bool
-          && incoming().get('productNews', true) is bool;
+        allow create, update: if isSignedIn() && request.auth.uid == userId && (
+          (preferenceId == 'notifications'
+            && incoming().get('comments', true) is bool
+            && incoming().get('replies', true) is bool
+            && incoming().get('mentions', true) is bool
+            && incoming().get('follows', true) is bool
+            && incoming().get('reactions', true) is bool
+            && incoming().get('productNews', true) is bool)
+          || (preferenceId == 'ui' && incoming().get('theme', 'light') in ['light','dark'])
+        );
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
 
@@ -254,6 +255,15 @@ service cloud.firestore {
           ))
         );
         allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || isCommunityModerator(communityId) || request.auth.uid == existing().authorId);
+        match /views/{viewId} {
+          allow read: if isAdmin();
+          allow create: if isSignedIn()
+            && incoming().userId == request.auth.uid
+            && incoming().postId == postId
+            && incoming().day is string
+            && incoming().createdAt is timestamp;
+          allow update, delete: if isAdmin();
+        }
         match /votes/{userId} {
           allow read: if true;
           allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().uid == request.auth.uid && incoming().type in ['up','down'];
@@ -409,6 +419,7 @@ service cloud.firestore {
         && data.upvotesCount is number
         && data.downvotesCount is number
         && data.commentsCount is number
+        && data.get('viewsCount', 0) is number
         && data.get('isFeatured', false) is bool
         && data.get('repostsCount', 0) is number
         && data.get('hashtags', []) is list
@@ -467,6 +478,9 @@ service cloud.firestore {
               && incoming().get('editReviewedAt', null) == null
               && incoming().get('editReviewedBy', null) == null)
           || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'isVerified', 'verificationColor', 'updatedAt']))
+          || (isSignedIn()
+              && incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
+              && incoming().get('viewsCount', 0) == existing().get('viewsCount', 0) + 1)
           || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['repostsCount', 'updatedAt']))
@@ -591,7 +605,11 @@ service cloud.firestore {
 
     match /articles/{slug} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount','updatedAt'])
+        && request.resource.data.get('viewsCount', 0) == resource.data.get('viewsCount', 0) + 1
+        && request.resource.data.updatedAt is timestamp);
 
       match /reactions/{userId} {
         allow read: if true;
@@ -615,7 +633,7 @@ service cloud.firestore {
 
     match /articleViews/{viewId} {
       allow read: if isAdmin();
-      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().slug is string && incoming().day is string && incoming().createdAt is timestamp;
       allow update, delete: if isAdmin();
     }
 

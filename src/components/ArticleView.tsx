@@ -441,15 +441,15 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   return (
     <div className="w-full bg-white min-h-screen">
       {/* Reading position + persistent reading progress. They intentionally behave differently. */}
-      <div className="fixed top-0 left-0 right-0 z-[10000] h-[6px] pointer-events-none" aria-label="Article reading indicators">
+      <div className="fixed top-0 left-0 right-0 z-[10000] h-[6px] pointer-events-none" aria-label="Article reading indicators" style={{'--progress-page-color': siteConfig.readingProgressPageColor || '#2563EB', '--progress-read-color': siteConfig.readingProgressPersistentColor || siteConfig.themePrimaryColor || '#FFD600'} as React.CSSProperties}>
         {/* CURRENT PAGE POSITION: follows the viewport in both directions. */}
         <div
           className="h-[3px] w-full bg-black/10 overflow-hidden"
           aria-hidden="true"
         >
           <div
-            className="h-full bg-blue-600 origin-left will-change-transform"
-            style={{ width: `${Math.max(0, Math.min(100, pagePosition))}%` }}
+            className="h-full origin-left will-change-transform"
+            style={{ backgroundColor: 'var(--progress-page-color)', width: `${Math.max(0, Math.min(100, pagePosition))}%` }}
           />
         </div>
         {/* READING PROGRESS: highest progress reached; never retracts on scroll-up. */}
@@ -462,8 +462,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           aria-valuenow={Math.round(scrollProgress)}
         >
           <div
-            className="h-full bg-[var(--color-primary)] will-change-transform"
-            style={{ width: `${Math.max(0, Math.min(100, scrollProgress))}%` }}
+            className="h-full will-change-transform" style={{ backgroundColor: 'var(--progress-read-color)', width: `${Math.max(0, Math.min(100, scrollProgress))}%` }}
+
           />
         </div>
       </div>
@@ -890,6 +890,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         </div>
 
         <div className="mb-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="border-2 border-black bg-white p-3 col-span-2 sm:col-span-1"><div className="font-mono text-[8px] uppercase text-neutral-500">VIEWS</div><div className="font-display font-black text-xl">{Number(article.viewsCount || 0).toLocaleString()}</div></div>
           <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">APPLAUSE</div><div className="font-display font-black text-xl">{engagement.applauds}</div></div>
           <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">REACTIONS</div><div className="font-display font-black text-xl">{Object.values(engagement.reactions).reduce<number>((a,b)=>a+Number(b||0),0)}</div></div>
           <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">COMMENTS</div><div className="font-display font-black text-xl">{engagement.comments}</div></div>

@@ -15,7 +15,8 @@ import {
   Timestamp,
   writeBatch,
   limit,
-  increment
+  increment,
+  runTransaction
 } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
 import { deletePost, getCommunityProfile, getPost } from './community';
@@ -41,6 +42,8 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   themeSecondaryColor: "#00E0FF",
   themeAccentColor: "#FF60B5",
   themeSuccessColor: "#00FF41",
+  readingProgressPageColor: "#2563EB",
+  readingProgressPersistentColor: "#FFD600",
   footerNewsletterTitle: "RECEIVE DEEP TECHNICAL ESSAYS IN YOUR INBOX",
   footerNewsletterSubtitle: "Zero spam. Zero generic marketing. Only in-depth software architectural breakdowns, local AI research, and production post-mortems.",
   footerBrandStatement: "An independent technology publication engineered by Krish. Fusing Neo-Brutalism, Gumroad minimalism, and Medium-grade editorial craft for software builders worldwide.",
@@ -483,15 +486,28 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
 
 
 export async function recordArticleView(slug:string, viewerId?:string):Promise<void>{
-  // Store one view receipt per signed-in user/article/day. This avoids allowing a
-  // public client to mutate the protected article aggregate directly.
-  if(!viewerId) return;
-  const day=new Date().toISOString().slice(0,10);
-  const ref=doc(db,'articleViews',`${slug}_${viewerId}_${day}`);
+  if(!viewerId || !slug) return;
+  const day = new Date().toISOString().slice(0,10);
+  const safeSlug = encodeURIComponent(slug).slice(0,180);
+  const safeUid = encodeURIComponent(viewerId).slice(0,180);
+  const receiptRef = doc(db, 'articleViews', `${safeSlug}_${safeUid}_${day}`);
+  const articleRef = doc(db, 'articles', slug);
   try {
-    const existing=await getDoc(ref);
-    if(!existing.exists()) await setDoc(ref,{slug,userId:viewerId,day,createdAt:serverTimestamp()});
-  } catch(e){ console.warn('Article view tracking failed:',e); }
+    await runTransaction(db, async (tx) => {
+      const receiptSnap = await tx.get(receiptRef);
+      const articleSnap = await tx.get(articleRef);
+      if (receiptSnap.exists() || !articleSnap.exists()) return;
+      const current = Number(articleSnap.data()?.viewsCount || 0);
+      tx.set(receiptRef, { slug, userId: viewerId, day, createdAt: serverTimestamp() });
+      tx.update(articleRef, { viewsCount: current + 1, updatedAt: serverTimestamp() });
+    });
+  } catch(e){ console.warn('Article view tracking failed:', e); }
+}
+
+export async function getArticleViewCount(slug:string):Promise<number>{
+  if(!slug) return 0;
+  try { const snap = await getDoc(doc(db, 'articles', slug)); return Number(snap.data()?.viewsCount || 0); }
+  catch { return 0; }
 }
 
 export const ARTICLE_REACTIONS = ['like','useful','insightful','interesting'] as const;
@@ -514,6 +530,22 @@ export async function createArticleRevision(article:Article):Promise<void>{
   if(!checkIsAdmin(auth.currentUser?.email)) return;
   const id=`${article.slug}_${Date.now()}`;
   await setDoc(doc(db,'articleRevisions',id),{article,slug:article.slug,createdBy:auth.currentUser?.uid||'',createdAt:serverTimestamp()});
+}
+
+export async function getArticleRevisions(slug:string):Promise<any[]>{
+  const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
+  const snap=await getDocs(query(collection(db,'articleRevisions'), where('slug','==',slug), limit(50)));
+  return snap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>{
+    const at=a.createdAt?.toDate?.()?.getTime?.() || 0; const bt=b.createdAt?.toDate?.()?.getTime?.() || 0; return bt-at;
+  });
+}
+
+export async function restoreArticleRevision(revisionId:string):Promise<Article>{
+  const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
+  const snap=await getDoc(doc(db,'articleRevisions',revisionId)); if(!snap.exists()) throw new Error('Revision not found.');
+  const article={...(snap.data()?.article as Article)};
+  await saveArticle(article);
+  return article;
 }
 
 export async function saveArticle(article: Article): Promise<Article> {

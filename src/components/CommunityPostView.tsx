@@ -2,7 +2,7 @@ import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityPost, CommunityComment, PageView, CommunityUser } from '../types';
 import { reportContent } from '../lib/social';
-import { getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
+import { recordCommunityPostView, getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { isPlatformModerator } from '../lib/social';
 import { promoteCommunityBlogToMain, fetchAllArticlesForAdmin, unpublishMainArticle } from '../lib/cms';
@@ -47,6 +47,8 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const effectiveIsSaved = propIsSaved !== undefined ? propIsSaved : localSaved;
+
+  useEffect(() => { if (post?.id && userAuth?.uid) void recordCommunityPostView(post.id, userAuth.uid); }, [post?.id, userAuth?.uid]);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {
@@ -435,7 +437,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           )}
           <div className="flex items-center space-x-2 font-mono text-xs sm:text-sm font-bold uppercase px-2 sm:px-4 py-2 text-neutral-600 shrink-0">
             <MessageSquare className="w-4 h-4" />
-            <span>{post.commentsCount} Comments</span>
+            <span>{Number(post.viewsCount || 0).toLocaleString()} Views</span><span>{post.commentsCount} Comments</span>
           </div>
         </div>
       </div>

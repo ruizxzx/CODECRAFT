@@ -163,3 +163,32 @@ export function mergeDashboardData(
   ];
   return rows.sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime()).slice(0, 60);
 }
+
+
+export type ThemePreference = 'light' | 'dark';
+export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'light';
+
+export async function getThemePreference(): Promise<ThemePreference> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return DEFAULT_THEME_PREFERENCE;
+  try {
+    const snap = await getDoc(doc(db, 'users', uid, 'preferences', 'ui'));
+    return snap.exists() && snap.data()?.theme === 'dark' ? 'dark' : 'light';
+  } catch {
+    return DEFAULT_THEME_PREFERENCE;
+  }
+}
+
+export async function saveThemePreference(theme: ThemePreference): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error('Sign in required');
+  await setDoc(doc(db, 'users', uid, 'preferences', 'ui'), { theme, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+export function subscribeThemePreference(callback: (theme: ThemePreference) => void): () => void {
+  const uid = auth.currentUser?.uid;
+  if (!uid) { callback(DEFAULT_THEME_PREFERENCE); return () => {}; }
+  return onSnapshot(doc(db, 'users', uid, 'preferences', 'ui'), (snap) => {
+    callback(snap.exists() && snap.data()?.theme === 'dark' ? 'dark' : 'light');
+  }, () => callback(DEFAULT_THEME_PREFERENCE));
+}

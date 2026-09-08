@@ -516,6 +516,7 @@ export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 
       downvotesCount: 0,
       commentsCount: 0,
       repostsCount: 0,
+      viewsCount: 0,
       isFeatured: false,
       origin: data.origin || 'community_post',
       createdAt: serverTimestamp(),
@@ -1262,4 +1263,36 @@ export async function toggleArticleLike(slug: string, userId: string, isCurrentl
     console.error("Error toggling article like:", error);
     throw error;
   }
+}
+
+
+export async function recordCommunityPostView(postId:string, viewerId?:string):Promise<void>{
+  if(!viewerId || !postId) return;
+  const day=new Date().toISOString().slice(0,10);
+  const receiptId=`${encodeURIComponent(postId)}_${encodeURIComponent(viewerId)}_${day}`;
+  const rootRef=doc(db,'posts',postId);
+  try {
+    const rootSnap=await getDoc(rootRef);
+    if(rootSnap.exists()){
+      const receiptRef=doc(rootRef,'views',receiptId);
+      await runTransaction(db,async tx=>{
+        const [postSnap, receiptSnap]=await Promise.all([tx.get(rootRef), tx.get(receiptRef)]);
+        if(!postSnap.exists() || receiptSnap.exists()) return;
+        tx.set(receiptRef,{postId,userId:viewerId,day,createdAt:serverTimestamp()});
+        tx.update(rootRef,{viewsCount:Number(postSnap.data()?.viewsCount||0)+1,updatedAt:serverTimestamp()});
+      });
+      return;
+    }
+    // Community posts use the same post document ID under their community path. Resolve it once, then transact.
+    const snap=await getDocs(query(collectionGroup(db,'posts'), where('__name__','==',postId), limit(5)));
+    const match=snap.docs.find(d=>d.id===postId);
+    if(!match) return;
+    const receiptRef=doc(match.ref,'views',receiptId);
+    await runTransaction(db,async tx=>{
+      const [postSnap, receiptSnap]=await Promise.all([tx.get(match.ref),tx.get(receiptRef)]);
+      if(!postSnap.exists() || receiptSnap.exists()) return;
+      tx.set(receiptRef,{postId,userId:viewerId,day,createdAt:serverTimestamp()});
+      tx.update(match.ref,{viewsCount:Number(postSnap.data()?.viewsCount||0)+1,updatedAt:serverTimestamp()});
+    });
+  } catch(e){ console.warn('Community post view tracking failed:',e); }
 }

@@ -1,54 +1,32 @@
-# OFFSCRPT V50 — Dual Reading Indicators
+# OFFSCRPT V51
 
-## This release
+## Release
+V51 adds account-level dark mode, admin-controlled dual reading-indicator colors, a Creator Studio publishing layer, cloud revision history, resilient drafts/autosave/offline recovery, and real post/article view counters.
 
-V50 adds a second, independent article-position indicator while preserving the existing cloud reading-progress system.
+## Appearance
+- My OFFSCRPT → Settings supports Light/Dark mode.
+- Theme choice is cached locally for instant startup and synced to the signed-in user's Firestore account.
 
-### Reading indicators
+## Reading indicators
+- Admin Control Panel → Site controls exposes independent colors for the current-page indicator and persistent reading-progress indicator.
+- Current-page position retracts when scrolling upward.
+- Persistent reading progress never retracts unless reset or explicitly changed by completion logic.
 
-At the very top of every article there are now two joined 3px bars:
+## Creator Studio
+- Draft autosave to local storage + Firestore.
+- Offline state is surfaced in the editor.
+- Recover/discard draft management in Admin Studio.
+- Existing articles create cloud revision snapshots before updates.
+- Revision History can inspect and restore prior article snapshots.
 
-1. **Blue page-position line** — shows the reader's current viewport position inside the article. It moves forward while scrolling down and retracts when scrolling up. It does not affect saved reading progress.
-2. **Reading-progress line** — shows the highest reading progress reached. It is monotonic during the visit and therefore does not retract when the reader scrolls upward. If the article is manually completed, it stays at 100% until the reader uses Reset & Recalculate.
+## Views
+- Articles and community posts expose real Firestore-backed view counters.
+- Signed-in users generate at most one counted view per content item per UTC day through a deterministic receipt.
+- New articles/posts start from zero rather than seeded fake view totals.
+- View counts are displayed across article/post surfaces where metadata is rendered.
 
-### Progress model
-
-- Current viewport position and persisted reading progress are intentionally separate.
-- The article endpoint is based on the real article-content start/end markers, excluding reactions, comments, metadata, related content and footer areas.
-- Automatic cloud checkpoints remain monotonic.
-- Manual completion remains sticky at 100%.
-- Reset removes the completion/progress document and allows automatic tracking to resume.
-- Layout changes from images, videos, fonts, resize and content height continue to trigger recalculation.
-
-### Existing platform functionality retained
-
-- Structured article editor with rich content blocks, links, buttons, images, code, callouts and video.
-- Table of contents with active section navigation and deep links.
-- Series library/detail pages, ordering, previous/next navigation and cloud-synced series progress.
-- Homepage/blog series discovery.
-- Account-based history, bookmarks/reading queue, dashboard and notification preferences.
-- Carousel image/canvas builder with Firebase synchronization.
-- Firebase-backed reactions, comments, likes and account identity.
-- Admin/moderator security model and Firestore protections.
-
-## Firebase / deployment
-
-No new Firestore permissions are required for V50. Existing reading-progress rules continue to protect account-owned progress documents.
-
-Deploy the rules currently included in this package whenever your Firebase project is behind the version in the ZIP.
+## Firebase
+Deploy the included `firestore.rules` before enabling the new settings, revision, draft, and view-sync behavior. Existing security boundaries are retained; new rules cover the UI theme preference and view-count updates.
 
 ## Validation
-
-- `ArticleView.tsx` TypeScript/JSX transpile validation: passed with zero diagnostics.
-- ZIP integrity: validated.
-- Full `npm run lint` / `npm run build` cannot be claimed in this environment because the supplied dependency installation is incomplete (`vite` is unavailable and TypeScript reports missing ambient type packages).
-
-## Manual acceptance test
-
-1. Open a long article at the top: blue line near 0%, reading line at the saved/highest progress.
-2. Scroll down: both advance.
-3. Scroll back up: blue line retracts; reading line does not.
-4. Reach the last actual article-content line: both can reach 100%; footer scrolling must not be required.
-5. Refresh: saved cloud progress remains.
-6. Mark complete: reading line stays at 100% while scrolling anywhere.
-7. Reset & Recalculate: completion lock is removed and automatic tracking resumes.
+Source files were checked for TypeScript/TSX transpilation and Firestore rule structural integrity. A full production build should be run in a normal dependency-complete environment.

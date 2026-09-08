@@ -239,7 +239,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       <p className="mt-2 text-sm text-neutral-600 line-clamp-2">{post.content}</p>
       <div className="mt-4 pt-4 border-t-2 border-neutral-100 flex justify-between font-mono text-xs text-neutral-500">
         <span>{formatDisplayDate(post.createdAt)}{(post as any).communityId ? ` · c/${(post as any).communitySlug || ''}` : ''}</span>
-        <div className="flex gap-4"><span>{post.upvotesCount || 0} Upvotes</span><span>{post.commentsCount || 0} Comments</span><span>{post.repostsCount || 0} Reposts</span></div>
+        <div className="flex gap-4"><span>{post.upvotesCount || 0} Upvotes</span><span>{Number(post.viewsCount || 0).toLocaleString()} VIEWS · {post.commentsCount || 0} Comments</span><span>{post.repostsCount || 0} Reposts</span></div>
       </div>
     </div>
   );
