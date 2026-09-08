@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { calculateArticleReadingTime } from '../lib/reading';
 import { Article, Category, SiteConfig, BentoLink, CarouselSlide, CarouselElement } from '../types';
 import { 
   X, 
@@ -755,7 +756,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         category: newCategory,
         tags: tagsArray.length ? tagsArray : ['Engineering'],
         publishedAt: editingPublishedAt || new Date().toISOString().split('T')[0],
-        readingTimeMinutes: Number(newReadingTime) || 5,
+        readingTimeMinutes: calculateArticleReadingTime(contentBlocks),
         coverImage: newCoverImage.trim() || 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1200&auto=format&fit=crop',
         coverImageAlt: newCoverAlt || newTitle,
         coverImageCaption: newCoverCaption,

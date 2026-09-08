@@ -1,7 +1,7 @@
 {
   "name": "OFFSCRPT",
-  "version": "v38",
-  "description": "OFFSCRPT v38: visual home carousel builder, focal-image cropping, overlay content elements, slide dots, stronger staff authentication boundaries, and privilege-escalation hardening.",
+  "version": "v45",
+  "description": "OFFSCRPT v45: production series experience, cloud reading progress, real engagement counts, automatic reading-time calculation, creator identity surfaces, and realtime synchronization.",
   "majorCapabilities": [
     "Unified Social / Community",
     "Cloud-synced moderation",
@@ -9,6 +9,11 @@
     "Direct messaging",
     "Community blogs and discussions",
     "Complete profile post history",
-    "Instagram social link configuration"
+    "Instagram social link configuration",
+    "Production Series Library and curriculum",
+    "Cloud reading progress and completion",
+    "Real article engagement metrics",
+    "Universal creator identity surfaces",
+    "Automatic structured-content reading-time calculation"
   ]
 }

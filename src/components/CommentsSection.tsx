@@ -7,6 +7,7 @@ import { getCommunityProfile } from '../lib/community';
 import { ArticleComment } from '../types';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { RichText } from './RichText';
+import { UserIdentity } from './UserIdentity';
 
 interface CommentsSectionProps {
   articleSlug: string;

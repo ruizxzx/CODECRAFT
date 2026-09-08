@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { calculateArticleReadingTime } from '../lib/reading';
 import { ArticleContentBlock, CommunityPost, CommunityUser } from '../types';
 import { createPost, updatePost, getPost, saveCommunityDraft, clearCommunityDraft } from '../lib/community';
 import { createCommunityPost, updateCommunityPost, SocialCommunity } from '../lib/social';
@@ -168,7 +169,7 @@ export const PublicBlogComposer: React.FC<Props> = ({
         coverImageCaption: coverImageCaption.trim().slice(0, 300),
         category: category.trim().slice(0, 80),
         tags: tags.split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 20),
-        readingTimeMinutes: readingTime,
+        readingTimeMinutes: calculateArticleReadingTime(blocks),
         contentBlocks: blocks,
         seriesId: seriesName.trim() ? seriesName.trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60) : '',
         seriesName: seriesName.trim(),

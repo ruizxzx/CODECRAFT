@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { PageView, SiteConfig, CommunityUser } from '../types';
 import { auth, loginWithGoogle, logout, ADMIN_EMAILS } from '../lib/firebase';
+import { useAuthUser } from '../lib/useAuthUser';
 import { subscribeUnreadNotificationCount } from '../lib/community';
-import { useAuthState } from 'react-firebase-hooks/auth';
 import { 
   Menu, 
   X, 
@@ -62,7 +62,8 @@ export const Header: React.FC<HeaderProps> = ({
   onCreateCommunityPost,
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [user, loading] = useAuthState(auth);
+  const user = useAuthUser();
+  const loading = !user && auth.currentUser === null;
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);

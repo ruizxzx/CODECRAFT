@@ -336,6 +336,23 @@ service cloud.firestore {
       allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
 
+    // Device-independent article reading checkpoints. One document per article per user.
+    match /users/{userId}/readingProgress/{articleSlug} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && incoming().slug == articleSlug
+        && incoming().percent is number && incoming().percent >= 0 && incoming().percent <= 100
+        && incoming().completed is bool
+        && incoming().updatedAt is timestamp;
+      allow update: if isSignedIn() && request.auth.uid == userId
+        && incoming().slug == existing().slug
+        && incoming().percent is number && incoming().percent >= 0 && incoming().percent <= 100
+        && incoming().completed is bool
+        && incoming().updatedAt is timestamp
+        && incoming().diff(existing()).affectedKeys().hasOnly(['slug','percent','completed','lastSection','updatedAt']);
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
     // POST VALIDATION
     function isValidPost(data) {
       return data.keys().hasAll(["type", "title", "content", "authorId", "authorUsername", "upvotesCount", "downvotesCount", "commentsCount", "createdAt", "updatedAt"])
@@ -478,6 +495,11 @@ service cloud.firestore {
 
     match /series/{seriesId} {
       allow read: if true;
+      match /followers/{userId} {
+        allow read: if true;
+        allow create: if isSignedIn() && request.auth.uid == userId && incoming().userId == request.auth.uid && incoming().createdAt is timestamp;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
       allow create: if isSignedIn()
         && incoming().ownerId == request.auth.uid
         && incoming().title is string && incoming().title.size() <= 160

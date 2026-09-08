@@ -540,6 +540,7 @@ export default function App() {
                   allArticles={articles}
                   onBack={() => navigateTo('blog')}
                   onSelectArticle={(slug) => navigateTo('article', slug)}
+                  onOpenSeries={(seriesId) => navigateTo('series', seriesId)}
                   onOpenAuthorProfile={(username) => navigateTo('community_profile', username)}
                   isSaved={savedSlugs.includes(activeArticle.slug)}
                   onToggleSave={handleToggleSave}

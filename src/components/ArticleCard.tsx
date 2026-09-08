@@ -1,6 +1,7 @@
 import { VerifiedBadge } from './VerifiedBadge';
 import React from 'react';
 import { Article, Category, SiteConfig } from '../types';
+import { UserIdentity } from './UserIdentity';
 import { Clock, Calendar, Bookmark, ArrowUpRight, Sparkles } from 'lucide-react';
 
 interface ArticleCardProps {

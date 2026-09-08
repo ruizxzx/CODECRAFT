@@ -12,3 +12,16 @@ No new Firestore index is required for V37.
 
 ## Data
 Existing posts, articles, communities, profiles, discussions, and messages are preserved. V37 does not run a data migration.
+
+## V45 rule changes
+Deploy the included `firestore.rules` before using V45 reading-progress and series-follow features.
+
+Added private account-scoped progress documents at:
+`users/{uid}/readingProgress/{articleSlug}`
+
+Added series follower membership at:
+`series/{seriesId}/followers/{uid}`
+
+The progress collection is not publicly readable. Series follower documents are readable for aggregate-count queries but can only be created/deleted by the corresponding signed-in account.
+
+No rules were added that expose per-user article-view receipts.

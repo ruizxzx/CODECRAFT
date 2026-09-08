@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   ArrowRight, 
   Terminal, 
@@ -11,6 +11,8 @@ import {
   ArrowUpRight
 } from 'lucide-react';
 import { PageView, SiteConfig } from '../types';
+import { collection, getCountFromServer } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface HeroProps {
   onNavigate: (page: PageView) => void;
@@ -21,6 +23,8 @@ interface HeroProps {
 export const Hero: React.FC<HeroProps> = ({ onNavigate, postsCount, siteConfig }) => {
   const [showTerminal, setShowTerminal] = useState(false);
   const [activeTab, setActiveTab] = useState<'stack' | 'status' | 'manifesto'>('stack');
+  const [readerCount, setReaderCount] = useState<number | null>(null);
+  useEffect(() => { let active = true; getCountFromServer(collection(db, 'users')).then(s => { if (active) setReaderCount(s.data().count); }).catch(() => {}); return () => { active = false; }; }, []);
 
   return (
     <section 
@@ -100,7 +104,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, postsCount, siteConfig }
                 className="bg-[var(--color-accent)] neo-border p-6 sm:p-7 neo-shadow rotate-3 hover:rotate-0 transition-transform cursor-pointer flex flex-col items-center min-w-[130px] sm:min-w-[150px]"
               >
                 <span className="text-4xl sm:text-5xl font-black text-black leading-none">
-                  {postsCount > 0 ? postsCount : 142}
+                  {postsCount}
                 </span>
                 <span className="uppercase font-bold text-xs text-black mt-2 tracking-wider">
                   Articles
@@ -110,7 +114,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, postsCount, siteConfig }
               {/* Green Card */}
               <div className="bg-[var(--color-success)] neo-border p-6 sm:p-7 neo-shadow -rotate-6 hover:rotate-0 transition-transform flex flex-col items-center min-w-[130px] sm:min-w-[150px]">
                 <span className="text-4xl sm:text-5xl font-black text-black leading-none">
-                  24k
+                  {readerCount === null ? '—' : readerCount.toLocaleString()}
                 </span>
                 <span className="uppercase font-bold text-xs text-black mt-2 tracking-wider">
                   Readers

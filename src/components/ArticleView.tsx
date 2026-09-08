@@ -29,10 +29,12 @@ import { ArticleCard } from './ArticleCard';
 import { CommentsSection } from './CommentsSection';
 import { RichText } from './RichText';
 import { auth, loginWithGoogle } from '../lib/firebase';
+import { useAuthUser } from '../lib/useAuthUser';
 import { getArticleLikeStatus, toggleArticleLike, getPost, getCommunityProfile } from '../lib/community';
 import { recordArticleView, ARTICLE_REACTIONS, getArticleReaction, setArticleReaction, getSeriesArticles } from '../lib/cms';
+import { calculateArticleReadingTime, getArticleReadingProgress, saveArticleReadingProgress, ArticleEngagementStats, subscribeArticleEngagementStats } from '../lib/reading';
+import { UserIdentity } from './UserIdentity';
 import type { ArticleReaction } from '../lib/cms';
-import { useAuthState } from 'react-firebase-hooks/auth';
 
 function slugifyHeading(value: string): string {
   return String(value || 'section')
@@ -70,6 +72,7 @@ interface ArticleViewProps {
   allArticles: Article[];
   onBack: () => void;
   onSelectArticle: (slug: string) => void;
+  onOpenSeries?: (seriesId: string) => void;
   onOpenAuthorProfile?: (username: string) => void;
   isSaved: boolean;
   onToggleSave: (slug: string) => void;
@@ -81,6 +84,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   allArticles,
   onBack,
   onSelectArticle,
+  onOpenSeries,
   onOpenAuthorProfile,
   isSaved,
   onToggleSave,
@@ -88,17 +92,30 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 }) => {
   const [copiedCodeIdx, setCopiedCodeIdx] = useState<number | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [claps, setClaps] = useState(article.clapsCount || 42);
+  const [engagement, setEngagement] = useState<ArticleEngagementStats>({ likes: 0, applauds: 0, comments: 0, reactions: {} });
+  const [savedCloudProgress, setSavedCloudProgress] = useState(0);
+  const [resumeVisible, setResumeVisible] = useState(false);
+  const lastSavedProgressRef = React.useRef(-1);
+  const saveTimerRef = React.useRef<number | null>(null);
   const [hasClapped, setHasClapped] = useState(false);
   const [fontSize, setFontSize] = useState<'normal' | 'large'>('normal');
   const [scrollProgress, setScrollProgress] = useState(0);
-  const [user] = useAuthState(auth);
+  const user = useAuthUser();
   const [reaction, setReaction] = useState<ArticleReaction|null>(null);
   const [reactionBusy, setReactionBusy] = useState(false);
   const [seriesArticles, setSeriesArticles] = useState<Article[]>([]);
   const [resolvedOriginalAuthor, setResolvedOriginalAuthor] = useState<any>(article.originalAuthor || article.author);
 
+  const toc = article.content
+    .map((b,i)=>({ b, i, id: `article-block-${i}-${slugifyHeading(String(b.content || 'section'))}` }))
+    .filter(x=>x.b.type==='heading2'||x.b.type==='heading3');
+  const [activeTocId, setActiveTocId] = useState<string>('');
+  const [tocOpen, setTocOpen] = useState(true);
+  const [copiedTocId, setCopiedTocId] = useState<string | null>(null);
+
   useEffect(() => { void recordArticleView(article.slug, user?.uid); }, [article.slug, user?.uid]);
+  useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
+  useEffect(() => { let active = true; if (!user) { setSavedCloudProgress(0); return; } getArticleReadingProgress(article.slug).then(p => { if (active && p) { setSavedCloudProgress(p.percent); setResumeVisible(p.percent >= 10 && p.percent < 90); } }).catch(() => {}); return () => { active = false; }; }, [article.slug, user]);
 
   useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
   useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
@@ -157,18 +174,36 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     }
   }, [article.slug, user]);
 
-  // Track reading progress
+  // Track reading progress locally and in the signed-in account. Writes are debounced and only sent when progress moves meaningfully.
   useEffect(() => {
     const handleScroll = () => {
       const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (totalHeight > 0) {
-        const currentProgress = (window.scrollY / totalHeight) * 100;
-        setScrollProgress(Math.min(100, Math.max(0, currentProgress)));
+      if (totalHeight <= 0) return;
+      const currentProgress = Math.min(100, Math.max(0, (window.scrollY / totalHeight) * 100));
+      setScrollProgress(currentProgress);
+      if (user && Math.abs(currentProgress - lastSavedProgressRef.current) >= 5) {
+        lastSavedProgressRef.current = currentProgress;
+        if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = window.setTimeout(() => {
+          void saveArticleReadingProgress(article.slug, currentProgress, activeTocId || '', currentProgress >= 90).catch(() => {});
+        }, 900);
       }
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', handleScroll); if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current); };
+  }, [article.slug, user, activeTocId]);
+
+  useEffect(() => {
+    if (!user || scrollProgress < 95) return;
+    void saveArticleReadingProgress(article.slug, 100, activeTocId || '', true).catch(() => {});
+  }, [scrollProgress, article.slug, user, activeTocId]);
+
+  const resumeArticle = () => {
+    const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
+    if (totalHeight > 0 && savedCloudProgress > 0) window.scrollTo({ top: totalHeight * (savedCloudProgress / 100), behavior: 'smooth' });
+    setResumeVisible(false);
+  };
 
   const handleCopyCode = (code: string, idx: number) => {
     navigator.clipboard.writeText(code);
@@ -198,7 +233,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     try {
       const newLiked = await toggleArticleLike(article.slug, currentUser.uid, hasClapped);
       setHasClapped(newLiked);
-      setClaps(prev => (newLiked ? prev + 1 : Math.max(0, prev - 1)));
+      setEngagement(prev => ({ ...prev, likes: Math.max(0, prev.likes + (newLiked ? 1 : -1)), applauds: Math.max(0, prev.applauds + (newLiked ? 1 : -1)) }));
     } catch (err) {
       console.error("Error liking article:", err);
     }
@@ -211,13 +246,6 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     .sort((x,y) => y.score - x.score || new Date(y.a.publishedAt).getTime() - new Date(x.a.publishedAt).getTime())
     .slice(0, 3)
     .map(x=>x.a);
-  const toc = article.content
-    .map((b,i)=>({ b, i, id: `article-block-${i}-${slugifyHeading(String(b.content || 'section'))}` }))
-    .filter(x=>x.b.type==='heading2'||x.b.type==='heading3');
-  const [activeTocId, setActiveTocId] = useState<string>('');
-  const [tocOpen, setTocOpen] = useState(true);
-  const [copiedTocId, setCopiedTocId] = useState<string | null>(null);
-
   useEffect(() => {
     if (!toc.length) return;
     const hash = window.location.hash.replace(/^#/, '');
@@ -352,20 +380,16 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Author Metadata Strip */}
         <div className="p-4 bg-white neo-border neo-shadow mb-10 flex flex-wrap items-center justify-between gap-4">
-          <button type="button" onClick={() => { const authorHandle = resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername; if (authorHandle && onOpenAuthorProfile) onOpenAuthorProfile(authorHandle); }} className="flex items-center space-x-3.5 text-left">
-            <img
-              src={resolvedOriginalAuthor?.avatar || article.author.avatar}
-              alt={resolvedOriginalAuthor?.name || article.author.name}
-              className="w-12 h-12 neo-border-2 object-cover"
-            />
-            <div>
-              <div className="font-display font-black text-base text-black flex items-center space-x-1.5">
-                <span className="inline-flex items-center gap-1">{resolvedOriginalAuthor?.name || article.author.name}<VerifiedBadge verified={resolvedOriginalAuthor?.isVerified ?? article.author.isVerified} color={resolvedOriginalAuthor?.verificationColor || article.author.verificationColor} className="w-4 h-4" /></span>
-                <span className="text-[11px] font-mono font-bold bg-[var(--color-success)] text-black px-1.5 py-0.2 border-2 border-black">AUTHOR</span>
-              </div>
-              <div className="font-mono text-xs text-neutral-500">@{resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername}</div>
-            </div>
-          </button>
+          <UserIdentity
+            name={resolvedOriginalAuthor?.name || article.author.name}
+            username={resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername}
+            avatar={resolvedOriginalAuthor?.avatar || article.author.avatar}
+            uid={resolvedOriginalAuthor?.uid || article.author.uid}
+            verified={resolvedOriginalAuthor?.isVerified ?? article.author.isVerified}
+            verificationColor={resolvedOriginalAuthor?.verificationColor || article.author.verificationColor}
+            size="lg"
+            onClick={() => { const authorHandle = resolvedOriginalAuthor?.username || article.author.username || siteConfig.authorProfileUsername; if (authorHandle && onOpenAuthorProfile) onOpenAuthorProfile(authorHandle); }}
+          />
 
           <div className="flex items-center space-x-4 text-xs font-mono font-bold text-neutral-700">
             <div className="flex items-center space-x-1.5">
@@ -375,7 +399,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             <span>•</span>
             <div className="flex items-center space-x-1.5">
               <Clock className="w-4 h-4 text-black" />
-              <span>{article.readingTimeMinutes} MIN READ</span>
+              <span>{calculateArticleReadingTime(article)} MIN READ</span>
             </div>
           </div>
         </div>
@@ -405,6 +429,13 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           const progress = idx >= 0 ? Math.round(((idx + 1) / seriesArticles.length) * 100) : 0;
           return <div className="mb-10 border-2 border-black bg-white p-4"><div className="flex justify-between font-mono text-[10px] uppercase"><span>PART {idx + 1} OF {seriesArticles.length}</span><span>{progress}% COMPLETE</span></div><div className="h-3 border-2 border-black mt-2 bg-white"><div className="h-full bg-[var(--color-primary)]" style={{width:`${progress}%`}} /></div><div className="grid grid-cols-2 gap-2 mt-3"><button disabled={!prev} onClick={()=>prev&&onSelectArticle(prev.slug)} className="border-2 border-black p-3 text-left font-mono text-[10px] disabled:opacity-30">← PREVIOUS<br/><b className="font-display text-sm">{prev?.title || 'START'}</b></button><button disabled={!next} onClick={()=>next&&onSelectArticle(next.slug)} className="border-2 border-black p-3 text-right font-mono text-[10px] disabled:opacity-30">NEXT →<br/><b className="font-display text-sm">{next?.title || 'END'}</b></button></div></div>;
         })()}
+
+        {resumeVisible && user && (
+          <div className="mb-6 border-4 border-black bg-[var(--color-success)] p-4 neo-shadow flex flex-wrap items-center justify-between gap-3">
+            <div><div className="font-mono text-[10px] font-black uppercase">Cloud reading progress</div><div className="font-display font-black text-xl uppercase mt-1">Resume at {savedCloudProgress}%</div></div>
+            <button type="button" onClick={resumeArticle} className="border-2 border-black bg-black text-white px-4 py-2 font-mono text-[10px] font-black uppercase">RESUME READING</button>
+          </div>
+        )}
 
         {toc.length > 0 && (
           <nav className="mb-10 border-4 border-black bg-neutral-50 neo-shadow" aria-label="Table of contents">
@@ -641,8 +672,28 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         <div className="my-10 border-4 border-black bg-white p-5 neo-shadow">
           <div className="font-display font-black uppercase mb-3 flex items-center gap-2"><HeartPulse className="w-4 h-4"/> Reader reactions</div>
           <div className="flex flex-wrap gap-2">
-            {ARTICLE_REACTIONS.map((r)=><button key={r} disabled={reactionBusy} onClick={async()=>{let u=user;if(!u){try{u=await loginWithGoogle();}catch{return}} if(!u)return;setReactionBusy(true);try{const next=reaction===r?null:r;await setArticleReaction(article.slug,u.uid,next);setReaction(next);}catch(e){console.warn(e)}finally{setReactionBusy(false)}}} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${reaction===r?'bg-[var(--color-primary)]':'bg-white'}`}>{r}</button>)}
+            {ARTICLE_REACTIONS.map((r)=><button key={r} disabled={reactionBusy} onClick={async()=>{let u=user;if(!u){try{u=await loginWithGoogle();}catch{return}} if(!u)return;setReactionBusy(true);try{const previous=reaction;const next=reaction===r?null:r;await setArticleReaction(article.slug,u.uid,next);setReaction(next);setEngagement(prev=>{const counts={...prev.reactions};if(previous) counts[previous]=Math.max(0,(counts[previous]||0)-1);if(next) counts[next]=(counts[next]||0)+1;return {...prev,reactions:counts};});}catch(e){console.warn(e)}finally{setReactionBusy(false)}}} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${reaction===r?'bg-[var(--color-primary)]':'bg-white'}`}>{r} <span className="ml-1 opacity-70">{engagement.reactions[r]||0}</span></button>)}
           </div>
+        </div>
+
+        {article.seriesId && seriesArticles.length > 0 && (() => {
+          const idx = seriesArticles.findIndex(x => x.slug === article.slug);
+          const next = idx >= 0 && idx < seriesArticles.length - 1 ? seriesArticles[idx + 1] : null;
+          return <div className="my-12 border-4 border-black bg-[var(--color-primary)] p-5 neo-shadow-lg">
+            <div className="font-mono text-[10px] font-black uppercase">{article.seriesName || 'SERIES'} · PART {Math.max(1,idx+1)} / {seriesArticles.length}</div>
+            <div className="font-display font-black text-2xl uppercase mt-1">{next ? `Next: ${next.title}` : 'You reached the end.'}</div>
+            <div className="flex flex-wrap gap-2 mt-4">
+              {next && <button onClick={()=>onSelectArticle(next.slug)} className="border-2 border-black bg-black text-white px-4 py-3 font-mono text-[10px] font-black uppercase">NEXT PART →</button>}
+              <button onClick={()=>onBack} className="border-2 border-black bg-white text-black px-4 py-3 font-mono text-[10px] font-black uppercase">VIEW ALL SERIES</button>
+            </div>
+          </div>;
+        })()}
+
+        <div className="mb-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">APPLAUSE</div><div className="font-display font-black text-xl">{engagement.applauds}</div></div>
+          <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">REACTIONS</div><div className="font-display font-black text-xl">{Object.values(engagement.reactions).reduce<number>((a,b)=>a+Number(b||0),0)}</div></div>
+          <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">COMMENTS</div><div className="font-display font-black text-xl">{engagement.comments}</div></div>
+          <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">READ TIME</div><div className="font-display font-black text-xl">{calculateArticleReadingTime(article)}m</div></div>
         </div>
 
         {/* Tags list */}
@@ -673,7 +724,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               <span>APPLAUD ESSAY</span>
             </button>
             <div className="font-mono text-sm font-bold text-neutral-800">
-              <span className="text-xl font-black text-black">{claps}</span> claps
+              <span className="text-xl font-black text-black">{engagement.applauds}</span> applauds
             </div>
           </div>
 

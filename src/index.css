@@ -216,3 +216,8 @@ html, body, #root {
     max-width: calc(100vw - 16px);
   }
 }
+
+@media print {
+  .print\:hidden { display: none !important; }
+  body { background: white !important; }
+}

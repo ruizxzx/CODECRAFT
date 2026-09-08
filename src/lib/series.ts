@@ -1,4 +1,4 @@
-import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, getCountFromServer, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
 import { Article, Series } from '../types';
 
@@ -15,6 +15,39 @@ export async function getSeriesList(limitCount = 50): Promise<Series[]> {
     const snap = await getDocs(query(collection(db, 'series'), limit(limitCount)));
     return snap.docs.map(d => ({ id: d.id, ...d.data() } as Series));
   }
+}
+
+
+export function subscribeSeriesList(callback: (series: Series[]) => void): () => void {
+  const q = query(collection(db, 'series'), orderBy('updatedAt', 'desc'), limit(100));
+  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Series))), async () => {
+    try { callback(await getSeriesList(100)); } catch { callback([]); }
+  });
+}
+
+export async function toggleSeriesFollow(seriesId: string, userId: string): Promise<boolean> {
+  if (!auth.currentUser || auth.currentUser.uid !== userId) throw new Error('Sign in required.');
+  const ref = doc(db, 'series', seriesId, 'followers', userId);
+  const existing = await getDoc(ref);
+  if (existing.exists()) { await deleteDoc(ref); return false; }
+  await setDoc(ref, { userId, createdAt: serverTimestamp() });
+  return true;
+}
+
+export async function getSeriesFollowStatus(seriesId: string, userId: string): Promise<boolean> {
+  if (!userId) return false;
+  const snap = await getDoc(doc(db, 'series', seriesId, 'followers', userId));
+  return snap.exists();
+}
+
+
+export function subscribeSeriesFollowerCount(seriesId: string, callback: (count: number) => void): () => void {
+  if (!seriesId) { callback(0); return () => {}; }
+  return onSnapshot(collection(db, 'series', seriesId, 'followers'), snap => callback(snap.size), () => callback(0));
+}
+
+export async function getSeriesFollowerCount(seriesId: string): Promise<number> {
+  try { return (await getCountFromServer(collection(db, 'series', seriesId, 'followers'))).data().count; } catch { return 0; }
 }
 
 export async function getSeriesArticlesFromAllArticles(seriesId: string, articles: Article[]): Promise<Article[]> {
