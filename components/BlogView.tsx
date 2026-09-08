@@ -87,28 +87,50 @@ export const BlogView: React.FC<BlogViewProps> = ({
 
   return (
     <div className="w-full bg-white min-h-screen pb-20">
-      {/* Editorial Header Section */}
-      <section className="bg-[var(--color-primary)] border-b-4 border-black py-12 sm:py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <span className="px-3 py-1 bg-black text-white font-mono text-xs font-bold uppercase">
-              THE DISPATCHES ARCHIVE
-            </span>
-            <span className="px-2.5 py-1 bg-white text-black neo-border-2 font-display font-black text-xs uppercase neo-shadow-sm">
-              {articles.length} ESSAYS PUBLISHED
-            </span>
-          </div>
+      {/* Editorial Header Section — fully CMS controlled, with a live published count */}
+      {(() => {
+        const header = siteConfig.blogHeader || {
+          eyebrow: 'THE DISPATCHES ARCHIVE',
+          title: 'ENGINEERING & ARCHITECTURE',
+          description: 'Rigorous, hands-on writing dissecting modern web technologies, AI agent architectures, distributed database internals, and developer productivity systems.',
+          backgroundColor: siteConfig.themePrimaryColor || '#FFD600',
+          textColor: '#000000',
+          showEssayCount: true,
+          essayCountLabel: 'ESSAYS PUBLISHED'
+        };
+        const publishedCount = articles.filter(a => a.isPublished !== false && a.mainPublicationStatus !== 'unpublished').length;
+        return (
+          <section
+            className="border-b-4 border-black py-12 sm:py-16"
+            style={{ backgroundColor: header.backgroundColor, color: header.textColor }}
+          >
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                {header.eyebrow && (
+                  <span className="px-3 py-1 bg-black text-white font-mono text-xs font-bold uppercase">
+                    {header.eyebrow}
+                  </span>
+                )}
+                {header.showEssayCount !== false && (
+                  <span className="px-2.5 py-1 bg-white text-black neo-border-2 font-display font-black text-xs uppercase neo-shadow-sm">
+                    {publishedCount} {header.essayCountLabel || 'ESSAYS PUBLISHED'}
+                  </span>
+                )}
+              </div>
 
-          <h1 className="font-display font-black text-4xl sm:text-5xl md:text-6xl uppercase tracking-tighter text-black mb-4">
-            ENGINEERING &amp; ARCHITECTURE
-          </h1>
+              <h1 className="font-display font-black text-4xl sm:text-5xl md:text-6xl uppercase tracking-tighter mb-4">
+                {header.title}
+              </h1>
 
-          <p className="font-sans text-lg sm:text-xl text-neutral-900 max-w-3xl leading-relaxed font-medium">
-            Rigorous, hands-on writing dissecting modern web technologies, AI agent architectures, 
-            distributed database internals, and developer productivity systems.
-          </p>
-        </div>
-      </section>
+              {header.description && (
+                <p className="font-sans text-lg sm:text-xl max-w-3xl leading-relaxed font-medium">
+                  {header.description}
+                </p>
+              )}
+            </div>
+          </section>
+        );
+      })()}
 
       <SeriesStrip articles={articles} onNavigate={onNavigate} compact />
 

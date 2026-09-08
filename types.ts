@@ -122,6 +122,30 @@ export interface NavigationItemConfig {
   visible?: boolean;
 }
 
+export interface MarqueeItem {
+  id: string;
+  text: string;
+  url?: string;
+}
+
+export interface FooterLink {
+  id: string;
+  label: string;
+  type: 'internal' | 'external' | 'rss' | 'topic';
+  target: string;
+  visible?: boolean;
+}
+
+export interface BlogHeaderConfig {
+  eyebrow: string;
+  title: string;
+  description: string;
+  backgroundColor: string;
+  textColor: string;
+  showEssayCount: boolean;
+  essayCountLabel: string;
+}
+
 export interface SiteConfig {
   logoImageUrl: string;
   logoPart1: string;
@@ -147,6 +171,19 @@ export interface SiteConfig {
   themeSuccessColor?: string;
   readingProgressPageColor?: string;
   readingProgressPersistentColor?: string;
+
+  // Global site presentation controls
+  marqueeItems?: MarqueeItem[];
+  marqueeSpeedSeconds?: number;
+  marqueePauseOnHover?: boolean;
+  blogHeader?: BlogHeaderConfig;
+  footerNavigationTitle?: string;
+  footerTopicsTitle?: string;
+  footerHubTitle?: string;
+  footerNavigationLinks?: FooterLink[];
+  footerHubLinks?: FooterLink[];
+  footerTopicCategories?: string[];
+  footerBottomRightText?: string;
   
   // Footer
   footerNewsletterTitle?: string;

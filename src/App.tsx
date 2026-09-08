@@ -820,6 +820,7 @@ export default function App() {
         onOpenCms={() => setIsCmsOpen(true)}
         onOpenRssModal={() => setIsRssOpen(true)}
         siteConfig={siteConfig}
+        articles={articles}
       />
     </div>
     </>

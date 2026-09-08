@@ -2,7 +2,7 @@ import { notifyToast } from '../lib/toast';
 import React, { useState, useEffect, useRef } from 'react';
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { calculateArticleReadingTime } from '../lib/reading';
-import { Article, Category, SiteConfig, BentoLink, CarouselSlide, CarouselElement } from '../types';
+import { Article, Category, SiteConfig, BentoLink, CarouselSlide, CarouselElement, MarqueeItem, FooterLink, BlogHeaderConfig, PageView } from '../types';
 import { 
   X, 
   PlusCircle, 
@@ -402,7 +402,28 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [footerNewsletterTitle, setFooterNewsletterTitle] = useState(siteConfig.footerNewsletterTitle || '');
   const [footerNewsletterSubtitle, setFooterNewsletterSubtitle] = useState(siteConfig.footerNewsletterSubtitle || '');
   const [footerBrandStatement, setFooterBrandStatement] = useState(siteConfig.footerBrandStatement || '');
-  
+
+  const defaultBlogHeader: BlogHeaderConfig = {
+    eyebrow: 'THE DISPATCHES ARCHIVE',
+    title: 'ENGINEERING & ARCHITECTURE',
+    description: 'Rigorous, hands-on writing dissecting modern web technologies, AI agent architectures, distributed database internals, and developer productivity systems.',
+    backgroundColor: themePrimaryColor || '#FFD600',
+    textColor: '#000000',
+    showEssayCount: true,
+    essayCountLabel: 'ESSAYS PUBLISHED'
+  };
+  const [marqueeItems, setMarqueeItems] = useState<MarqueeItem[]>(siteConfig.marqueeItems || []);
+  const [marqueeSpeedSeconds, setMarqueeSpeedSeconds] = useState(siteConfig.marqueeSpeedSeconds || 25);
+  const [marqueePauseOnHover, setMarqueePauseOnHover] = useState(siteConfig.marqueePauseOnHover !== false);
+  const [blogHeader, setBlogHeader] = useState<BlogHeaderConfig>(siteConfig.blogHeader || defaultBlogHeader);
+  const [footerNavigationTitle, setFooterNavigationTitle] = useState(siteConfig.footerNavigationTitle || 'NAVIGATION');
+  const [footerTopicsTitle, setFooterTopicsTitle] = useState(siteConfig.footerTopicsTitle || 'CURATED TOPICS');
+  const [footerHubTitle, setFooterHubTitle] = useState(siteConfig.footerHubTitle || 'PUBLICATION HUB');
+  const [footerNavigationLinks, setFooterNavigationLinks] = useState<FooterLink[]>(siteConfig.footerNavigationLinks || []);
+  const [footerHubLinks, setFooterHubLinks] = useState<FooterLink[]>(siteConfig.footerHubLinks || []);
+  const [footerTopicCategories, setFooterTopicCategories] = useState<string[]>(siteConfig.footerTopicCategories || []);
+  const [footerBottomRightText, setFooterBottomRightText] = useState(siteConfig.footerBottomRightText || 'HIGH DENSITY SPECIFICATION');
+
   const [contactTitle, setContactTitle] = useState(siteConfig.contactTitle || '');
   const [contactSubtitle, setContactSubtitle] = useState(siteConfig.contactSubtitle || '');
   const [contactEmail, setContactEmail] = useState(siteConfig.contactEmail || '');
@@ -444,6 +465,17 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setFooterNewsletterTitle(siteConfig.footerNewsletterTitle || '');
     setFooterNewsletterSubtitle(siteConfig.footerNewsletterSubtitle || '');
     setFooterBrandStatement(siteConfig.footerBrandStatement || '');
+    setMarqueeItems(siteConfig.marqueeItems || []);
+    setMarqueeSpeedSeconds(siteConfig.marqueeSpeedSeconds || 25);
+    setMarqueePauseOnHover(siteConfig.marqueePauseOnHover !== false);
+    setBlogHeader(siteConfig.blogHeader || defaultBlogHeader);
+    setFooterNavigationTitle(siteConfig.footerNavigationTitle || 'NAVIGATION');
+    setFooterTopicsTitle(siteConfig.footerTopicsTitle || 'CURATED TOPICS');
+    setFooterHubTitle(siteConfig.footerHubTitle || 'PUBLICATION HUB');
+    setFooterNavigationLinks(siteConfig.footerNavigationLinks || []);
+    setFooterHubLinks(siteConfig.footerHubLinks || []);
+    setFooterTopicCategories(siteConfig.footerTopicCategories || []);
+    setFooterBottomRightText(siteConfig.footerBottomRightText || 'HIGH DENSITY SPECIFICATION');
     setContactTitle(siteConfig.contactTitle || '');
     setContactSubtitle(siteConfig.contactSubtitle || '');
     setContactEmail(siteConfig.contactEmail || '');
@@ -480,6 +512,29 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     } catch (err: any) { notifyToast(err?.message || 'Lookup failed'); }
   };
 
+  const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const updateFooterLink = (group: 'nav' | 'hub', id: string, patch: Partial<FooterLink>) => {
+    const setter = group === 'nav' ? setFooterNavigationLinks : setFooterHubLinks;
+    setter(prev => prev.map(link => link.id === id ? { ...link, ...patch } : link));
+  };
+  const removeFooterLink = (group: 'nav' | 'hub', id: string) => {
+    const setter = group === 'nav' ? setFooterNavigationLinks : setFooterHubLinks;
+    setter(prev => prev.filter(link => link.id !== id));
+  };
+  const addFooterLink = (group: 'nav' | 'hub') => {
+    const newLink: FooterLink = group === 'nav'
+      ? { id: makeId('footer-nav'), label: 'New Link', type: 'internal', target: 'home', visible: true }
+      : { id: makeId('footer-hub'), label: 'New Channel', type: 'external', target: 'https://', visible: true };
+    const setter = group === 'nav' ? setFooterNavigationLinks : setFooterHubLinks;
+    setter(prev => [...prev, newLink]);
+  };
+  const handleAddMarquee = () => setMarqueeItems(prev => [...prev, { id: makeId('marquee'), text: 'NEW MARQUEE MESSAGE' }]);
+  const moveMarquee = (index: number, direction: -1 | 1) => setMarqueeItems(prev => {
+    const next = [...prev]; const target = index + direction;
+    if (target < 0 || target >= next.length) return prev;
+    [next[index], next[target]] = [next[target], next[index]]; return next;
+  });
+
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingConfig(true);
@@ -498,6 +553,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         console.warn('Author profile/content sync deferred; saving site config anyway:', authorSyncError);
       }
       const updated: SiteConfig = {
+        ...siteConfig,
         logoImageUrl,
         logoPart1,
         logoPart2,
@@ -519,6 +575,25 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         footerNewsletterTitle,
         footerNewsletterSubtitle,
         footerBrandStatement,
+        marqueeItems: marqueeItems.map(item => ({ ...item, text: item.text.trim() })).filter(item => item.text),
+        marqueeSpeedSeconds: Math.max(8, Number(marqueeSpeedSeconds) || 25),
+        marqueePauseOnHover,
+        blogHeader: {
+          ...blogHeader,
+          eyebrow: blogHeader.eyebrow.trim(),
+          title: blogHeader.title.trim(),
+          description: blogHeader.description.trim(),
+          backgroundColor: blogHeader.backgroundColor || themePrimaryColor || '#FFD600',
+          textColor: blogHeader.textColor || '#000000',
+          essayCountLabel: blogHeader.essayCountLabel.trim() || 'ESSAYS PUBLISHED'
+        },
+        footerNavigationTitle: footerNavigationTitle.trim() || 'NAVIGATION',
+        footerTopicsTitle: footerTopicsTitle.trim() || 'CURATED TOPICS',
+        footerHubTitle: footerHubTitle.trim() || 'PUBLICATION HUB',
+        footerNavigationLinks: footerNavigationLinks.map(link => ({ ...link, label: link.label.trim(), target: link.target.trim() })).filter(link => link.label && link.target),
+        footerHubLinks: footerHubLinks.map(link => ({ ...link, label: link.label.trim(), target: link.target.trim() })).filter(link => link.label && link.target),
+        footerTopicCategories: footerTopicCategories.map(x => x.trim()).filter(Boolean),
+        footerBottomRightText: footerBottomRightText.trim(),
         contactTitle,
         contactSubtitle,
         contactEmail,
@@ -1361,6 +1436,156 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                     <div className="flex flex-wrap gap-2">
                       <button type="button" disabled={isSavingVerification} onClick={() => handleSetVerification(true)} className="px-5 py-2 bg-[var(--color-primary)] border-2 border-black font-mono text-xs font-black uppercase flex items-center gap-2"><BadgeCheck className="w-4 h-4" /> Verify User</button>
                       <button type="button" disabled={isSavingVerification} onClick={() => handleSetVerification(false)} className="px-5 py-2 bg-white border-2 border-black text-red-600 font-mono text-xs font-black uppercase">Remove Verification</button>
+                    </div>
+                  </div>
+
+                  {/* LOOPING TOP BAR / MARQUEE */}
+                  <div className="space-y-4 p-4 border-2 border-black bg-[#0A0A0A] text-white">
+                    <div className="flex items-center justify-between gap-3 border-b-2 border-white/30 pb-2">
+                      <div>
+                        <h4 className="font-display font-black text-lg uppercase">Looping Top Bar</h4>
+                        <p className="font-mono text-[10px] text-neutral-300">Control every message shown in the moving black ticker. Add, remove, reorder, and optionally make any item clickable.</p>
+                      </div>
+                      <button type="button" onClick={handleAddMarquee} className="border-2 border-white bg-[var(--color-primary)] text-black px-3 py-2 font-mono text-[10px] font-black uppercase">+ ADD MESSAGE</button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="border border-white/30 p-2 font-mono text-[10px] uppercase">
+                        Speed (seconds / loop)
+                        <input type="number" min={8} max={120} value={marqueeSpeedSeconds} onChange={e => setMarqueeSpeedSeconds(Number(e.target.value))} className="w-full mt-1 px-2 py-2 bg-white text-black border-2 border-black font-mono text-xs" />
+                      </label>
+                      <label className="border border-white/30 p-2 font-mono text-[10px] uppercase flex items-center gap-2">
+                        <input type="checkbox" checked={marqueePauseOnHover} onChange={e => setMarqueePauseOnHover(e.target.checked)} /> PAUSE WHEN HOVERED
+                      </label>
+                    </div>
+                    <div className="space-y-2">
+                      {marqueeItems.length === 0 && <div className="border border-dashed border-white/40 p-4 font-mono text-xs text-neutral-300">No messages configured. Add your first ticker message.</div>}
+                      {marqueeItems.map((item, index) => (
+                        <div key={item.id} className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_1fr_auto] gap-2 items-center border border-white/20 p-2">
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => moveMarquee(index, -1)} disabled={index === 0} className="border border-white/40 px-2 py-1 disabled:opacity-30">↑</button>
+                            <button type="button" onClick={() => moveMarquee(index, 1)} disabled={index === marqueeItems.length - 1} className="border border-white/40 px-2 py-1 disabled:opacity-30">↓</button>
+                          </div>
+                          <input value={item.text} onChange={e => setMarqueeItems(prev => prev.map(x => x.id === item.id ? { ...x, text: e.target.value } : x))} placeholder="BUILDING ON THE OPEN INTERNET" className="w-full px-2 py-2 bg-white text-black border-2 border-black font-mono text-xs uppercase" />
+                          <input value={item.url || ''} onChange={e => setMarqueeItems(prev => prev.map(x => x.id === item.id ? { ...x, url: e.target.value } : x))} placeholder="Optional URL (https://...)" className="w-full px-2 py-2 bg-white text-black border-2 border-black font-mono text-xs" />
+                          <button type="button" onClick={() => setMarqueeItems(prev => prev.filter(x => x.id !== item.id))} className="border-2 border-red-500 bg-red-600 text-white px-3 py-2 font-mono text-[10px] font-black uppercase">DELETE</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* BLOG ARCHIVE HEADER */}
+                  <div className="space-y-4 p-4 border-2 border-black bg-[var(--color-primary)]/20">
+                    <div className="flex items-center justify-between gap-3 border-b-2 border-black pb-2">
+                      <div>
+                        <h4 className="font-display font-black text-lg uppercase">Blog Archive / Orange Header</h4>
+                        <p className="font-mono text-[10px] text-neutral-600">The archive header is fully CMS-controlled. The essay number remains live and is calculated from published articles.</p>
+                      </div>
+                      <div className="px-2 py-1 border-2 border-black bg-white font-mono text-[9px] font-black uppercase">
+                        LIVE COUNT: {articles.filter(a => a.isPublished !== false && a.mainPublicationStatus !== 'unpublished').length}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <label className="font-mono text-[10px] font-black uppercase">Eyebrow
+                        <input value={blogHeader.eyebrow} onChange={e => setBlogHeader(prev => ({ ...prev, eyebrow: e.target.value }))} className="w-full mt-1 px-3 py-2 border-2 border-black font-mono text-xs" />
+                      </label>
+                      <label className="font-mono text-[10px] font-black uppercase">Essay Count Label
+                        <input value={blogHeader.essayCountLabel} onChange={e => setBlogHeader(prev => ({ ...prev, essayCountLabel: e.target.value }))} className="w-full mt-1 px-3 py-2 border-2 border-black font-mono text-xs" placeholder="ESSAYS PUBLISHED" />
+                      </label>
+                    </div>
+                    <label className="font-mono text-[10px] font-black uppercase">Headline
+                      <input value={blogHeader.title} onChange={e => setBlogHeader(prev => ({ ...prev, title: e.target.value }))} className="w-full mt-1 px-3 py-2 border-2 border-black font-display font-black text-lg" placeholder="ENGINEERING & ARCHITECTURE" />
+                    </label>
+                    <label className="font-mono text-[10px] font-black uppercase">Description
+                      <textarea rows={3} value={blogHeader.description} onChange={e => setBlogHeader(prev => ({ ...prev, description: e.target.value }))} className="w-full mt-1 px-3 py-2 border-2 border-black font-sans text-sm" />
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                      <label className="font-mono text-[10px] font-black uppercase">Background
+                        <div className="flex gap-2 mt-1"><input type="color" value={blogHeader.backgroundColor} onChange={e => setBlogHeader(prev => ({ ...prev, backgroundColor: e.target.value }))} className="w-10 h-10 border-2 border-black" /><input value={blogHeader.backgroundColor} onChange={e => setBlogHeader(prev => ({ ...prev, backgroundColor: e.target.value }))} className="flex-1 px-2 py-2 border-2 border-black font-mono text-xs uppercase" /></div>
+                      </label>
+                      <label className="font-mono text-[10px] font-black uppercase">Text Color
+                        <div className="flex gap-2 mt-1"><input type="color" value={blogHeader.textColor} onChange={e => setBlogHeader(prev => ({ ...prev, textColor: e.target.value }))} className="w-10 h-10 border-2 border-black" /><input value={blogHeader.textColor} onChange={e => setBlogHeader(prev => ({ ...prev, textColor: e.target.value }))} className="flex-1 px-2 py-2 border-2 border-black font-mono text-xs uppercase" /></div>
+                      </label>
+                      <label className="border-2 border-black p-3 font-mono text-[10px] font-black uppercase flex items-center gap-2 bg-white"><input type="checkbox" checked={blogHeader.showEssayCount} onChange={e => setBlogHeader(prev => ({ ...prev, showEssayCount: e.target.checked }))} /> SHOW LIVE ESSAY COUNT</label>
+                    </div>
+                  </div>
+
+                  {/* FOOTER BUILDER */}
+                  <div className="space-y-5 p-4 border-2 border-black bg-neutral-50">
+                    <div>
+                      <h4 className="font-display font-black text-lg uppercase border-b-2 border-black pb-1">Footer Builder</h4>
+                      <p className="font-mono text-[10px] text-neutral-600 mt-1">Footer navigation and publication links are stored in Firestore. Internal links route inside OFFSCRPT; external links open their real destination; RSS opens the live feed UI; topic links open the real topic page.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <label className="font-mono text-[10px] font-black uppercase">Navigation Title
+                        <input value={footerNavigationTitle} onChange={e => setFooterNavigationTitle(e.target.value)} className="w-full mt-1 px-2 py-2 border-2 border-black bg-white" />
+                      </label>
+                      <label className="font-mono text-[10px] font-black uppercase">Topics Title
+                        <input value={footerTopicsTitle} onChange={e => setFooterTopicsTitle(e.target.value)} className="w-full mt-1 px-2 py-2 border-2 border-black bg-white" />
+                      </label>
+                      <label className="font-mono text-[10px] font-black uppercase">Hub Title
+                        <input value={footerHubTitle} onChange={e => setFooterHubTitle(e.target.value)} className="w-full mt-1 px-2 py-2 border-2 border-black bg-white" />
+                      </label>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between"><div className="font-display font-black uppercase text-sm">Navigation Links</div><button type="button" onClick={() => addFooterLink('nav')} className="border-2 border-black bg-white px-3 py-1.5 font-mono text-[10px] font-black">+ ADD</button></div>
+                      {footerNavigationLinks.map(link => (
+                        <div key={link.id} className="border-2 border-black p-3 bg-white space-y-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-[1.2fr_auto_1.5fr_auto] gap-2 items-center">
+                            <input value={link.label} onChange={e => updateFooterLink('nav', link.id, { label: e.target.value })} placeholder="Label" className="border-2 border-black px-2 py-2 font-mono text-xs" />
+                            <select value={link.type} onChange={e => updateFooterLink('nav', link.id, { type: e.target.value as FooterLink['type'], target: e.target.value === 'rss' ? 'rss' : link.target })} className="border-2 border-black px-2 py-2 font-mono text-xs uppercase">
+                              <option value="internal">INTERNAL</option><option value="external">EXTERNAL</option><option value="topic">TOPIC</option><option value="rss">RSS</option>
+                            </select>
+                            {link.type === 'internal' ? (
+                              <select value={link.target} onChange={e => updateFooterLink('nav', link.id, { target: e.target.value })} className="border-2 border-black px-2 py-2 font-mono text-xs uppercase">
+                                {(['home','blog','explore','series','saved','history','notifications','social','about','links','contact'] as PageView[]).map(page => <option key={page} value={page}>{page}</option>)}
+                              </select>
+                            ) : link.type === 'rss' ? (
+                              <input disabled value="rss" className="border-2 border-black px-2 py-2 font-mono text-xs bg-neutral-100" />
+                            ) : (
+                              <input value={link.target} onChange={e => updateFooterLink('nav', link.id, { target: e.target.value })} placeholder={link.type === 'topic' ? 'topic slug e.g. react' : 'https://...'} className="border-2 border-black px-2 py-2 font-mono text-xs" />
+                            )}
+                            <button type="button" onClick={() => removeFooterLink('nav', link.id)} className="border-2 border-red-600 text-red-600 px-3 py-2 font-mono text-[10px] font-black">DELETE</button>
+                          </div>
+                          <label className="font-mono text-[9px] uppercase flex items-center gap-2"><input type="checkbox" checked={link.visible !== false} onChange={e => updateFooterLink('nav', link.id, { visible: e.target.checked })} /> VISIBLE</label>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between"><div className="font-display font-black uppercase text-sm">Publication Hub Links</div><button type="button" onClick={() => addFooterLink('hub')} className="border-2 border-black bg-white px-3 py-1.5 font-mono text-[10px] font-black">+ ADD</button></div>
+                      {footerHubLinks.map(link => (
+                        <div key={link.id} className="border-2 border-black p-3 bg-white space-y-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-[1.2fr_auto_1.5fr_auto] gap-2 items-center">
+                            <input value={link.label} onChange={e => updateFooterLink('hub', link.id, { label: e.target.value })} placeholder="Label" className="border-2 border-black px-2 py-2 font-mono text-xs" />
+                            <select value={link.type} onChange={e => updateFooterLink('hub', link.id, { type: e.target.value as FooterLink['type'], target: e.target.value === 'rss' ? 'rss' : link.target })} className="border-2 border-black px-2 py-2 font-mono text-xs uppercase">
+                              <option value="external">EXTERNAL</option><option value="internal">INTERNAL</option><option value="topic">TOPIC</option><option value="rss">RSS</option>
+                            </select>
+                            {link.type === 'internal' ? (
+                              <select value={link.target} onChange={e => updateFooterLink('hub', link.id, { target: e.target.value })} className="border-2 border-black px-2 py-2 font-mono text-xs uppercase">
+                                {(['home','blog','explore','series','saved','history','notifications','social','about','links','contact'] as PageView[]).map(page => <option key={page} value={page}>{page}</option>)}
+                              </select>
+                            ) : link.type === 'rss' ? (
+                              <input disabled value="rss" className="border-2 border-black px-2 py-2 font-mono text-xs bg-neutral-100" />
+                            ) : (
+                              <input value={link.target} onChange={e => updateFooterLink('hub', link.id, { target: e.target.value })} placeholder={link.type === 'topic' ? 'topic slug' : 'https://...'} className="border-2 border-black px-2 py-2 font-mono text-xs" />
+                            )}
+                            <button type="button" onClick={() => removeFooterLink('hub', link.id)} className="border-2 border-red-600 text-red-600 px-3 py-2 font-mono text-[10px] font-black">DELETE</button>
+                          </div>
+                          <label className="font-mono text-[9px] uppercase flex items-center gap-2"><input type="checkbox" checked={link.visible !== false} onChange={e => updateFooterLink('hub', link.id, { visible: e.target.checked })} /> VISIBLE</label>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <label className="font-mono text-[10px] font-black uppercase">Footer Topic Override
+                        <textarea rows={4} value={footerTopicCategories.join('\n')} onChange={e => setFooterTopicCategories(e.target.value.split(/[\n,]/).map(x => x.trim()).filter(Boolean))} placeholder="react\narchitecture\nlocal ai" className="w-full mt-1 px-3 py-2 border-2 border-black bg-white font-mono text-xs" />
+                        <span className="block text-[9px] text-neutral-500 mt-1">Leave empty to automatically show the most-used tags from published articles.</span>
+                      </label>
+                      <label className="font-mono text-[10px] font-black uppercase">Bottom-right Footer Text
+                        <input value={footerBottomRightText} onChange={e => setFooterBottomRightText(e.target.value)} className="w-full mt-1 px-3 py-2 border-2 border-black bg-white font-mono text-xs" placeholder="HIGH DENSITY SPECIFICATION" />
+                      </label>
                     </div>
                   </div>
 
