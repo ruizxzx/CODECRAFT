@@ -126,6 +126,24 @@ export async function deleteDraftSnapshot(draftId: string) {
   await deleteDoc(doc(db, 'users', uid, 'drafts', draftId));
 }
 
+
+export type DraftSummary = { id: string; title: string; type?: string; updatedAt?: string; wordCount?: number; payload?: Record<string, unknown> };
+
+export async function getAccountDrafts(): Promise<DraftSummary[]> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return [];
+  try {
+    const snap = await getDocs(query(collection(db, 'users', uid, 'drafts'), orderBy('updatedAt', 'desc'), limit(50)));
+    return snap.docs.map(d => { const x = d.data() as any; const blocks = Array.isArray(x.contentBlocks) ? x.contentBlocks : []; const text = blocks.map((b:any)=>String(b.content||'')).join(' '); return { id:d.id, title:String(x.title||x.name||'Untitled Draft'), type:String(x.type || (d.id==='community' ? 'community' : 'article')), updatedAt:iso(x.updatedAt), wordCount:text.trim()?text.trim().split(/\s+/).length:0, payload:x }; });
+  } catch { return []; }
+}
+
+export async function deleteAccountDraft(draftId: string): Promise<void> {
+  const uid = auth.currentUser?.uid;
+  if (!uid || !draftId) return;
+  await deleteDoc(doc(db, 'users', uid, 'drafts', draftId));
+}
+
 export type AccountActivity = {
   id: string;
   kind: 'read' | 'saved' | 'notification';

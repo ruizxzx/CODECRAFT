@@ -48,7 +48,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
 
   const effectiveIsSaved = propIsSaved !== undefined ? propIsSaved : localSaved;
 
-  useEffect(() => { if (post?.id && userAuth?.uid) void recordCommunityPostView(post.id, userAuth.uid); }, [post?.id, userAuth?.uid]);
+  useEffect(() => { if (post?.id) void recordCommunityPostView(post.id, userAuth?.uid); }, [post?.id, userAuth?.uid]);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {

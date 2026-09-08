@@ -219,15 +219,18 @@ export default function App() {
     siteConfig.themeSuccessColor
   ]);
 
-  // Account theme preference is persisted locally for instant startup and cloud-synced when signed in.
+  // Account theme preference: cached immediately, then cloud-synced once signed in.
   useEffect(() => {
     const apply = (theme: 'light' | 'dark') => {
       document.documentElement.classList.toggle('dark', theme === 'dark');
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
       try { localStorage.setItem('offscrpt:theme', theme); } catch {}
     };
     try {
       const cached = localStorage.getItem('offscrpt:theme');
-      if (cached === 'dark' || cached === 'light') apply(cached);
+      if (cached === 'dark' || cached === 'light') apply(cached as 'light'|'dark');
+      else if (window.matchMedia('(prefers-color-scheme: dark)').matches) apply('dark');
     } catch {}
     if (!userAuth?.uid) return;
     return subscribeThemePreference(apply);

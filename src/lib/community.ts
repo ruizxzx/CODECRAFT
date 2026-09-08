@@ -1266,33 +1266,56 @@ export async function toggleArticleLike(slug: string, userId: string, isCurrentl
 }
 
 
-export async function recordCommunityPostView(postId:string, viewerId?:string):Promise<void>{
-  if(!viewerId || !postId) return;
-  const day=new Date().toISOString().slice(0,10);
-  const receiptId=`${encodeURIComponent(postId)}_${encodeURIComponent(viewerId)}_${day}`;
-  const rootRef=doc(db,'posts',postId);
+
+function getStableVisitorId(): string {
+  if (typeof window === 'undefined') return 'server';
+  const KEY = 'offscrpt:visitor-id:v1';
   try {
-    const rootSnap=await getDoc(rootRef);
-    if(rootSnap.exists()){
-      const receiptRef=doc(rootRef,'views',receiptId);
+    const existing = localStorage.getItem(KEY);
+    if (existing) return existing;
+    const value = `${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    localStorage.setItem(KEY, value);
+    return value;
+  } catch {
+    return `ephemeral-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+  }
+}
+export async function recordCommunityPostView(postId:string, viewerId?:string):Promise<void>{
+  if(!postId) return;
+  const authenticated=Boolean(viewerId);
+  const identity=viewerId||getStableVisitorId();
+  const day=new Date().toISOString().slice(0,10);
+  const safePost=encodeURIComponent(postId).slice(0,180);
+  const safeIdentity=encodeURIComponent(identity).slice(0,220);
+  const receiptId=`${safePost}_${safeIdentity}_${day}`;
+  const localKey=`offscrpt:post-view:${postId}:${day}`;
+  let rootRef=doc(db,'posts',postId);
+  try {
+    let targetRef:any=rootRef;
+    const direct=await getDoc(rootRef);
+    if(!direct.exists()){
+      const snap=await getDocs(query(collectionGroup(db,'posts'), where('__name__','==',postId), limit(20)));
+      const match=snap.docs.find((d:any)=>d.id===postId);
+      if(!match) return;
+      targetRef=match.ref;
+    }
+    const receiptRef=doc(targetRef,'views',receiptId);
+    if(!authenticated){
+      try { if(localStorage.getItem(localKey)==='1') return; } catch {}
+      await setDoc(receiptRef,{postId,visitorId:identity,day,createdAt:serverTimestamp()},{merge:false});
       await runTransaction(db,async tx=>{
-        const [postSnap, receiptSnap]=await Promise.all([tx.get(rootRef), tx.get(receiptRef)]);
-        if(!postSnap.exists() || receiptSnap.exists()) return;
-        tx.set(receiptRef,{postId,userId:viewerId,day,createdAt:serverTimestamp()});
-        tx.update(rootRef,{viewsCount:Number(postSnap.data()?.viewsCount||0)+1,updatedAt:serverTimestamp()});
+        const postSnap=await tx.get(targetRef);
+        if(!postSnap.exists()) return;
+        tx.update(targetRef,{viewsCount:Number(postSnap.data()?.viewsCount||0)+1,updatedAt:serverTimestamp()});
       });
+      try { localStorage.setItem(localKey,'1'); } catch {}
       return;
     }
-    // Community posts use the same post document ID under their community path. Resolve it once, then transact.
-    const snap=await getDocs(query(collectionGroup(db,'posts'), where('__name__','==',postId), limit(5)));
-    const match=snap.docs.find(d=>d.id===postId);
-    if(!match) return;
-    const receiptRef=doc(match.ref,'views',receiptId);
     await runTransaction(db,async tx=>{
-      const [postSnap, receiptSnap]=await Promise.all([tx.get(match.ref),tx.get(receiptRef)]);
+      const [postSnap,receiptSnap]=await Promise.all([tx.get(targetRef),tx.get(receiptRef)]);
       if(!postSnap.exists() || receiptSnap.exists()) return;
       tx.set(receiptRef,{postId,userId:viewerId,day,createdAt:serverTimestamp()});
-      tx.update(match.ref,{viewsCount:Number(postSnap.data()?.viewsCount||0)+1,updatedAt:serverTimestamp()});
+      tx.update(targetRef,{viewsCount:Number(postSnap.data()?.viewsCount||0)+1,updatedAt:serverTimestamp()});
     });
   } catch(e){ console.warn('Community post view tracking failed:',e); }
 }

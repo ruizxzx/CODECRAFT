@@ -485,13 +485,50 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
 }
 
 
+
+function getStableVisitorId(): string {
+  if (typeof window === 'undefined') return 'server';
+  const KEY = 'offscrpt:visitor-id:v1';
+  try {
+    const existing = localStorage.getItem(KEY);
+    if (existing) return existing;
+    const value = `${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    localStorage.setItem(KEY, value);
+    return value;
+  } catch {
+    return `ephemeral-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+  }
+}
 export async function recordArticleView(slug:string, viewerId?:string):Promise<void>{
-  if(!viewerId || !slug) return;
+  if(!slug) return;
+  const authenticated = Boolean(viewerId);
+  const identity = viewerId || getStableVisitorId();
   const day = new Date().toISOString().slice(0,10);
   const safeSlug = encodeURIComponent(slug).slice(0,180);
-  const safeUid = encodeURIComponent(viewerId).slice(0,180);
-  const receiptRef = doc(db, 'articleViews', `${safeSlug}_${safeUid}_${day}`);
+  const safeIdentity = encodeURIComponent(identity).slice(0,220);
+  const receiptId = `${safeSlug}_${safeIdentity}_${day}`;
+  const receiptRef = doc(db, 'articleViews', receiptId);
   const articleRef = doc(db, 'articles', slug);
+
+  // Anonymous reads are deduplicated by a stable browser identifier + UTC day.
+  // The local marker prevents unnecessary writes; authenticated readers are additionally
+  // protected by the cloud receipt transaction below.
+  const localKey = `offscrpt:view:${slug}:${day}`;
+  if (!authenticated) {
+    try { if (localStorage.getItem(localKey) === '1') return; } catch {}
+    try {
+      await setDoc(receiptRef, { slug, visitorId: identity, day, createdAt: serverTimestamp() }, { merge: false });
+      await runTransaction(db, async (tx) => {
+        const articleSnap = await tx.get(articleRef);
+        if (!articleSnap.exists()) return;
+        const current = Number(articleSnap.data()?.viewsCount || 0);
+        tx.update(articleRef, { viewsCount: current + 1, updatedAt: serverTimestamp() });
+      });
+      try { localStorage.setItem(localKey, '1'); } catch {}
+    } catch(e){ console.warn('Anonymous article view tracking failed:', e); }
+    return;
+  }
+
   try {
     await runTransaction(db, async (tx) => {
       const receiptSnap = await tx.get(receiptRef);

@@ -1,32 +1,23 @@
-# OFFSCRPT V51
+# OFFSCRPT V52
 
 ## Release
-V51 adds account-level dark mode, admin-controlled dual reading-indicator colors, a Creator Studio publishing layer, cloud revision history, resilient drafts/autosave/offline recovery, and real post/article view counters.
+Production hardening + account UX upgrade.
 
-## Appearance
-- My OFFSCRPT → Settings supports Light/Dark mode.
-- Theme choice is cached locally for instant startup and synced to the signed-in user's Firestore account.
+### Added / fixed
+- Clearly exposed **Settings & Appearance** entry in the account menu.
+- Dark mode can be enabled from **My OFFSCRPT → Settings & Appearance** and is restored locally and from Firestore.
+- Dark mode CSS coverage expanded across common surfaces, forms, borders and states.
+- Anonymous article and community-post view tracking now works using a stable per-browser identifier with daily deduplication. Authenticated viewers continue using account/day cloud receipts.
+- View tracking runs for logged-out public readers as well as signed-in readers.
+- Reading/view counters remain displayed across article/post surfaces already supported by the app.
+- Existing dual reading indicators, manual completion/reset, history, dashboard, queue, notifications, autosave/recovery and creator-studio functionality retained.
 
-## Reading indicators
-- Admin Control Panel → Site controls exposes independent colors for the current-page indicator and persistent reading-progress indicator.
-- Current-page position retracts when scrolling upward.
-- Persistent reading progress never retracts unless reset or explicitly changed by completion logic.
+### Firebase / Firestore
+Deploy the included `firestore.rules`. The rules allow public content view receipts to be created anonymously while preventing direct arbitrary counter field edits outside the controlled `+1` update shape. Account-private preferences, drafts, history and queue remain owner-scoped.
 
-## Creator Studio
-- Draft autosave to local storage + Firestore.
-- Offline state is surfaced in the editor.
-- Recover/discard draft management in Admin Studio.
-- Existing articles create cloud revision snapshots before updates.
-- Revision History can inspect and restore prior article snapshots.
+### Known architectural note
+Authoritative anti-fraud analytics at large scale should eventually move view counting to trusted server code (Cloud Functions/Cloud Run). V52 provides stable browser/day deduplication and does not expose private account identifiers publicly in the view UI.
 
-## Views
-- Articles and community posts expose real Firestore-backed view counters.
-- Signed-in users generate at most one counted view per content item per UTC day through a deterministic receipt.
-- New articles/posts start from zero rather than seeded fake view totals.
-- View counts are displayed across article/post surfaces where metadata is rendered.
-
-## Firebase
-Deploy the included `firestore.rules` before enabling the new settings, revision, draft, and view-sync behavior. Existing security boundaries are retained; new rules cover the UI theme preference and view-count updates.
-
-## Validation
-Source files were checked for TypeScript/TSX transpilation and Firestore rule structural integrity. A full production build should be run in a normal dependency-complete environment.
+### Validation
+- Source inspection performed across Firebase, account, CMS, article/post view flows, header/settings, CSS and Firestore rules.
+- `vite build` could not be executed in this environment because the supplied dependency tree has no installed Vite binary.

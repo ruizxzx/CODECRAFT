@@ -497,7 +497,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <span>MY OFFSCRPT</span><ArrowRight className="w-4 h-4" />
                     </button>
                     <button onClick={() => handleNavClick('preferences')} className="w-full py-3 px-4 bg-white border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between hover:bg-neutral-100">
-                      <span>NOTIFICATION SETTINGS</span><Settings className="w-4 h-4" />
+                      <span>SETTINGS & APPEARANCE</span><Settings className="w-4 h-4" />
                     </button>
                     {userProfile ? (
                       <button
