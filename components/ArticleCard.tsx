@@ -36,7 +36,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
     border: 'border-black',
   };
 
-  const displayAuthor:any = (article as any).originalAuthor || article.author;
+  const displayAuthor:any = (article as any).originalAuthor || article.author || { name: 'OFFSCRPT', role: 'Author', avatar: '', isVerified: false, verificationColor: undefined };
 
   const handleCardClick = () => {
     onSelect(article.slug);

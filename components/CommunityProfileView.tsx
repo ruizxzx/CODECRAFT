@@ -3,7 +3,7 @@ import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
 import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments, getUserFollowers, getUserFollowing, ProfileListEntry, subscribeCommunityProfile } from '../lib/community';
-import { auth } from '../lib/firebase';
+import { auth, checkIsAdmin } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
 import { syncUserIdentityAcrossContent } from '../lib/community';
@@ -54,6 +54,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [relationSearch, setRelationSearch] = useState('');
 
   useEffect(() => auth.onAuthStateChanged(setUserAuth), []);
+  const isAdmin = checkIsAdmin(userAuth?.email);
 
   // Keep the public profile live for every viewer. Do not overwrite form inputs while the owner is editing.
   useEffect(() => {
