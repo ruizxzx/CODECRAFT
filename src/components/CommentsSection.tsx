@@ -1,4 +1,3 @@
-import { notifyToast } from '../lib/toast';
 import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, Send, Clock, Trash2, LogIn } from 'lucide-react';
@@ -90,7 +89,7 @@ export const CommentsSection: React.FC<CommentsSectionProps> = ({ articleSlug })
       await deleteArticleComment(articleSlug, commentId);
     } catch (err: any) {
       console.error("Failed to delete comment:", err);
-      notifyToast("Failed to delete comment: " + (err.message || "Permission denied"));
+      alert("Failed to delete comment: " + (err.message || "Permission denied"));
     }
   };
 

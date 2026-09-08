@@ -79,8 +79,11 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
                   <Calendar className="w-3.5 h-3.5" />
                   <span>{article.publishedAt}</span>
                 </span>
-                <span>•</span><span>{Number(article.viewsCount || 0).toLocaleString()} views</span><span>•</span>
-                <span className="flex items-center space-x-1"><Clock className="w-3.5 h-3.5" /><span>{article.readingTimeMinutes} min read</span></span>
+                <span>•</span>
+                <span className="flex items-center space-x-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>{article.readingTimeMinutes} min read</span>
+                </span>
               </div>
               {onToggleSave && (
                 <button
@@ -203,7 +206,7 @@ export const ArticleCard: React.FC<ArticleCardProps> = ({
           <div className="flex items-center space-x-2 text-xs font-mono font-semibold text-neutral-500 mb-2.5">
             <span>{article.publishedAt}</span>
             <span>•</span>
-            <span>{article.readingTimeMinutes} min read</span><span>•</span><span>{Number(article.viewsCount || 0).toLocaleString()} views</span>
+            <span>{article.readingTimeMinutes} min read</span>
           </div>
 
           <h3 

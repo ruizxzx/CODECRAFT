@@ -32,7 +32,6 @@ import { auth, loginWithGoogle } from '../lib/firebase';
 import { useAuthUser } from '../lib/useAuthUser';
 import { getArticleLikeStatus, toggleArticleLike, getPost, getCommunityProfile } from '../lib/community';
 import { recordArticleView, ARTICLE_REACTIONS, getArticleReaction, setArticleReaction, getSeriesArticles } from '../lib/cms';
-import { getSeriesList } from '../lib/series';
 import { calculateArticleReadingTime, getArticleReadingProgress, saveArticleReadingProgress, resetArticleReadingProgress, recordArticleHistory, ArticleEngagementStats, subscribeArticleEngagementStats } from '../lib/reading';
 import { UserIdentity } from './UserIdentity';
 import type { ArticleReaction } from '../lib/cms';
@@ -110,25 +109,19 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [hasClapped, setHasClapped] = useState(false);
   const [fontSize, setFontSize] = useState<'normal' | 'large'>('normal');
   const [scrollProgress, setScrollProgress] = useState(0);
-  const [pagePosition, setPagePosition] = useState(0);
   const [progressHydrated, setProgressHydrated] = useState(false);
   const articleContentRef = React.useRef<HTMLDivElement | null>(null);
   const articleContentEndRef = React.useRef<HTMLDivElement | null>(null);
-  const readerReactionRef = React.useRef<HTMLDivElement | null>(null);
-  const activeTocIdRef = React.useRef('');
-  const completionCommittedRef = React.useRef(false);
   const user = useAuthUser();
   const [reaction, setReaction] = useState<ArticleReaction|null>(null);
   const [reactionBusy, setReactionBusy] = useState(false);
   const [seriesArticles, setSeriesArticles] = useState<Article[]>([]);
-  const [allSeries, setAllSeries] = useState<import('../types').Series[]>([]);
   const [resolvedOriginalAuthor, setResolvedOriginalAuthor] = useState<any>(article.originalAuthor || article.author);
 
   const toc = article.content
     .map((b,i)=>({ b, i, id: `article-block-${i}-${slugifyHeading(String(b.content || 'section'))}` }))
     .filter(x=>x.b.type==='heading2'||x.b.type==='heading3');
   const [activeTocId, setActiveTocId] = useState<string>('');
-  useEffect(() => { activeTocIdRef.current = activeTocId; }, [activeTocId]);
   const [tocOpen, setTocOpen] = useState(true);
   const [copiedTocId, setCopiedTocId] = useState<string | null>(null);
 
@@ -136,10 +129,9 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
   useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); setSavedCloudProgress(pct); maxAutoProgressRef.current = pct; setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
 
-  useEffect(() => { lastSavedProgressRef.current = -1; maxAutoProgressRef.current = 0; completionCommittedRef.current = false; setScrollProgress(0); setPagePosition(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
+  useEffect(() => { lastSavedProgressRef.current = -1; maxAutoProgressRef.current = 0; setScrollProgress(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
   useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
   useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
-  useEffect(() => { getSeriesList(100).then(setAllSeries).catch(()=>setAllSeries([])); }, []);
   useEffect(() => {
     let active = true;
     const resolve = async () => {
@@ -195,150 +187,42 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     }
   }, [article.slug, user]);
 
-  // Production reading-progress engine.
-  // Two distinct signals:
-  // 1) pagePosition: current viewport position; it follows the reader up/down.
-  // 2) scrollProgress: highest reading progress reached; it never retracts until reset.
-  // The reading endpoint is the READER REACTIONS panel: 100% is reached when that panel
-  // first touches the bottom edge of the viewport. Footer/related content is excluded.
+  // Reading progress is measured against the actual rendered article-body wrapper.
+  // The endpoint is the last content line, so footer/reactions do not affect progress.
   useEffect(() => {
-    if (!progressHydrated) return;
-
-    let raf = 0;
-    let disposed = false;
-
-    const getAnchors = () => {
+    const handleScroll = () => {
       const startEl = articleContentRef.current;
-      const endEl = readerReactionRef.current || articleContentEndRef.current;
-      if (!startEl || !endEl) return null;
-
-      const startRect = startEl.getBoundingClientRect();
-      const endRect = endEl.getBoundingClientRect();
-      const scrollY = window.scrollY || window.pageYOffset || 0;
-      const startY = startRect.top + scrollY;
-      const endY = endRect.top + scrollY;
-      const viewportHeight = Math.max(1, window.innerHeight);
-
-      // Start at 0 when the first pixel of the actual article body enters the viewport.
-      // This makes the first downward scroll produce immediate, proportional movement.
-      const startScrollY = Math.max(0, startY - viewportHeight);
-
-      // 100% exactly when the reader-reaction panel reaches the bottom of the screen.
-      const endScrollY = Math.max(startScrollY + 1, endY - viewportHeight);
-
-      return { startScrollY, endScrollY, scrollY };
-    };
-
-    const calculate = () => {
-      if (disposed) return;
-      raf = 0;
-
-      const anchors = getAnchors();
-      if (!anchors) return;
-
-      const span = Math.max(1, anchors.endScrollY - anchors.startScrollY);
-      const rawProgress = Math.round(
-        Math.min(100, Math.max(0, ((anchors.scrollY - anchors.startScrollY) / span) * 100))
-      );
-
-      const visualCurrent = rawProgress;
-
-      // CURRENT PAGE POSITION retracts naturally when scrolling upward.
-      setPagePosition(articleCompleted ? 100 : visualCurrent);
-
-      // PERSISTENT READING PROGRESS is monotonic for resume/completion.
-      const persistentProgress = articleCompleted
-        ? 100
-        : Math.max(rawProgress, maxAutoProgressRef.current, savedCloudProgress);
-      setScrollProgress(persistentProgress);
-
-      if (!articleCompleted) {
-        if (rawProgress > maxAutoProgressRef.current) {
-          maxAutoProgressRef.current = rawProgress;
-        }
-
-        if (user) {
-          const cloudProgress = maxAutoProgressRef.current;
-          if (
-            cloudProgress !== lastSavedProgressRef.current &&
-            (cloudProgress === 0 || Math.abs(cloudProgress - lastSavedProgressRef.current) >= 2)
-          ) {
-            lastSavedProgressRef.current = cloudProgress;
-            if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-            saveTimerRef.current = window.setTimeout(() => {
-              void saveArticleReadingProgress(
-                article.slug,
-                cloudProgress,
-                activeTocIdRef.current || '',
-                false
-              ).catch(() => {});
-              void recordArticleHistory(article, cloudProgress).catch(() => {});
-            }, 350);
-          }
-        }
-      }
-
-      // Reaching the reader-reaction boundary records automatic 100% progress,
-      // but explicit COMPLETED status still requires Mark as Complete.
-      if (user && !articleCompleted && rawProgress >= 100 && !completionCommittedRef.current) {
+      const endEl = articleContentEndRef.current;
+      if (!startEl || !endEl || !progressHydrated) return;
+      const startY = startEl.getBoundingClientRect().top + window.scrollY;
+      const endY = endEl.getBoundingClientRect().top + window.scrollY;
+      const travel = Math.max(1, endY - startY - window.innerHeight);
+      const rawProgress = articleCompleted ? 100 : Math.round(Math.min(100, Math.max(0, ((window.scrollY - startY) / travel) * 100)));
+      // Reading progress is monotonic. Reopening/scrolling backwards must not
+      // erase a reader's latest checkpoint. Reset explicitly to start over.
+      const currentProgress = articleCompleted ? 100 : Math.max(rawProgress, maxAutoProgressRef.current);
+      maxAutoProgressRef.current = currentProgress;
+      setScrollProgress(currentProgress);
+      if (user && !articleCompleted && currentProgress !== lastSavedProgressRef.current && (currentProgress === 0 || Math.abs(currentProgress - lastSavedProgressRef.current) >= 2)) {
+        lastSavedProgressRef.current = currentProgress;
         if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-        completionCommittedRef.current = true;
-        void saveArticleReadingProgress(
-          article.slug,
-          100,
-          activeTocIdRef.current || 'end',
-          false
-        )
-          .then(() => {
-            if (!disposed) {
-              maxAutoProgressRef.current = 100;
-              setSavedCloudProgress(100);
-            }
-          })
-          .catch(() => {
-            completionCommittedRef.current = false;
-          });
+        saveTimerRef.current = window.setTimeout(() => {
+          void saveArticleReadingProgress(article.slug, currentProgress, activeTocId || '', false).catch(() => {});
+          void recordArticleHistory(article, currentProgress).catch(() => {});
+        }, 500);
+      }
+      const atContentEnd = endY - (window.scrollY + window.innerHeight) <= 8;
+      if (user && !articleCompleted && atContentEnd) {
+        if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+        void saveArticleReadingProgress(article.slug, 100, activeTocId || 'completed', true).then(() => { setArticleCompleted(true); setSavedCloudProgress(100); setScrollProgress(100); }).catch(() => {});
         void recordArticleHistory(article, 100).catch(() => {});
       }
     };
-
-    const requestCalculate = () => {
-      if (!raf) raf = window.requestAnimationFrame(calculate);
-    };
-
-    requestCalculate();
-    window.addEventListener('scroll', requestCalculate, { passive: true, capture: true });
-    window.addEventListener('resize', requestCalculate, { passive: true });
-    window.addEventListener('orientationchange', requestCalculate, { passive: true });
-
-    let ro: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(requestCalculate);
-      if (articleContentRef.current) ro.observe(articleContentRef.current);
-      if (readerReactionRef.current) ro.observe(readerReactionRef.current);
-    }
-
-    const onLoad = requestCalculate;
-    window.addEventListener('load', onLoad);
-
-    const fontReady = (document as any).fonts?.ready;
-    if (fontReady?.then) void fontReady.then(requestCalculate).catch(() => {});
-
-    // Images/embeds can change document height after initial paint.
-    const timers = [100, 300, 600, 1200, 2000].map(ms => window.setTimeout(requestCalculate, ms));
-
-    return () => {
-      disposed = true;
-      if (raf) window.cancelAnimationFrame(raf);
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-      timers.forEach(window.clearTimeout);
-      window.removeEventListener('scroll', requestCalculate, true);
-      window.removeEventListener('resize', requestCalculate);
-      window.removeEventListener('orientationchange', requestCalculate);
-      window.removeEventListener('load', onLoad);
-      ro?.disconnect();
-    };
-  }, [article.slug, user?.uid, articleCompleted, progressHydrated]);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
+    return () => { window.removeEventListener('scroll', handleScroll); window.removeEventListener('resize', handleScroll); if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current); };
+  }, [article.slug, user?.uid, activeTocId, articleCompleted, progressHydrated]);
 
   // Record an account-level history entry when an article is opened. The deterministic document id
   // means repeated opens update one record instead of creating duplicates.
@@ -349,7 +233,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
   const resumeArticle = () => {
     const startEl = articleContentRef.current;
-    const endEl = readerReactionRef.current || articleContentEndRef.current;
+    const endEl = articleContentEndRef.current;
     if (!startEl || !endEl || savedCloudProgress <= 0 || savedCloudProgress >= 100) { setResumeVisible(false); return; }
     const startY = startEl.getBoundingClientRect().top + window.scrollY;
     const endY = endEl.getBoundingClientRect().top + window.scrollY;
@@ -390,7 +274,6 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       await resetArticleReadingProgress(article.slug);
       setArticleCompleted(false);
       maxAutoProgressRef.current = 0;
-      completionCommittedRef.current = false;
       setSavedCloudProgress(0);
       setScrollProgress(0);
       lastSavedProgressRef.current = -1;
@@ -429,8 +312,6 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   };
 
   // Related articles (same category or latest excluding current)
-  const relatedSeries = allSeries.filter(s => s.id !== article.seriesId && s.status !== 'archived' && s.visibility !== 'private' && (s.tags||[]).some(tag => (article.tags||[]).map(x=>x.toLowerCase()).includes(String(tag).toLowerCase()))).slice(0,4);
-
   const relatedArticles = allArticles
     .filter((a) => a.slug !== article.slug)
     .map(a => ({ a, score: (a.category === article.category ? 4 : 0) + (a.tags||[]).filter(t => (article.tags||[]).map(x=>x.toLowerCase()).includes(String(t).toLowerCase())).length * 2 }))
@@ -474,32 +355,12 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
   return (
     <div className="w-full bg-white min-h-screen">
-      {/* Reading position + persistent reading progress. They intentionally behave differently. */}
-      <div className="fixed top-0 left-0 right-0 z-[10000] h-[6px] pointer-events-none" aria-label="Article reading indicators" style={{'--progress-page-color': siteConfig.readingProgressPageColor || '#2563EB', '--progress-read-color': siteConfig.readingProgressPersistentColor || siteConfig.themePrimaryColor || '#FFD600'} as React.CSSProperties}>
-        {/* CURRENT PAGE POSITION: follows the viewport in both directions. */}
-        <div
-          className="h-[3px] w-full bg-black/10 overflow-hidden"
-          aria-hidden="true"
-        >
-          <div
-            className="h-full origin-left will-change-transform transition-[width] duration-75 ease-linear"
-            style={{ backgroundColor: 'var(--progress-page-color)', width: `${Math.max(0, Math.min(100, pagePosition))}%` }}
-          />
-        </div>
-        {/* READING PROGRESS: highest progress reached; never retracts on scroll-up. */}
-        <div
-          className="h-[3px] w-full bg-neutral-200 overflow-hidden"
-          role="progressbar"
-          aria-label={`Article reading progress ${Math.round(scrollProgress)}%`}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(scrollProgress)}
-        >
-          <div
-            className="h-full will-change-transform transition-[width] duration-75 ease-linear" style={{ backgroundColor: 'var(--progress-read-color)', width: `${Math.max(0, Math.min(100, scrollProgress))}%` }}
-
-          />
-        </div>
+      {/* Top Reading Progress Bar */}
+      <div className="fixed top-0 left-0 right-0 z-50 h-2 bg-neutral-200">
+        <div 
+          className="h-full bg-[var(--color-primary)] border-b-2 border-black transition-all duration-75"
+          style={{ width: `${scrollProgress}%` }}
+        />
       </div>
 
       {/* Floating Sub-Header for reading utility */}
@@ -893,7 +754,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           <div ref={articleContentEndRef} aria-hidden="true" className="h-px w-full" />
         </div>
 
-        <div ref={readerReactionRef} className="my-10 border-4 border-black bg-white p-5 neo-shadow">
+        <div className="my-10 border-4 border-black bg-white p-5 neo-shadow">
           <div className="font-display font-black uppercase mb-3 flex items-center gap-2"><HeartPulse className="w-4 h-4"/> Reader reactions</div>
           <div className="flex flex-wrap gap-2">
             {ARTICLE_REACTIONS.map((r)=><button key={r} disabled={reactionBusy} onClick={async()=>{let u=user;if(!u){try{u=await loginWithGoogle();}catch{return}} if(!u)return;setReactionBusy(true);try{const previous=reaction;const next=reaction===r?null:r;await setArticleReaction(article.slug,u.uid,next);setReaction(next);setEngagement(prev=>{const counts={...prev.reactions};if(previous) counts[previous]=Math.max(0,(counts[previous]||0)-1);if(next) counts[next]=(counts[next]||0)+1;return {...prev,reactions:counts};});}catch(e){console.warn(e)}finally{setReactionBusy(false)}}} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${reaction===r?'bg-[var(--color-primary)]':'bg-white'}`}>{r} <span className="ml-1 opacity-70">{engagement.reactions[r]||0}</span></button>)}
@@ -924,7 +785,6 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         </div>
 
         <div className="mb-8 grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <div className="border-2 border-black bg-white p-3 col-span-2 sm:col-span-1"><div className="font-mono text-[8px] uppercase text-neutral-500">VIEWS</div><div className="font-display font-black text-xl">{Number(article.viewsCount || 0).toLocaleString()}</div></div>
           <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">APPLAUSE</div><div className="font-display font-black text-xl">{engagement.applauds}</div></div>
           <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">REACTIONS</div><div className="font-display font-black text-xl">{Object.values(engagement.reactions).reduce<number>((a,b)=>a+Number(b||0),0)}</div></div>
           <div className="border-2 border-black bg-white p-3"><div className="font-mono text-[8px] uppercase text-neutral-500">COMMENTS</div><div className="font-display font-black text-xl">{engagement.comments}</div></div>
@@ -1052,12 +912,6 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           </div>
         )}
 
-        {relatedSeries.length > 0 && (
-          <div className="pt-10 border-t-4 border-black mt-12 space-y-5">
-            <div className="flex items-center justify-between"><h3 className="font-display font-black text-2xl uppercase">RELATED SERIES</h3><button onClick={()=>onOpenSeries && onOpenSeries(relatedSeries[0].id)} className="font-mono text-[9px] uppercase underline">OPEN A PATH →</button></div>
-            <div className="grid sm:grid-cols-2 gap-4">{relatedSeries.map(s=><button key={s.id} onClick={()=>onOpenSeries && onOpenSeries(s.id)} className="text-left border-4 border-black bg-[var(--color-secondary)] p-4 hover:-translate-y-1 transition-transform"><div className="font-mono text-[9px] uppercase">{s.articleCount||0} PARTS · {s.estimatedMinutes||0} MIN</div><h4 className="font-display font-black text-xl uppercase mt-1">{s.title}</h4><p className="text-sm mt-2 line-clamp-2">{s.description}</p></button>)}</div>
-          </div>
-        )}
       </article>
     </div>
   );

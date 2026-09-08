@@ -34,43 +34,16 @@ import { PreferencesView } from './components/PreferencesView';
 import { ExploreView } from './components/ExploreView';
 import { SeriesView } from './components/SeriesView';
 import { CreatorView } from './components/CreatorView';
-import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor } from './lib/community';
-import { subscribeReadingQueue, toggleReadingQueue, subscribeThemePreference } from './lib/account';
+import { subscribeReadingQueue, toggleReadingQueue } from './lib/account';
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
-import { notifyToast } from './lib/toast';
 
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
 const SAVED_COMMUNITY_KEY = 'krishficient_saved_community_v1';
-
-function ToastHost(){
-  const [toasts,setToasts]=React.useState<Array<{id:number;message:string;kind:'success'|'error'|'info';duration:number}>>([]);
-  React.useEffect(()=>{
-    const onToast=(event:Event)=>{
-      const detail=(event as CustomEvent).detail||{};
-      const id=Date.now()+Math.random();
-      const item={id,message:String(detail.message||''),kind:(detail.kind||'info') as 'success'|'error'|'info',duration:Number(detail.duration)||3200};
-      setToasts(prev=>[...prev.slice(-3),item]);
-      window.setTimeout(()=>setToasts(prev=>prev.filter(t=>t.id!==id)),item.duration);
-    };
-    window.addEventListener('offscrpt:toast',onToast);
-    return ()=>window.removeEventListener('offscrpt:toast',onToast);
-  },[]);
-  const tone={success:'bg-[#00FF41]',error:'bg-[#FF4D6D]',info:'bg-[#00E0FF]'};
-  return <div className="fixed right-4 bottom-4 z-[500] w-[min(92vw,360px)] space-y-3 pointer-events-none">
-    {toasts.map(t=><div key={t.id} className={`pointer-events-auto border-4 border-black neo-shadow-sm ${tone[t.kind]} text-black`}>
-      <div className="flex items-start gap-3 p-3">
-        <div className="flex-1 font-display font-black uppercase text-sm leading-tight">{t.message}</div>
-        <button aria-label="Dismiss notification" className="border-2 border-black bg-white px-2 py-0.5 font-mono text-xs font-black pointer-events-auto" onClick={()=>setToasts(prev=>prev.filter(x=>x.id!==t.id))}>×</button>
-      </div>
-      <div className="h-1 bg-black/20 overflow-hidden"><div className="h-full bg-black origin-left animate-[toastbar_3200ms_linear_forwards]" style={{animationDuration:`${t.duration}ms`}} /></div>
-    </div>)}
-  </div>;
-}
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<PageView>('home');
@@ -246,23 +219,6 @@ export default function App() {
     siteConfig.themeSuccessColor
   ]);
 
-  // Account theme preference: cached immediately, then cloud-synced once signed in.
-  useEffect(() => {
-    const apply = (theme: 'light' | 'dark') => {
-      document.documentElement.classList.toggle('dark', theme === 'dark');
-      document.documentElement.dataset.theme = theme;
-      document.documentElement.style.colorScheme = theme;
-      try { localStorage.setItem('offscrpt:theme', theme); } catch {}
-    };
-    try {
-      const cached = localStorage.getItem('offscrpt:theme');
-      if (cached === 'dark' || cached === 'light') apply(cached as 'light'|'dark');
-      else if (window.matchMedia('(prefers-color-scheme: dark)').matches) apply('dark');
-    } catch {}
-    if (!userAuth?.uid) return;
-    return subscribeThemePreference(apply);
-  }, [userAuth?.uid]);
-
   // Keep the browser favicon synchronized with the cloud-managed site logo.
   useEffect(() => {
     const fallbackFavicon = 'https://i.postimg.cc/kMf3D3cS/Screenshot-2026-09-07-142924.png';
@@ -356,9 +312,6 @@ export default function App() {
       } else if (hash.startsWith('creator/')) {
         setCurrentPage('creator');
         setActiveArticleSlug(hash.replace('creator/', ''));
-      } else if (hash.startsWith('topic/')) {
-        setCurrentPage('topic');
-        setActiveArticleSlug(hash.replace('topic/', ''));
       } else if (hash === 'explore' || hash.startsWith('explore/')) {
         setCurrentPage('explore');
         setActiveArticleSlug(hash.startsWith('explore/') ? hash.replace('explore/', '') : null);
@@ -446,7 +399,6 @@ export default function App() {
           !willBeSaved,
           targetArticle?.title || slug
         );
-        notifyToast(willBeSaved ? 'Saved to your library.' : 'Removed from your saved items.', 'success');
       } catch (e) {
         console.error("Error saving dispatch to cloud:", e);
       }
@@ -477,7 +429,6 @@ export default function App() {
           !willBeSaved,
           title || 'Community Post'
         );
-        notifyToast(willBeSaved ? 'Saved community post.' : 'Removed from your saved items.', 'success');
       } catch (e) {
         console.error("Error saving community post to cloud:", e);
       }
@@ -493,7 +444,6 @@ export default function App() {
     setReadingQueueIds(prev => queued ? prev.filter(id => id !== slug) : [...prev, slug]);
     try {
       await toggleReadingQueue(slug, 'article', articles.find(a => a.slug === slug)?.title || slug, queued);
-      notifyToast(queued ? 'Removed from reading queue.' : 'Added to reading queue.', 'success');
     } catch (e) {
       console.error('Reading queue sync failed:', e);
       setReadingQueueIds(prev => queued ? [...prev, slug] : prev.filter(id => id !== slug));
@@ -552,8 +502,6 @@ export default function App() {
   }, [userAuth, currentPage, activeArticle?.slug]);
 
   return (
-    <>
-      <ToastHost />
     <div className="min-h-screen flex flex-col bg-white text-black font-sans selection:bg-[var(--color-primary)] selection:text-black">
       {/* Top Header */}
       <Header
@@ -710,11 +658,7 @@ export default function App() {
             )}
 
             {currentPage === 'creator' && activeArticleSlug && (
-              <CreatorView username={activeArticleSlug} articles={articles} currentUserUid={userAuth?.uid} currentUsername={userProfile?.username} onNavigate={navigateTo} />
-            )}
-
-            {currentPage === 'topic' && activeArticleSlug && (
-              <TopicView slug={activeArticleSlug} articles={articles} onNavigate={navigateTo} />
+              <CreatorView username={activeArticleSlug} articles={articles} onNavigate={navigateTo} />
             )}
 
             {currentPage === 'community' && (
@@ -819,9 +763,10 @@ export default function App() {
         onNavigate={navigateTo}
         onOpenCms={() => setIsCmsOpen(true)}
         onOpenRssModal={() => setIsRssOpen(true)}
+        onSelectCategory={(category) => setSelectedCategory(category)}
+        articles={articles}
         siteConfig={siteConfig}
       />
     </div>
-    </>
   );
 }

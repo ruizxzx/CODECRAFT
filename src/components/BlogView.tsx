@@ -81,6 +81,8 @@ export const BlogView: React.FC<BlogViewProps> = ({
   }, [articles, selectedCategory, selectedTag, searchQuery, showSavedOnly, savedSlugs, sortBy]);
 
   // Determine top featured article
+  const publishedArticles = useMemo(() => articles.filter(a => a.isPublished !== false && a.mainPublicationStatus !== 'unpublished'), [articles]);
+
   const featuredArticle = useMemo(() => {
     return articles.find((a) => a.pinned) || articles.find((a) => a.featured) || articles[0];
   }, [articles]);
@@ -88,24 +90,28 @@ export const BlogView: React.FC<BlogViewProps> = ({
   return (
     <div className="w-full bg-white min-h-screen pb-20">
       {/* Editorial Header Section */}
-      <section className="bg-[var(--color-primary)] border-b-4 border-black py-12 sm:py-16">
+      <section
+        className="border-b-4 border-black py-12 sm:py-16"
+        style={{ backgroundColor: siteConfig.blogHeader?.backgroundColor || 'var(--color-primary)', color: siteConfig.blogHeader?.textColor || '#000000' }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap items-center gap-2 mb-4">
             <span className="px-3 py-1 bg-black text-white font-mono text-xs font-bold uppercase">
-              THE DISPATCHES ARCHIVE
+              {siteConfig.blogHeader?.eyebrow || 'THE DISPATCHES ARCHIVE'}
             </span>
-            <span className="px-2.5 py-1 bg-white text-black neo-border-2 font-display font-black text-xs uppercase neo-shadow-sm">
-              {articles.length} ESSAYS PUBLISHED
-            </span>
+            {(siteConfig.blogHeader?.showEssayCount !== false) && (
+              <span className="px-2.5 py-1 bg-white text-black neo-border-2 font-display font-black text-xs uppercase neo-shadow-sm">
+                {publishedArticles.length} ESSAYS PUBLISHED
+              </span>
+            )}
           </div>
 
-          <h1 className="font-display font-black text-4xl sm:text-5xl md:text-6xl uppercase tracking-tighter text-black mb-4">
-            ENGINEERING &amp; ARCHITECTURE
+          <h1 className="font-display font-black text-4xl sm:text-5xl md:text-6xl uppercase tracking-tighter mb-4">
+            {siteConfig.blogHeader?.title || 'ENGINEERING & ARCHITECTURE'}
           </h1>
 
-          <p className="font-sans text-lg sm:text-xl text-neutral-900 max-w-3xl leading-relaxed font-medium">
-            Rigorous, hands-on writing dissecting modern web technologies, AI agent architectures, 
-            distributed database internals, and developer productivity systems.
+          <p className="font-sans text-lg sm:text-xl max-w-3xl leading-relaxed font-medium">
+            {siteConfig.blogHeader?.description || 'Rigorous, hands-on writing dissecting modern web technologies, AI agent architectures, distributed database internals, and developer productivity systems.'}
           </p>
         </div>
       </section>

@@ -126,24 +126,6 @@ export async function deleteDraftSnapshot(draftId: string) {
   await deleteDoc(doc(db, 'users', uid, 'drafts', draftId));
 }
 
-
-export type DraftSummary = { id: string; title: string; type?: string; updatedAt?: string; wordCount?: number; payload?: Record<string, unknown> };
-
-export async function getAccountDrafts(): Promise<DraftSummary[]> {
-  const uid = auth.currentUser?.uid;
-  if (!uid) return [];
-  try {
-    const snap = await getDocs(query(collection(db, 'users', uid, 'drafts'), orderBy('updatedAt', 'desc'), limit(50)));
-    return snap.docs.map(d => { const x = d.data() as any; const blocks = Array.isArray(x.contentBlocks) ? x.contentBlocks : []; const text = blocks.map((b:any)=>String(b.content||'')).join(' '); return { id:d.id, title:String(x.title||x.name||'Untitled Draft'), type:String(x.type || (d.id==='community' ? 'community' : 'article')), updatedAt:iso(x.updatedAt), wordCount:text.trim()?text.trim().split(/\s+/).length:0, payload:x }; });
-  } catch { return []; }
-}
-
-export async function deleteAccountDraft(draftId: string): Promise<void> {
-  const uid = auth.currentUser?.uid;
-  if (!uid || !draftId) return;
-  await deleteDoc(doc(db, 'users', uid, 'drafts', draftId));
-}
-
 export type AccountActivity = {
   id: string;
   kind: 'read' | 'saved' | 'notification';
@@ -180,33 +162,4 @@ export function mergeDashboardData(
     ...notifications.map((x) => ({ id: `notification:${x.id}`, kind: 'notification' as const, title: x.message, subtitle: x.actorUsername ? `From @${x.actorUsername}` : 'Notification', at: x.createdAt, targetSlug: x.targetId, targetType: x.targetType })),
   ];
   return rows.sort((a, b) => new Date(b.at || 0).getTime() - new Date(a.at || 0).getTime()).slice(0, 60);
-}
-
-
-export type ThemePreference = 'light' | 'dark';
-export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'light';
-
-export async function getThemePreference(): Promise<ThemePreference> {
-  const uid = auth.currentUser?.uid;
-  if (!uid) return DEFAULT_THEME_PREFERENCE;
-  try {
-    const snap = await getDoc(doc(db, 'users', uid, 'preferences', 'ui'));
-    return snap.exists() && snap.data()?.theme === 'dark' ? 'dark' : 'light';
-  } catch {
-    return DEFAULT_THEME_PREFERENCE;
-  }
-}
-
-export async function saveThemePreference(theme: ThemePreference): Promise<void> {
-  const uid = auth.currentUser?.uid;
-  if (!uid) throw new Error('Sign in required');
-  await setDoc(doc(db, 'users', uid, 'preferences', 'ui'), { theme, updatedAt: serverTimestamp() }, { merge: true });
-}
-
-export function subscribeThemePreference(callback: (theme: ThemePreference) => void): () => void {
-  const uid = auth.currentUser?.uid;
-  if (!uid) { callback(DEFAULT_THEME_PREFERENCE); return () => {}; }
-  return onSnapshot(doc(db, 'users', uid, 'preferences', 'ui'), (snap) => {
-    callback(snap.exists() && snap.data()?.theme === 'dark' ? 'dark' : 'light');
-  }, () => callback(DEFAULT_THEME_PREFERENCE));
 }

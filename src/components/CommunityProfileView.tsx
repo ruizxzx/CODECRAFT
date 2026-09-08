@@ -1,4 +1,3 @@
-import { notifyToast } from '../lib/toast';
 import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
@@ -162,38 +161,38 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     try {
       const nextPhotoURL = photoUrlInput.trim();
       const nextCoverURL = coverUrlInput.trim();
-      if (nextPhotoURL && !/^https?:\/\//i.test(nextPhotoURL)) { notifyToast('Profile picture must be a public http(s) image URL.'); return; }
-      if (nextCoverURL && !/^https?:\/\//i.test(nextCoverURL)) { notifyToast('Cover image must be a public http(s) image URL.'); return; }
+      if (nextPhotoURL && !/^https?:\/\//i.test(nextPhotoURL)) { alert('Profile picture must be a public http(s) image URL.'); return; }
+      if (nextCoverURL && !/^https?:\/\//i.test(nextCoverURL)) { alert('Cover image must be a public http(s) image URL.'); return; }
       const nextWebsite = websiteInput.trim();
       const nextX = socialXInput.trim();
       const nextGithub = socialGithubInput.trim();
       const nextTelegram = socialTelegramInput.trim();
       for (const [label, value] of [['Website', nextWebsite], ['X', nextX], ['GitHub', nextGithub], ['Telegram', nextTelegram], ['Instagram', socialInstagramInput.trim()]] as const) {
-        if (value && !/^https?:\/\//i.test(value)) { notifyToast(`${label} URL must start with http:// or https://`); return; }
+        if (value && !/^https?:\/\//i.test(value)) { alert(`${label} URL must start with http:// or https://`); return; }
       }
       const nextDisplayName = displayNameInput.trim() || profile.username;
-      if (nextDisplayName.length > 64) { notifyToast('Display name must be 64 characters or less.'); return; }
+      if (nextDisplayName.length > 64) { alert('Display name must be 64 characters or less.'); return; }
       await updateCommunityProfile(profile.uid, { displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, socialInstagram: socialInstagramInput.trim() });
       try { await updateProfile(activeUser, { displayName: nextDisplayName, photoURL: nextPhotoURL || null }); } catch (authError) { console.warn('Firebase Auth avatar update skipped:', authError); }
       const nextProfile = { ...profile, displayName: nextDisplayName, bio: bioInput, themeColor: themeInput, photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim(), socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, socialInstagram: socialInstagramInput.trim(), updatedAt: new Date().toISOString() };
       setProfile(nextProfile);
       await syncUserIdentityAcrossContent(activeUser.uid, { displayName: nextProfile.displayName, photoURL: nextPhotoURL, username: nextProfile.username });
       setIsEditing(false);
-      notifyToast('Profile saved and synchronized across your posts and comments.');
-    } catch (e: any) { notifyToast('Failed to update profile: ' + (e?.message || 'Permission denied.')); }
+      alert('Profile saved and synchronized across your posts and comments.');
+    } catch (e: any) { alert('Failed to update profile: ' + (e?.message || 'Permission denied.')); }
   };
 
   const handleToggleFollow = async () => {
     if (!profile || profile.uid === activeUser?.uid) return;
     if (!activeUser) {
-      notifyToast('Sign in with Google to follow this profile.');
+      alert('Sign in with Google to follow this profile.');
       return;
     }
     setIsFollowLoading(true);
     try {
       let me = currentUserProfile || await getCommunityProfile(activeUser.uid);
       if (!me) {
-        notifyToast('Complete your profile before following other accounts.');
+        alert('Complete your profile before following other accounts.');
         return;
       }
       if (isFollowing) {
@@ -205,7 +204,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         setIsFollowing(true);
         setProfile(prev => prev ? { ...prev, followersCount: (prev.followersCount || 0) + 1 } : prev);
       }
-    } catch (e: any) { notifyToast('Failed to update follow: ' + (e?.message || 'Permission denied')); }
+    } catch (e: any) { alert('Failed to update follow: ' + (e?.message || 'Permission denied')); }
     finally { setIsFollowLoading(false); }
   };
 
@@ -217,7 +216,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       const target:any = posts.find((p:any)=>p.id===postId);
       if(target?.sourceType==='community' && target.communityId){ const {deleteCommunityPost}=await import('../lib/social'); await deleteCommunityPost(target.communityId,postId,activeUser.uid); } else { await deletePost(postId); }
       setPosts(prev => prev.filter((p:any) => !(p.id === postId && ((p as any).communityId||'') === ((target as any)?.communityId||''))));
-    } catch (err: any) { notifyToast('Failed to delete post: ' + (err?.message || 'Permission denied')); }
+    } catch (err: any) { alert('Failed to delete post: ' + (err?.message || 'Permission denied')); }
   };
 
   const renderPost = (post: CommunityPost, label?: string) => (
@@ -240,7 +239,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       <p className="mt-2 text-sm text-neutral-600 line-clamp-2">{post.content}</p>
       <div className="mt-4 pt-4 border-t-2 border-neutral-100 flex justify-between font-mono text-xs text-neutral-500">
         <span>{formatDisplayDate(post.createdAt)}{(post as any).communityId ? ` · c/${(post as any).communitySlug || ''}` : ''}</span>
-        <div className="flex gap-4"><span>{post.upvotesCount || 0} Upvotes</span><span>{Number(post.viewsCount || 0).toLocaleString()} VIEWS · {post.commentsCount || 0} Comments</span><span>{post.repostsCount || 0} Reposts</span></div>
+        <div className="flex gap-4"><span>{post.upvotesCount || 0} Upvotes</span><span>{post.commentsCount || 0} Comments</span><span>{post.repostsCount || 0} Reposts</span></div>
       </div>
     </div>
   );

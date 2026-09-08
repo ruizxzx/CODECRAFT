@@ -1,4 +1,3 @@
-import { notifyToast } from '../lib/toast';
 import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
@@ -151,7 +150,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
       const next = await toggleRepost(post.id, userAuth.uid, active);
       setRepostedIds(prev => next ? [...prev, post.id] : prev.filter(id => id !== post.id));
       setPosts(prev => prev.map(p => p.id === post.id ? { ...p, repostsCount: Math.max(0, (p.repostsCount || 0) + (next ? 1 : -1)) } : p));
-    } catch (err: any) { notifyToast('Failed to update repost: ' + (err?.message || 'Permission denied')); }
+    } catch (err: any) { alert('Failed to update repost: ' + (err?.message || 'Permission denied')); }
     finally { setRepostingId(null); }
   };
 
@@ -169,17 +168,17 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
     const currentUser = auth.currentUser || userAuth;
     const currentIsAdmin = checkIsAdmin(currentUser?.email);
     if (!currentUser || (!currentIsAdmin && currentUser.uid !== authorId)) {
-      notifyToast('You do not have permission to delete this post.');
+      alert('You do not have permission to delete this post.');
       return;
     }
     if (!confirm('Are you sure you want to permanently delete this post?')) return;
     try {
       await deletePost(postId);
       setPosts(posts.filter(p => p.id !== postId));
-      notifyToast('Post successfully deleted from database and site!');
+      alert('Post successfully deleted from database and site!');
     } catch (err: any) {
       console.error(err);
-      notifyToast('Failed to delete post: ' + (err?.message || 'Permission denied'));
+      alert('Failed to delete post: ' + (err?.message || 'Permission denied'));
     }
   };
 
@@ -450,7 +449,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       </div>
                       <div className="flex items-center space-x-1 font-bold">
                         <MessageSquare className="w-3.5 h-3.5" />
-                        <span>{Number(post.viewsCount || 0).toLocaleString()} VIEWS · {post.commentsCount || 0}</span>
+                        <span>{post.commentsCount || 0}</span>
                       </div>
                       <div className="flex items-center space-x-1 font-bold"><Repeat2 className="w-3.5 h-3.5" /><span>{post.repostsCount || 0}</span></div>
                     </div>
