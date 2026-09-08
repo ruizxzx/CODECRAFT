@@ -15,12 +15,29 @@ import {
   Timestamp,
   writeBatch,
   limit,
-  increment
+  increment,
+  runTransaction
 } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
 import { deletePost, getCommunityProfile, getPost } from './community';
-import { Article, SiteConfig, BentoLink, ArticleComment, CommunityPost } from '../types';
+import { Article, SiteConfig, BentoLink, ArticleComment, CommunityPost, NavigationItemConfig } from '../types';
 import { INITIAL_ARTICLES } from '../data/articles';
+
+export const DEFAULT_TOP_NAVIGATION: NavigationItemConfig[] = [
+  { id: 'home', label: 'Home', page: 'home', visible: true },
+  { id: 'blog', label: 'Blog', page: 'blog', visible: true },
+  { id: 'social', label: 'Community', page: 'social', visible: true },
+  { id: 'saved', label: 'Saved', page: 'saved', visible: true },
+  { id: 'notifications', label: 'Notifications', page: 'notifications', visible: true },
+  { id: 'explore', label: 'Explore', page: 'explore', visible: true },
+  { id: 'series', label: 'Series', page: 'series', visible: true },
+];
+
+export const DEFAULT_MENU_NAVIGATION: NavigationItemConfig[] = [
+  { id: 'about', label: 'About', page: 'about', visible: true },
+  { id: 'links', label: 'Links', page: 'links', visible: true },
+  { id: 'contact', label: 'Contact', page: 'contact', visible: true },
+];
 
 export const DEFAULT_SITE_CONFIG: SiteConfig = {
   logoImageUrl: "",
@@ -36,49 +53,15 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   authorRole: "Founder & Systems Architect",
   authorAvatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=400&auto=format&fit=crop",
   aboutMeTitle: "SYSTEMS ARCHITECT // SOFTWARE CRAFTSMAN",
+  topNavigation: DEFAULT_TOP_NAVIGATION,
+  menuNavigation: DEFAULT_MENU_NAVIGATION,
   aboutMeBio: "I am a software engineer and systems architect specializing in high-performance web applications and distributed systems.\n\nOver the past decade, I have built infrastructure that scales to millions of users, designed resilient microservices, and obsessed over web performance metrics.",
   themePrimaryColor: "#FFD600",
   themeSecondaryColor: "#00E0FF",
   themeAccentColor: "#FF60B5",
   themeSuccessColor: "#00FF41",
-  marqueeItems: [
-    { id: "marquee-1", text: "BUILDING ON THE OPEN INTERNET", enabled: true },
-    { id: "marquee-2", text: "OFFSCRPT TECH PRESS", enabled: true },
-    { id: "marquee-3", text: "BUILD. LEARN. CREATE.", enabled: true },
-    { id: "marquee-4", text: "NEW DISPATCHES EVERY TUESDAY", enabled: true },
-    { id: "marquee-5", text: "NO FLUFF • REAL PRODUCTION CODE", enabled: true },
-    { id: "marquee-6", text: "DISTRIBUTED SYSTEMS & LOCAL AI", enabled: true },
-  ],
-  marqueeSpeedSeconds: 25,
-  marqueePauseOnHover: true,
-  blogHeader: {
-    eyebrow: "THE DISPATCHES ARCHIVE",
-    title: "ENGINEERING & ARCHITECTURE",
-    description: "Rigorous, hands-on writing dissecting modern web technologies, AI agent architectures, distributed database internals, and developer productivity systems.",
-    backgroundColor: "#D97706",
-    textColor: "#000000",
-    showEssayCount: true,
-  },
-  footerNavigationTitle: "NAVIGATION",
-  footerTopicsTitle: "CURATED TOPICS",
-  footerHubTitle: "PUBLICATION HUB",
-  footerNavigationLinks: [
-    { id: "footer-home", label: "Home", url: "#home", enabled: true },
-    { id: "footer-blog", label: "The Dispatches", url: "#blog", enabled: true },
-    { id: "footer-series", label: "Series", url: "#series", enabled: true },
-    { id: "footer-explore", label: "Explore", url: "#explore", enabled: true },
-    { id: "footer-about", label: "About Krish", url: "#about", enabled: true },
-    { id: "footer-contact", label: "Contact Desk", url: "#contact", enabled: true },
-  ],
-  footerHubLinks: [
-    { id: "hub-saved", label: "Saved", url: "#saved", enabled: true },
-    { id: "hub-history", label: "Reading History", url: "#history", enabled: true },
-    { id: "hub-notifications", label: "Notifications", url: "#notifications", enabled: true },
-    { id: "hub-dashboard", label: "My OFFSCRPT", url: "#dashboard", enabled: true },
-    { id: "hub-rss", label: "RSS / XML Feed", url: "#rss", enabled: true },
-  ],
-  footerTopicCategories: [],
-  footerBottomRightText: "GUMROAD × MEDIUM × NEO-BRUTALISM",
+  readingProgressPageColor: "#2563EB",
+  readingProgressPersistentColor: "#FFD600",
   footerNewsletterTitle: "RECEIVE DEEP TECHNICAL ESSAYS IN YOUR INBOX",
   footerNewsletterSubtitle: "Zero spam. Zero generic marketing. Only in-depth software architectural breakdowns, local AI research, and production post-mortems.",
   footerBrandStatement: "An independent technology publication engineered by Krish. Fusing Neo-Brutalism, Gumroad minimalism, and Medium-grade editorial craft for software builders worldwide.",
@@ -520,16 +503,66 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
 }
 
 
-export async function recordArticleView(slug:string, viewerId?:string):Promise<void>{
-  // Store one view receipt per signed-in user/article/day. This avoids allowing a
-  // public client to mutate the protected article aggregate directly.
-  if(!viewerId) return;
-  const day=new Date().toISOString().slice(0,10);
-  const ref=doc(db,'articleViews',`${slug}_${viewerId}_${day}`);
+
+function getStableVisitorId(): string {
+  if (typeof window === 'undefined') return 'server';
+  const KEY = 'offscrpt:visitor-id:v1';
   try {
-    const existing=await getDoc(ref);
-    if(!existing.exists()) await setDoc(ref,{slug,userId:viewerId,day,createdAt:serverTimestamp()});
-  } catch(e){ console.warn('Article view tracking failed:',e); }
+    const existing = localStorage.getItem(KEY);
+    if (existing) return existing;
+    const value = `${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    localStorage.setItem(KEY, value);
+    return value;
+  } catch {
+    return `ephemeral-${Math.random().toString(36).slice(2)}-${Date.now()}`;
+  }
+}
+export async function recordArticleView(slug:string, viewerId?:string):Promise<void>{
+  if(!slug) return;
+  const authenticated = Boolean(viewerId);
+  const identity = viewerId || getStableVisitorId();
+  const day = new Date().toISOString().slice(0,10);
+  const safeSlug = encodeURIComponent(slug).slice(0,180);
+  const safeIdentity = encodeURIComponent(identity).slice(0,220);
+  const receiptId = `${safeSlug}_${safeIdentity}_${day}`;
+  const receiptRef = doc(db, 'articleViews', receiptId);
+  const articleRef = doc(db, 'articles', slug);
+
+  // Anonymous reads are deduplicated by a stable browser identifier + UTC day.
+  // The local marker prevents unnecessary writes; authenticated readers are additionally
+  // protected by the cloud receipt transaction below.
+  const localKey = `offscrpt:view:${slug}:${day}`;
+  if (!authenticated) {
+    try { if (localStorage.getItem(localKey) === '1') return; } catch {}
+    try {
+      await setDoc(receiptRef, { slug, visitorId: identity, day, createdAt: serverTimestamp() }, { merge: false });
+      await runTransaction(db, async (tx) => {
+        const articleSnap = await tx.get(articleRef);
+        if (!articleSnap.exists()) return;
+        const current = Number(articleSnap.data()?.viewsCount || 0);
+        tx.update(articleRef, { viewsCount: current + 1, updatedAt: serverTimestamp() });
+      });
+      try { localStorage.setItem(localKey, '1'); } catch {}
+    } catch(e){ console.warn('Anonymous article view tracking failed:', e); }
+    return;
+  }
+
+  try {
+    await runTransaction(db, async (tx) => {
+      const receiptSnap = await tx.get(receiptRef);
+      const articleSnap = await tx.get(articleRef);
+      if (receiptSnap.exists() || !articleSnap.exists()) return;
+      const current = Number(articleSnap.data()?.viewsCount || 0);
+      tx.set(receiptRef, { slug, userId: viewerId, day, createdAt: serverTimestamp() });
+      tx.update(articleRef, { viewsCount: current + 1, updatedAt: serverTimestamp() });
+    });
+  } catch(e){ console.warn('Article view tracking failed:', e); }
+}
+
+export async function getArticleViewCount(slug:string):Promise<number>{
+  if(!slug) return 0;
+  try { const snap = await getDoc(doc(db, 'articles', slug)); return Number(snap.data()?.viewsCount || 0); }
+  catch { return 0; }
 }
 
 export const ARTICLE_REACTIONS = ['like','useful','insightful','interesting'] as const;
@@ -552,6 +585,22 @@ export async function createArticleRevision(article:Article):Promise<void>{
   if(!checkIsAdmin(auth.currentUser?.email)) return;
   const id=`${article.slug}_${Date.now()}`;
   await setDoc(doc(db,'articleRevisions',id),{article,slug:article.slug,createdBy:auth.currentUser?.uid||'',createdAt:serverTimestamp()});
+}
+
+export async function getArticleRevisions(slug:string):Promise<any[]>{
+  const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
+  const snap=await getDocs(query(collection(db,'articleRevisions'), where('slug','==',slug), limit(50)));
+  return snap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>{
+    const at=a.createdAt?.toDate?.()?.getTime?.() || 0; const bt=b.createdAt?.toDate?.()?.getTime?.() || 0; return bt-at;
+  });
+}
+
+export async function restoreArticleRevision(revisionId:string):Promise<Article>{
+  const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
+  const snap=await getDoc(doc(db,'articleRevisions',revisionId)); if(!snap.exists()) throw new Error('Revision not found.');
+  const article={...(snap.data()?.article as Article)};
+  await saveArticle(article);
+  return article;
 }
 
 export async function saveArticle(article: Article): Promise<Article> {

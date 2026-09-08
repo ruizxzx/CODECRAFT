@@ -1,7 +1,8 @@
+import { notifyToast } from '../lib/toast';
 import React, { useState, useEffect, useRef } from 'react';
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { calculateArticleReadingTime } from '../lib/reading';
-import { Article, Category, SiteConfig, BentoLink, CarouselSlide, CarouselElement, MarqueeItem, FooterLink } from '../types';
+import { Article, Category, SiteConfig, BentoLink, CarouselSlide, CarouselElement } from '../types';
 import { 
   X, 
   PlusCircle, 
@@ -32,12 +33,15 @@ import {
   Trash,
   BadgeCheck,
   MousePointer2,
-  Layers
+  Layers,
+  History
 } from 'lucide-react';
 import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
 import { isPlatformModerator } from '../lib/social';
 import { 
   saveArticle, 
+  getArticleRevisions,
+  restoreArticleRevision,
   deleteArticle, 
   saveSiteConfig,
   getSiteConfig,
@@ -332,7 +336,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   };
 
   const handleEditSlideUpload = async (_e: React.ChangeEvent<HTMLInputElement>) => {
-    alert('Firebase Storage is disabled. Paste a public image URL instead.');
+    notifyToast('Firebase Storage is disabled. Paste a public image URL instead.');
   };
 
   const executeDeleteSlide = async (id: string) => {
@@ -398,22 +402,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [footerNewsletterTitle, setFooterNewsletterTitle] = useState(siteConfig.footerNewsletterTitle || '');
   const [footerNewsletterSubtitle, setFooterNewsletterSubtitle] = useState(siteConfig.footerNewsletterSubtitle || '');
   const [footerBrandStatement, setFooterBrandStatement] = useState(siteConfig.footerBrandStatement || '');
-  const [marqueeItemsText, setMarqueeItemsText] = useState((siteConfig.marqueeItems || []).map(i => `${i.text} | ${i.url || ''}`).join('\n'));
-  const [marqueeSpeedSeconds, setMarqueeSpeedSeconds] = useState(siteConfig.marqueeSpeedSeconds || 25);
-  const [marqueePauseOnHover, setMarqueePauseOnHover] = useState(siteConfig.marqueePauseOnHover !== false);
-  const [blogEyebrow, setBlogEyebrow] = useState(siteConfig.blogHeader?.eyebrow || '');
-  const [blogTitle, setBlogTitle] = useState(siteConfig.blogHeader?.title || '');
-  const [blogDescription, setBlogDescription] = useState(siteConfig.blogHeader?.description || '');
-  const [blogBackgroundColor, setBlogBackgroundColor] = useState(siteConfig.blogHeader?.backgroundColor || '#D97706');
-  const [blogTextColor, setBlogTextColor] = useState(siteConfig.blogHeader?.textColor || '#000000');
-  const [blogShowEssayCount, setBlogShowEssayCount] = useState(siteConfig.blogHeader?.showEssayCount !== false);
-  const [footerNavigationTitle, setFooterNavigationTitle] = useState(siteConfig.footerNavigationTitle || 'NAVIGATION');
-  const [footerTopicsTitle, setFooterTopicsTitle] = useState(siteConfig.footerTopicsTitle || 'CURATED TOPICS');
-  const [footerHubTitle, setFooterHubTitle] = useState(siteConfig.footerHubTitle || 'PUBLICATION HUB');
-  const [footerNavigationLinksText, setFooterNavigationLinksText] = useState((siteConfig.footerNavigationLinks || []).map(i => `${i.label} | ${i.url}`).join('\n'));
-  const [footerHubLinksText, setFooterHubLinksText] = useState((siteConfig.footerHubLinks || []).map(i => `${i.label} | ${i.url}`).join('\n'));
-  const [footerTopicCategoriesText, setFooterTopicCategoriesText] = useState((siteConfig.footerTopicCategories || []).join(', '));
-  const [footerBottomRightText, setFooterBottomRightText] = useState(siteConfig.footerBottomRightText || '');
   
   const [contactTitle, setContactTitle] = useState(siteConfig.contactTitle || '');
   const [contactSubtitle, setContactSubtitle] = useState(siteConfig.contactSubtitle || '');
@@ -456,22 +444,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setFooterNewsletterTitle(siteConfig.footerNewsletterTitle || '');
     setFooterNewsletterSubtitle(siteConfig.footerNewsletterSubtitle || '');
     setFooterBrandStatement(siteConfig.footerBrandStatement || '');
-    setMarqueeItemsText((siteConfig.marqueeItems || []).map(i => `${i.text} | ${i.url || ''}`).join('\n'));
-    setMarqueeSpeedSeconds(siteConfig.marqueeSpeedSeconds || 25);
-    setMarqueePauseOnHover(siteConfig.marqueePauseOnHover !== false);
-    setBlogEyebrow(siteConfig.blogHeader?.eyebrow || '');
-    setBlogTitle(siteConfig.blogHeader?.title || '');
-    setBlogDescription(siteConfig.blogHeader?.description || '');
-    setBlogBackgroundColor(siteConfig.blogHeader?.backgroundColor || '#D97706');
-    setBlogTextColor(siteConfig.blogHeader?.textColor || '#000000');
-    setBlogShowEssayCount(siteConfig.blogHeader?.showEssayCount !== false);
-    setFooterNavigationTitle(siteConfig.footerNavigationTitle || 'NAVIGATION');
-    setFooterTopicsTitle(siteConfig.footerTopicsTitle || 'CURATED TOPICS');
-    setFooterHubTitle(siteConfig.footerHubTitle || 'PUBLICATION HUB');
-    setFooterNavigationLinksText((siteConfig.footerNavigationLinks || []).map(i => `${i.label} | ${i.url}`).join('\n'));
-    setFooterHubLinksText((siteConfig.footerHubLinks || []).map(i => `${i.label} | ${i.url}`).join('\n'));
-    setFooterTopicCategoriesText((siteConfig.footerTopicCategories || []).join(', '));
-    setFooterBottomRightText(siteConfig.footerBottomRightText || '');
     setContactTitle(siteConfig.contactTitle || '');
     setContactSubtitle(siteConfig.contactSubtitle || '');
     setContactEmail(siteConfig.contactEmail || '');
@@ -483,7 +455,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   }, [siteConfig]);
 
   const handleSetVerification = async (verified: boolean) => {
-    if (!verificationHandle.trim()) { alert('Enter a user @handle.'); return; }
+    if (!verificationHandle.trim()) { notifyToast('Enter a user @handle.'); return; }
     setIsSavingVerification(true);
     setVerificationMessage(null);
     try {
@@ -493,7 +465,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       setVerificationState(verified ? 'verified' : 'unverified');
       setVerificationMessage(verified ? `@${updated.username} is now verified.` : `Verification removed from @${updated.username}.`);
     } catch (err: any) {
-      alert('Verification update failed: ' + (err?.message || 'Permission denied'));
+      notifyToast('Verification update failed: ' + (err?.message || 'Permission denied'));
     } finally { setIsSavingVerification(false); }
   };
 
@@ -505,18 +477,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       setVerificationColor(result.verificationColor || '#2196F3');
       setVerificationState(result.isVerified ? 'verified' : 'unverified');
       setVerificationMessage(result.isVerified ? 'User is currently verified.' : 'User is currently unverified.');
-    } catch (err: any) { alert(err?.message || 'Lookup failed'); }
+    } catch (err: any) { notifyToast(err?.message || 'Lookup failed'); }
   };
-
-  const parseConfiguredLinks = (raw: string, prefix: string): FooterLink[] => raw.split('\n').map((line, index) => {
-    const [label, ...urlParts] = line.split('|');
-    return { id: `${prefix}-${index + 1}`, label: (label || '').trim(), url: urlParts.join('|').trim(), enabled: true };
-  }).filter(link => link.label && link.url);
-
-  const parseMarqueeItems = (raw: string): MarqueeItem[] => raw.split('\n').map((line, index) => {
-    const [text, ...urlParts] = line.split('|');
-    return { id: `marquee-${index + 1}`, text: (text || '').trim(), url: urlParts.join('|').trim() || undefined, enabled: true };
-  }).filter(item => item.text);
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -557,20 +519,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         footerNewsletterTitle,
         footerNewsletterSubtitle,
         footerBrandStatement,
-        marqueeItems: parseMarqueeItems(marqueeItemsText),
-        marqueeSpeedSeconds: Math.max(10, Math.min(120, Number(marqueeSpeedSeconds) || 25)),
-        marqueePauseOnHover,
-        blogHeader: {
-          eyebrow: blogEyebrow.trim(), title: blogTitle.trim(), description: blogDescription.trim(),
-          backgroundColor: blogBackgroundColor, textColor: blogTextColor, showEssayCount: blogShowEssayCount
-        },
-        footerNavigationTitle: footerNavigationTitle.trim(),
-        footerTopicsTitle: footerTopicsTitle.trim(),
-        footerHubTitle: footerHubTitle.trim(),
-        footerNavigationLinks: parseConfiguredLinks(footerNavigationLinksText, 'footer-nav'),
-        footerHubLinks: parseConfiguredLinks(footerHubLinksText, 'footer-hub'),
-        footerTopicCategories: footerTopicCategoriesText.split(',').map(v => v.trim()).filter(Boolean),
-        footerBottomRightText: footerBottomRightText.trim(),
         contactTitle,
         contactSubtitle,
         contactEmail,
@@ -605,7 +553,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       setTimeout(() => setConfigSuccess(false), 2000);
     } catch (err: any) {
       console.error("Failed to save site config to Firestore:", err);
-      alert("Failed to save config: " + (err.message || 'Permission denied'));
+      notifyToast("Failed to save config: " + (err.message || 'Permission denied'));
     } finally {
       setIsSavingConfig(false);
     }
@@ -651,6 +599,11 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [showCustomCategoryInput, setShowCustomCategoryInput] = useState(false);
   const cropFileInputRef = useRef<HTMLInputElement | null>(null);
   const [draftRecoveryAvailable, setDraftRecoveryAvailable] = useState(false);
+  const [draftSaveState, setDraftSaveState] = useState<'idle'|'saving'|'saved'|'offline'>('idle');
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [revisionArticle, setRevisionArticle] = useState<Article | null>(null);
+  const [revisions, setRevisions] = useState<any[]>([]);
+  const [revisionBusy, setRevisionBusy] = useState(false);
   const adminDraftKey = `offscrpt:draft:admin:${auth.currentUser?.uid || 'session'}`;
   const adminDraftRestoredRef = useRef(false);
 
@@ -683,12 +636,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   }, [adminDraftKey, editingArticleId]);
 
   useEffect(() => {
+    const on=()=>setOnline(true); const off=()=>setOnline(false);
+    window.addEventListener('online', on); window.addEventListener('offline', off);
+    return ()=>{ window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
+
+  useEffect(() => {
     if (!auth.currentUser || editingArticleId) return;
     const hasContent = !!(newTitle.trim() || newExcerpt.trim() || contentBlocks.some((b) => (b.content || b.imageUrl || b.videoUrl || b.linkText || b.buttonText)));
     if (!hasContent) return;
     const payload = { title: newTitle, category: newCategory, tags: newTags, excerpt: newExcerpt, coverImage: newCoverImage, coverAlt: newCoverAlt, coverCaption: newCoverCaption, seriesId: newSeriesId, seriesName: newSeriesName, seriesOrder: newSeriesOrder, contentBlocks };
     try { localStorage.setItem(adminDraftKey, JSON.stringify(payload)); } catch {}
-    const timer = window.setTimeout(() => { void saveDraftSnapshot('admin-article', payload).catch(() => {}); }, 1000);
+    setDraftSaveState(online ? 'saving' : 'offline');
+    const timer = window.setTimeout(() => { void saveDraftSnapshot('admin-article', payload).then(() => setDraftSaveState('saved')).catch(() => setDraftSaveState('offline')); }, 900);
     return () => window.clearTimeout(timer);
   }, [adminDraftKey, editingArticleId, newTitle, newCategory, newTags, newExcerpt, newCoverImage, newCoverAlt, newCoverCaption, newSeriesId, newSeriesName, newSeriesOrder, contentBlocks]);
 
@@ -715,7 +675,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       setTimeout(() => setSyncAuthorSuccess(null), 4000);
     } catch (err: any) {
       console.error("Failed to sync author to articles:", err);
-      alert("Sync failed: " + (err.message || 'Permission denied'));
+      notifyToast("Sync failed: " + (err.message || 'Permission denied'));
     } finally {
       setIsSyncingAuthor(false);
     }
@@ -729,7 +689,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       await setArticleFeaturedStatus(art, newFeaturedState, newFeaturedState);
     } catch (err: any) {
       console.error("Failed to update article featured status in Firestore:", err);
-      alert("Failed to update featured status: " + (err.message || 'Permission denied'));
+      notifyToast("Failed to update featured status: " + (err.message || 'Permission denied'));
     } finally {
       setTogglingFeaturedSlug(null);
     }
@@ -769,7 +729,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       setBentoIsFeatured(false);
     } catch (err: any) {
       console.error("Failed to save bento link:", err);
-      alert("Failed to save link: " + (err.message || "Permission denied"));
+      notifyToast("Failed to save link: " + (err.message || "Permission denied"));
     } finally {
       setIsSavingBento(false);
     }
@@ -782,7 +742,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       onUpdateBentoLinks(updatedLinks);
     } catch (err: any) {
       console.error("Failed to delete bento link:", err);
-      alert("Failed to delete link: " + (err.message || "Permission denied"));
+      notifyToast("Failed to delete link: " + (err.message || "Permission denied"));
     }
   };
   
@@ -812,6 +772,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         console.error("Failed to update bento link order:", e);
       }
     }
+  };
+
+  const openRevisionHistory = async (article: Article) => {
+    setRevisionArticle(article); setRevisionBusy(true);
+    try { setRevisions(await getArticleRevisions(article.slug)); } catch (e) { console.warn('Revision history load failed', e); setRevisions([]); }
+    finally { setRevisionBusy(false); }
+  };
+
+  const restoreRevision = async (revisionId: string) => {
+    if (!revisionId || !window.confirm('Restore this revision? The current article will be snapshotted before restore.')) return;
+    setRevisionBusy(true);
+    try { const restored = await restoreArticleRevision(revisionId); onArticlePublished(restored); setRevisionArticle(null); setRevisions([]); } catch (e:any) { notifyToast(e.message || 'Revision restore failed.'); }
+    finally { setRevisionBusy(false); }
   };
 
   const handlePublish = async (e: React.FormEvent) => {
@@ -864,7 +837,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         seriesId: newSeriesId.trim() || undefined,
         seriesName: newSeriesName.trim() || undefined,
         seriesOrder: newSeriesOrder === '' ? undefined : Number(newSeriesOrder),
-        viewsCount: 1,
+        ...(editingArticleSlug ? {} : { viewsCount: 0 }),
         clapsCount: 0,
         author: {
           uid: authorProfile.uid,
@@ -927,7 +900,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       onDeleteArticle(slug);
     } catch (err: any) {
       console.error("Failed to delete article:", err);
-      alert("Failed to delete article from Firestore: " + (err.message || "Permission denied"));
+      notifyToast("Failed to delete article from Firestore: " + (err.message || "Permission denied"));
     }
   };
 
@@ -1266,7 +1239,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
                   {/* AUTHOR / ABOUT */}
                   <div className="space-y-4 p-4 bg-gray-50 border-2 border-black">
-                    <div className="flex items-center justify-between border-b-2 border-black pb-2">
+                    <div className="border-2 border-black bg-neutral-50 p-4 flex flex-wrap items-center justify-between gap-3"><div><div className="font-mono text-[9px] uppercase text-neutral-500">CREATOR STUDIO</div><div className="font-display font-black text-xl uppercase">DRAFT MANAGEMENT</div><div className="font-mono text-[9px] mt-1">STATUS: {draftSaveState === 'saved' ? 'CLOUD SAVED' : draftSaveState === 'saving' ? 'SAVING…' : !online ? 'OFFLINE — LOCAL BACKUP ACTIVE' : draftRecoveryAvailable ? 'RECOVERABLE DRAFT' : 'NO ACTIVE DRAFT'}</div></div><div className="flex gap-2">{draftRecoveryAvailable && <button onClick={()=>setActiveTab('create')} className="border-2 border-black bg-[var(--color-primary)] px-3 py-2 font-mono text-[9px] font-black">RESUME DRAFT</button>}{draftRecoveryAvailable && <button onClick={resetForm} className="border-2 border-black bg-white px-3 py-2 font-mono text-[9px] font-black">DISCARD DRAFT</button>}</div></div>
+                <div className="flex items-center justify-between border-b-2 border-black pb-2">
                       <div>
                         <h4 className="font-display font-black text-lg uppercase text-black">Author &amp; About Profile</h4>
                         <p className="font-mono text-xs text-neutral-600">
@@ -1425,68 +1399,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                     </div>
                   </div>
 
-                  {/* GLOBAL TICKER */}
-                  <div className="space-y-4 p-4 bg-neutral-50 border-2 border-black">
-                    <div className="flex items-center justify-between border-b-2 border-black pb-2">
-                      <div>
-                        <h4 className="font-display font-black text-lg uppercase">Looping Top Bar</h4>
-                        <p className="font-mono text-[10px] text-neutral-600">One line per item: TEXT | optional URL. Leave URL blank for display-only text.</p>
-                      </div>
-                      <div className="font-mono text-[10px] font-bold">{marqueeItemsText.split('\n').filter(Boolean).length} ITEMS</div>
-                    </div>
-                    <textarea rows={6} value={marqueeItemsText} onChange={e => setMarqueeItemsText(e.target.value)} className="w-full px-3 py-2 border-2 border-black font-mono text-xs bg-white" placeholder={'BUILDING ON THE INTERNET | #home\nOFFSCRPT TECH PRESS | #blog\nNEW DISPATCHES EVERY TUESDAY'} />
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <label className="flex items-center gap-3 border-2 border-black bg-white p-3 font-mono text-xs font-bold uppercase">
-                        Speed (seconds)
-                        <input type="number" min={10} max={120} value={marqueeSpeedSeconds} onChange={e => setMarqueeSpeedSeconds(Number(e.target.value))} className="ml-auto w-20 px-2 py-1 border border-black" />
-                      </label>
-                      <label className="flex items-center gap-3 border-2 border-black bg-white p-3 font-mono text-xs font-bold uppercase">
-                        Pause on hover
-                        <input type="checkbox" checked={marqueePauseOnHover} onChange={e => setMarqueePauseOnHover(e.target.checked)} className="ml-auto w-5 h-5" />
-                      </label>
-                    </div>
-                  </div>
-
-                  {/* BLOG ARCHIVE HEADER */}
-                  <div className="space-y-4 p-4 bg-[var(--color-primary)]/20 border-2 border-black">
-                    <div className="border-b-2 border-black pb-2">
-                      <h4 className="font-display font-black text-lg uppercase">Blog Header / Archive Hero</h4>
-                      <p className="font-mono text-[10px] text-neutral-700">Control the complete orange block shown at the top of the Blog page. Essay count remains live and is calculated from published articles.</p>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Eyebrow</label><input value={blogEyebrow} onChange={e => setBlogEyebrow(e.target.value)} className="w-full px-3 py-2 border-2 border-black bg-white font-mono text-xs" /></div>
-                      <div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Main title</label><input value={blogTitle} onChange={e => setBlogTitle(e.target.value)} className="w-full px-3 py-2 border-2 border-black bg-white font-display font-black" /></div>
-                    </div>
-                    <div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Description</label><textarea rows={3} value={blogDescription} onChange={e => setBlogDescription(e.target.value)} className="w-full px-3 py-2 border-2 border-black bg-white font-sans text-sm" /></div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div><label className="font-mono text-[10px] font-bold uppercase block mb-1">Background</label><div className="flex gap-2"><input type="color" value={blogBackgroundColor} onChange={e => setBlogBackgroundColor(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={blogBackgroundColor} onChange={e => setBlogBackgroundColor(e.target.value)} className="flex-1 px-2 border-2 border-black font-mono text-xs uppercase" /></div></div>
-                      <div><label className="font-mono text-[10px] font-bold uppercase block mb-1">Text color</label><div className="flex gap-2"><input type="color" value={blogTextColor} onChange={e => setBlogTextColor(e.target.value)} className="w-10 h-10 border-2 border-black" /><input value={blogTextColor} onChange={e => setBlogTextColor(e.target.value)} className="flex-1 px-2 border-2 border-black font-mono text-xs uppercase" /></div></div>
-                      <label className="flex items-center gap-3 border-2 border-black bg-white p-3 font-mono text-xs font-bold uppercase self-end"><input type="checkbox" checked={blogShowEssayCount} onChange={e => setBlogShowEssayCount(e.target.checked)} className="w-5 h-5" /> Show live essay count</label>
-                    </div>
-                  </div>
-
-                  {/* FOOTER BUILDER */}
-                  <div className="space-y-4 p-4 bg-[#0A0A0A] text-white border-4 border-black">
-                    <div className="border-b-2 border-neutral-700 pb-2">
-                      <h4 className="font-display font-black text-lg uppercase">Footer Builder</h4>
-                      <p className="font-mono text-[10px] text-neutral-400">Every navigation/hub entry is a real route or URL. One line per link: LABEL | URL. Internal routes use #home, #blog, #series, etc.</p>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div><label className="font-mono text-[10px] font-bold uppercase block mb-1">Navigation title</label><input value={footerNavigationTitle} onChange={e => setFooterNavigationTitle(e.target.value)} className="w-full px-3 py-2 border-2 border-white bg-black text-white font-mono text-xs" /></div>
-                      <div><label className="font-mono text-[10px] font-bold uppercase block mb-1">Topics title</label><input value={footerTopicsTitle} onChange={e => setFooterTopicsTitle(e.target.value)} className="w-full px-3 py-2 border-2 border-white bg-black text-white font-mono text-xs" /></div>
-                      <div><label className="font-mono text-[10px] font-bold uppercase block mb-1">Hub title</label><input value={footerHubTitle} onChange={e => setFooterHubTitle(e.target.value)} className="w-full px-3 py-2 border-2 border-white bg-black text-white font-mono text-xs" /></div>
-                    </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                      <div><label className="font-mono text-[10px] font-bold uppercase block mb-1">Navigation links</label><textarea rows={7} value={footerNavigationLinksText} onChange={e => setFooterNavigationLinksText(e.target.value)} className="w-full px-3 py-2 border-2 border-white bg-black text-white font-mono text-xs" /></div>
-                      <div><label className="font-mono text-[10px] font-bold uppercase block mb-1">Publication hub links</label><textarea rows={7} value={footerHubLinksText} onChange={e => setFooterHubLinksText(e.target.value)} className="w-full px-3 py-2 border-2 border-white bg-black text-white font-mono text-xs" /></div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div><label className="font-mono text-[10px] font-bold uppercase block mb-1">Footer topic categories (comma separated)</label><input value={footerTopicCategoriesText} onChange={e => setFooterTopicCategoriesText(e.target.value)} placeholder="AI, Web Development, JavaScript" className="w-full px-3 py-2 border-2 border-white bg-black text-white font-mono text-xs" /></div>
-                      <div><label className="font-mono text-[10px] font-bold uppercase block mb-1">Bottom-right statement</label><input value={footerBottomRightText} onChange={e => setFooterBottomRightText(e.target.value)} className="w-full px-3 py-2 border-2 border-white bg-black text-white font-mono text-xs" /></div>
-                    </div>
-                    <div className="font-mono text-[10px] text-neutral-400">Topics can be left empty to automatically use real published article categories. Social/email links below are generated from the live contact configuration.</div>
-                  </div>
-
                   {/* CONTACT INFO */}
                   <div className="space-y-4">
                     <h4 className="font-display font-black text-lg uppercase border-b-2 border-black pb-1">Contact Channels</h4>
@@ -1619,7 +1531,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                 const nextConfig = { ...siteConfig, customCategories: next };
                                 await saveSiteConfig(nextConfig);
                                 onUpdateSiteConfig(nextConfig);
-                              } catch (err: any) { alert('Failed to save custom category: ' + (err.message || 'Permission denied')); }
+                              } catch (err: any) { notifyToast('Failed to save custom category: ' + (err.message || 'Permission denied')); }
                             }}
                             className="px-3 py-2 bg-[var(--color-primary)] border-2 border-black font-display font-black text-xs uppercase"
                           >ADD</button>
@@ -1866,9 +1778,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           <span className="bg-black text-white font-mono text-[9px] font-bold px-1.5 py-0.5 uppercase">
                             {art.category}
                           </span>
-                          <span className="font-mono text-[10px] text-neutral-500">
-                            {art.publishedAt}
-                          </span>
+                          <span className="font-mono text-[10px] text-neutral-500">{art.publishedAt}</span><span className="font-mono text-[10px] font-black text-neutral-500">{Number(art.viewsCount||0).toLocaleString()} VIEWS</span>
                           {(art.featured || art.pinned) && (
                             <span className="bg-[var(--color-primary)] text-black font-mono text-[9px] font-bold px-1.5 py-0.5 border border-black uppercase flex items-center space-x-1">
                               <Sparkles className="w-2.5 h-2.5 fill-black text-black" />
@@ -1909,6 +1819,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           <Edit2 className="w-3.5 h-3.5" />
                           <span>EDIT</span>
                         </button>
+                        <button onClick={() => openRevisionHistory(art)} className="px-3 py-1.5 bg-white border-2 border-black font-mono text-xs font-bold uppercase hover:bg-[var(--color-secondary)] transition-colors"><History className="w-3.5 h-3.5 inline mr-1"/>HISTORY</button>
                         <button
                           onClick={() => handleDeleteArticleClick(art.slug)}
                           className="px-3 py-1.5 bg-[var(--color-accent)] border-2 border-black font-mono text-xs font-bold uppercase text-black hover:bg-black hover:text-white transition-colors flex items-center space-x-1"
@@ -2054,14 +1965,14 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
             {activeTab === 'series' && (
               <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
                 <div className="border-4 border-black bg-[var(--color-primary)] p-5 neo-shadow"><div className="font-mono text-[10px]">PHASE 2 / STRUCTURED PUBLISHING</div><h2 className="font-display font-black text-3xl uppercase">SERIES MANAGER</h2><p className="text-sm mt-1">Create reusable reading paths, then assign articles to numbered parts from the article publisher.</p></div>
-                <form onSubmit={async e=>{e.preventDefault(); if(!seriesTitleInput.trim()) return; setSeriesBusy(true); try { const slug=(seriesSlugInput.trim()||seriesTitleInput.trim()).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60); const created=await createSeries({id:slug,slug,title:seriesTitleInput.trim(),description:seriesDescInput.trim(),coverImage:seriesCoverInput.trim()||undefined,ownerId:auth.currentUser!.uid,ownerUsername:'krishsarkar',ownerName:authorName}); setSeriesList(p=>[created,...p]); setSeriesTitleInput('');setSeriesSlugInput('');setSeriesDescInput('');setSeriesCoverInput(''); } catch(err:any){alert(err?.message||'Failed to create series.')} finally{setSeriesBusy(false)}}} className="border-4 border-black p-4 bg-white space-y-3">
+                <form onSubmit={async e=>{e.preventDefault(); if(!seriesTitleInput.trim()) return; setSeriesBusy(true); try { const slug=(seriesSlugInput.trim()||seriesTitleInput.trim()).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60); const created=await createSeries({id:slug,slug,title:seriesTitleInput.trim(),description:seriesDescInput.trim(),coverImage:seriesCoverInput.trim()||undefined,ownerId:auth.currentUser!.uid,ownerUsername:'krishsarkar',ownerName:authorName}); setSeriesList(p=>[created,...p]); setSeriesTitleInput('');setSeriesSlugInput('');setSeriesDescInput('');setSeriesCoverInput(''); } catch(err:any){notifyToast(err?.message||'Failed to create series.')} finally{setSeriesBusy(false)}}} className="border-4 border-black p-4 bg-white space-y-3">
                   <h3 className="font-display font-black uppercase">CREATE SERIES</h3>
                   <div className="grid md:grid-cols-2 gap-2"><input required value={seriesTitleInput} onChange={e=>setSeriesTitleInput(e.target.value)} placeholder="Series title" className="border-2 border-black p-3"/><input value={seriesSlugInput} onChange={e=>setSeriesSlugInput(e.target.value)} placeholder="Slug (optional)" className="border-2 border-black p-3 font-mono text-xs"/></div>
                   <textarea value={seriesDescInput} onChange={e=>setSeriesDescInput(e.target.value)} placeholder="What is this series about?" rows={3} className="w-full border-2 border-black p-3"/>
                   <input value={seriesCoverInput} onChange={e=>setSeriesCoverInput(e.target.value)} placeholder="Cover image URL (optional)" className="w-full border-2 border-black p-3 font-mono text-xs"/>
                   <button disabled={seriesBusy} className="border-2 border-black bg-black text-white px-4 py-2 font-mono text-xs font-black uppercase">{seriesBusy?'CREATING…':'CREATE SERIES'}</button>
                 </form>
-                <div className="space-y-3">{seriesList.map(item=><div key={item.id} className="border-4 border-black bg-white p-4 flex flex-wrap items-center gap-3"><div className="flex-1 min-w-[220px]"><div className="font-mono text-[10px]">{articles.filter(a=>a.seriesId===item.id || a.seriesId===item.slug).length || item.articleCount || 0} PARTS · /series/{item.id}</div><h3 className="font-display font-black text-xl uppercase">{item.title}</h3><p className="text-sm">{item.description}</p></div><button onClick={async()=>{try{await deleteSeries(item.id);setSeriesList(x=>x.filter(y=>y.id!==item.id))}catch(e:any){alert(e?.message||'Could not delete series.')}}} className="border-2 border-black bg-red-100 px-3 py-2 font-mono text-[10px]">DELETE</button></div>)}</div>
+                <div className="space-y-3">{seriesList.map(item=><div key={item.id} className="border-4 border-black bg-white p-4 flex flex-wrap items-center gap-3"><div className="flex-1 min-w-[220px]"><div className="font-mono text-[10px]">{articles.filter(a=>a.seriesId===item.id || a.seriesId===item.slug).length || item.articleCount || 0} PARTS · /series/{item.id}</div><h3 className="font-display font-black text-xl uppercase">{item.title}</h3><p className="text-sm">{item.description}</p></div><button onClick={async()=>{try{await deleteSeries(item.id);setSeriesList(x=>x.filter(y=>y.id!==item.id))}catch(e:any){notifyToast(e?.message||'Could not delete series.')}}} className="border-2 border-black bg-red-100 px-3 py-2 font-mono text-[10px]">DELETE</button></div>)}</div>
               </div>
             )}
 

@@ -1,8 +1,9 @@
+import { notifyToast } from '../lib/toast';
 import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityPost, CommunityComment, PageView, CommunityUser } from '../types';
 import { reportContent } from '../lib/social';
-import { getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
+import { recordCommunityPostView, getPost, getComments, subscribeCommunityComments, addComment, toggleVote, getUserVote, deletePost, deleteComment, getCommunityProfile, updatePost, toggleRepost, getUserRepostStatus } from '../lib/community';
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { isPlatformModerator } from '../lib/social';
 import { promoteCommunityBlogToMain, fetchAllArticlesForAdmin, unpublishMainArticle } from '../lib/cms';
@@ -47,6 +48,8 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const effectiveIsSaved = propIsSaved !== undefined ? propIsSaved : localSaved;
+
+  useEffect(() => { if (post?.id) void recordCommunityPostView(post.id, userAuth?.uid); }, [post?.id, userAuth?.uid]);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {
@@ -110,13 +113,13 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
         const a = articles.find((x:any) => x.sourcePostId === post.id || x.slug === (post as any).promotedToArticleSlug);
         if (a) await unpublishMainArticle(a);
         setMainArticleStatus('unpublished');
-        alert('Removed from the main publication. The creator blog remains intact.');
+        notifyToast('Removed from the main publication. The creator blog remains intact.');
       } else {
         await promoteCommunityBlogToMain(post, true);
         setMainArticleStatus('published');
-        alert('Published on the main site with the original creator credited.');
+        notifyToast('Published on the main site with the original creator credited.');
       }
-    } catch (e:any) { alert(e?.message || 'Main publication action failed.'); }
+    } catch (e:any) { notifyToast(e?.message || 'Main publication action failed.'); }
   };
 
   const handleVote = async (voteType: 'up' | 'down') => {
@@ -141,7 +144,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
       const next = await toggleRepost(postId, userAuth.uid, isReposted);
       setIsReposted(next);
       if (post) setPost({ ...post, repostsCount: Math.max(0, (post.repostsCount || 0) + (next ? 1 : -1)) });
-    } catch (e: any) { alert('Failed to update repost: ' + (e?.message || 'Permission denied')); }
+    } catch (e: any) { notifyToast('Failed to update repost: ' + (e?.message || 'Permission denied')); }
     finally { setIsReposting(false); }
   };
 
@@ -152,8 +155,8 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     const url = window.location.href;
     try {
       if (navigator.share) await navigator.share({ title: post?.title || 'OFFSCRPT post', text: post?.content?.slice(0, 140) || '', url });
-      else { await navigator.clipboard.writeText(url); alert('Link copied.'); }
-    } catch (e) { if ((e as any)?.name !== 'AbortError') { try { await navigator.clipboard.writeText(url); alert('Link copied.'); } catch {} } }
+      else { await navigator.clipboard.writeText(url); notifyToast('Link copied.'); }
+    } catch (e) { if ((e as any)?.name !== 'AbortError') { try { await navigator.clipboard.writeText(url); notifyToast('Link copied.'); } catch {} } }
   };
 
   const openEdit = () => { if (!post) return; setEditTitle(post.title); setEditContent(post.content); setIsEditing(true); };
@@ -161,7 +164,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     if (!post || !editTitle.trim() || !editContent.trim()) return;
     setIsSavingEdit(true);
     try { await updatePost(post.id, { title: editTitle.trim(), content: editContent.trim() }); setPost({ ...post, title: editTitle.trim(), content: editContent.trim(), editedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }); setIsEditing(false); }
-    catch (e: any) { alert('Failed to edit post: ' + (e?.message || 'Permission denied')); } finally { setIsSavingEdit(false); }
+    catch (e: any) { notifyToast('Failed to edit post: ' + (e?.message || 'Permission denied')); } finally { setIsSavingEdit(false); }
   };
 
   const handleQuoteRepost = async () => {
@@ -172,7 +175,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
       const created = await quoteRepost(post.id, profile, quoteText);
       setQuoteText(''); setIsQuoteOpen(false);
       onNavigate('community_post', created.id);
-    } catch (e: any) { alert('Failed to quote repost: ' + (e?.message || 'Permission denied')); }
+    } catch (e: any) { notifyToast('Failed to quote repost: ' + (e?.message || 'Permission denied')); }
   };
 
   const handleToggleSave = () => {
@@ -199,11 +202,11 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     if (!confirm('Are you sure you want to permanently delete this post from the database?')) return;
     try {
       await deletePost(postId);
-      alert('Post successfully deleted from the database and site!');
+      notifyToast('Post successfully deleted from the database and site!');
       onNavigate('community');
     } catch (e: any) {
       console.error(e);
-      alert('Failed to delete post: ' + (e?.message || 'Permission denied'));
+      notifyToast('Failed to delete post: ' + (e?.message || 'Permission denied'));
     }
   };
 
@@ -212,7 +215,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     const currentIsAdmin = checkIsAdmin(activeUser?.email);
     const canDeleteComment = activeUser && (activeUser.uid === commentAuthorId || currentIsAdmin || isModerator);
     if (!canDeleteComment) {
-      alert('You do not have permission to delete this comment.');
+      notifyToast('You do not have permission to delete this comment.');
       return;
     }
     if (!confirm('Are you sure you want to permanently delete this comment?')) return;
@@ -220,10 +223,10 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
       await deleteComment(postId, commentId);
       setComments(comments.filter(c => c.id !== commentId));
       if (post) setPost({ ...post, commentsCount: Math.max(0, post.commentsCount - 1) });
-      alert('Comment successfully deleted from database!');
+      notifyToast('Comment successfully deleted from database!');
     } catch (e: any) {
       console.error(e);
-      alert('Failed to delete comment: ' + (e?.message || 'Permission denied'));
+      notifyToast('Failed to delete comment: ' + (e?.message || 'Permission denied'));
     }
   };
 
@@ -249,11 +252,11 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   };
 
   const handleReport = async () => {
-    if (!profile || !post) { alert('Sign in to report this post.'); return; }
+    if (!profile || !post) { notifyToast('Sign in to report this post.'); return; }
     const reason = window.prompt('Reason for report?') || '';
     if (!reason.trim()) return;
-    try { await reportContent(profile, 'post', post.id, reason); alert('Report submitted to moderators.'); }
-    catch (e:any) { alert(e?.message || 'Failed to submit report.'); }
+    try { await reportContent(profile, 'post', post.id, reason); notifyToast('Report submitted to moderators.'); }
+    catch (e:any) { notifyToast(e?.message || 'Failed to submit report.'); }
   };
 
   const handleToggleFeature = async () => {
@@ -263,7 +266,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
       setPost({ ...post, isFeatured: !post.isFeatured });
     } catch (e) {
       console.error(e);
-      alert('Failed to feature post');
+      notifyToast('Failed to feature post');
     }
   };
 
@@ -435,7 +438,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           )}
           <div className="flex items-center space-x-2 font-mono text-xs sm:text-sm font-bold uppercase px-2 sm:px-4 py-2 text-neutral-600 shrink-0">
             <MessageSquare className="w-4 h-4" />
-            <span>{post.commentsCount} Comments</span>
+            <span>{Number(post.viewsCount || 0).toLocaleString()} Views</span><span>{post.commentsCount} Comments</span>
           </div>
         </div>
       </div>

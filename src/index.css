@@ -221,3 +221,50 @@ html, body, #root {
   .print\:hidden { display: none !important; }
   body { background: white !important; }
 }
+
+
+/* Account-level dark mode. Keep the neo-brutalist borders/accents intact while flipping
+   neutral surfaces and text. Components can override these utilities naturally. */
+html.dark body, html.dark #root {
+  background: #0b0b0b;
+  color: #f5f5f5;
+}
+html.dark .bg-white { background-color: #111111 !important; color: #f5f5f5; }
+html.dark .bg-neutral-50 { background-color: #171717 !important; }
+html.dark .bg-neutral-100 { background-color: #202020 !important; }
+html.dark .bg-neutral-200 { background-color: #2a2a2a !important; }
+html.dark .bg-gray-50, html.dark .bg-gray-100 { background-color: #171717 !important; color: #f5f5f5; }
+html.dark .text-black { color: #f5f5f5 !important; }
+html.dark .text-neutral-800, html.dark .text-neutral-700, html.dark .text-neutral-600 { color: #e5e5e5 !important; }
+html.dark .text-neutral-500 { color: #a3a3a3 !important; }
+html.dark .border-black { border-color: #f5f5f5 !important; }
+html.dark .bg-black { background-color: #f5f5f5 !important; color: #0b0b0b !important; }
+html.dark input, html.dark textarea, html.dark select { background-color: #111 !important; color: #f5f5f5 !important; border-color: #f5f5f5 !important; }
+html.dark a { color: inherit; }
+html.dark .neo-border, html.dark .neo-border-2 { border-color: #f5f5f5 !important; }
+html.dark .neo-shadow, html.dark .neo-shadow-lg, html.dark .neo-shadow-sm { box-shadow: 7px 7px 0 #f5f5f5; }
+
+/* V52 dark-mode production coverage. The theme remains opt-in per account and is
+   applied through html.dark so utility-heavy existing components continue to work. */
+html.dark body { background:#0b0b0b !important; color:#f5f5f5 !important; }
+html.dark .bg-white { background-color:#111 !important; color:#f5f5f5 !important; }
+html.dark .bg-neutral-50 { background-color:#161616 !important; color:#f5f5f5 !important; }
+html.dark .bg-neutral-100 { background-color:#1d1d1d !important; color:#f5f5f5 !important; }
+html.dark .bg-neutral-200 { background-color:#262626 !important; color:#f5f5f5 !important; }
+html.dark .bg-red-50 { background-color:#241414 !important; }
+html.dark .bg-red-100 { background-color:#331818 !important; }
+html.dark .bg-green-50 { background-color:#102214 !important; }
+html.dark .bg-blue-50 { background-color:#111d2b !important; }
+html.dark .text-black { color:#f5f5f5 !important; }
+html.dark .text-neutral-900, html.dark .text-neutral-800, html.dark .text-neutral-700, html.dark .text-neutral-600 { color:#ededed !important; }
+html.dark .text-neutral-500 { color:#aaa !important; }
+html.dark .border-black { border-color:#f5f5f5 !important; }
+html.dark .border-neutral-300 { border-color:#555 !important; }
+html.dark .shadow, html.dark .shadow-sm, html.dark .shadow-lg { --tw-shadow-color:#000 !important; }
+html.dark input, html.dark textarea, html.dark select { background:#111 !important; color:#f5f5f5 !important; border-color:#f5f5f5 !important; }
+html.dark input::placeholder, html.dark textarea::placeholder { color:#888 !important; }
+html.dark button.bg-white, html.dark a.bg-white { background:#111 !important; color:#f5f5f5 !important; }
+html.dark .bg-black { background:#f5f5f5 !important; color:#0b0b0b !important; }
+html.dark .divide-black > :not([hidden]) ~ :not([hidden]) { border-color:#f5f5f5 !important; }
+html.dark img { color-scheme: dark; }
+@keyframes toastbar{from{transform:scaleX(1)}to{transform:scaleX(0)}}

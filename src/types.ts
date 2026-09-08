@@ -55,10 +55,15 @@ export interface CreatorPageConfig {
   heroText?: string;
   layout?: 'grid' | 'list' | 'magazine';
   themeColor?: string;
+  coverImageUrl?: string;
+  aboutTitle?: string;
   featuredArticleSlugs?: string[];
   featuredSeriesIds?: string[];
+  featuredPostIds?: string[];
+  customLinks?: Array<{ id: string; label: string; url: string }>;
   showStats?: boolean;
   showSocialLinks?: boolean;
+  showAbout?: boolean;
 }
 
 export interface Article {
@@ -110,28 +115,11 @@ export interface Article {
   clapsCount?: number;
 }
 
-export interface MarqueeItem {
-  id: string;
-  text: string;
-  url?: string;
-  color?: string;
-  enabled?: boolean;
-}
-
-export interface FooterLink {
+export interface NavigationItemConfig {
   id: string;
   label: string;
-  url: string;
-  enabled?: boolean;
-}
-
-export interface BlogHeaderConfig {
-  eyebrow?: string;
-  title?: string;
-  description?: string;
-  backgroundColor?: string;
-  textColor?: string;
-  showEssayCount?: boolean;
+  page: PageView;
+  visible?: boolean;
 }
 
 export interface SiteConfig {
@@ -149,33 +137,22 @@ export interface SiteConfig {
   authorAvatarUrl: string;
   aboutMeTitle: string;
   aboutMeBio: string;
+  topNavigation?: NavigationItemConfig[];
+  menuNavigation?: NavigationItemConfig[];
   
   // Advanced Global Settings
   themePrimaryColor?: string;
   themeSecondaryColor?: string;
   themeAccentColor?: string;
   themeSuccessColor?: string;
+  readingProgressPageColor?: string;
+  readingProgressPersistentColor?: string;
   
-  // Global ticker / marquee
-  marqueeItems?: MarqueeItem[];
-  marqueeSpeedSeconds?: number;
-  marqueePauseOnHover?: boolean;
-
-  // Blog archive header
-  blogHeader?: BlogHeaderConfig;
-
   // Footer
   footerNewsletterTitle?: string;
   footerNewsletterSubtitle?: string;
   footerBrandStatement?: string;
   footerLegalText?: string;
-  footerNavigationTitle?: string;
-  footerTopicsTitle?: string;
-  footerHubTitle?: string;
-  footerNavigationLinks?: FooterLink[];
-  footerHubLinks?: FooterLink[];
-  footerTopicCategories?: string[];
-  footerBottomRightText?: string;
   
   // Contact Page
   contactTitle?: string;
@@ -222,7 +199,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'dashboard' | 'preferences';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'preferences';
 
 export interface CommunityUser {
   uid: string;
@@ -294,6 +271,7 @@ export interface CommunityPost {
   commentsCount: number;
   repostsCount?: number;
   isFeatured: boolean;
+  viewsCount?: number;
   createdAt: string;
   updatedAt: string;
   quoteText?: string;

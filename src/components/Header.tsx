@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PageView, SiteConfig, CommunityUser } from '../types';
+import { DEFAULT_TOP_NAVIGATION, DEFAULT_MENU_NAVIGATION } from '../lib/cms';
+import { notifyToast } from '../lib/toast';
 import { auth, loginWithGoogle, logout, ADMIN_EMAILS } from '../lib/firebase';
 import { useAuthUser } from '../lib/useAuthUser';
 import { subscribeUnreadNotificationCount } from '../lib/community';
@@ -104,26 +106,40 @@ export const Header: React.FC<HeaderProps> = ({
       setInstallPrompt(null);
       return;
     }
-    alert('To install OFFSCRPT, use your browser menu and choose “Install app” or “Add to Home Screen”.');
+    notifyToast('To install OFFSCRPT, use your browser menu and choose “Install app” or “Add to Home Screen”.', 'info');
   };
 
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email.toLowerCase());
 
-  const mainNavLinks: NavLinkItem[] = [
-    { label: 'Home', page: 'home', icon: Home },
-    { label: 'Blog', page: 'blog', icon: BookOpen },
-    { label: 'Community', page: 'social', icon: Users },
-    { label: 'Saved', page: 'saved', count: savedCount, icon: Bookmark },
-    { label: 'Notifications', page: 'notifications', count: unreadNotificationCount, icon: Bell },
-    { label: 'Explore', page: 'explore', icon: Compass },
-    { label: 'Series', page: 'series', icon: Layers },
-  ];
+  const iconById: Record<string, React.ComponentType<{ className?: string }>> = {
+    home: Home,
+    blog: BookOpen,
+    social: Users,
+    saved: Bookmark,
+    notifications: Bell,
+    explore: Compass,
+    series: Layers,
+    about: Sparkles,
+    links: ArrowRight,
+    contact: AtSign,
+    history: HistoryIcon,
+    dashboard: User,
+    preferences: Settings,
+  };
 
-  const secondaryNavLinks = [
-    { label: 'About', page: 'about' },
-    { label: 'Links', page: 'links' },
-    { label: 'Contact', page: 'contact' },
-  ] as const;
+  const configuredTop = (siteConfig.topNavigation?.length ? siteConfig.topNavigation : DEFAULT_TOP_NAVIGATION)
+    .filter(item => item.visible !== false);
+  const configuredMenu = (siteConfig.menuNavigation?.length ? siteConfig.menuNavigation : DEFAULT_MENU_NAVIGATION)
+    .filter(item => item.visible !== false);
+
+  const mainNavLinks: NavLinkItem[] = configuredTop.map((item) => ({
+    label: item.label,
+    page: item.page,
+    icon: iconById[item.id] || ArrowRight,
+    count: item.page === 'saved' ? savedCount : item.page === 'notifications' ? unreadNotificationCount : undefined,
+  }));
+
+  const secondaryNavLinks = configuredMenu;
 
   const handleNavClick = (page: PageView, param?: string) => {
     onNavigate(page, param);
@@ -497,7 +513,7 @@ export const Header: React.FC<HeaderProps> = ({
                       <span>MY OFFSCRPT</span><ArrowRight className="w-4 h-4" />
                     </button>
                     <button onClick={() => handleNavClick('preferences')} className="w-full py-3 px-4 bg-white border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between hover:bg-neutral-100">
-                      <span>NOTIFICATION SETTINGS</span><Settings className="w-4 h-4" />
+                      <span>SETTINGS & APPEARANCE</span><Settings className="w-4 h-4" />
                     </button>
                     {userProfile ? (
                       <button

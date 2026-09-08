@@ -4,7 +4,7 @@ import { useAuthUser } from '../lib/useAuthUser';
 import { loginWithGoogle } from '../lib/firebase';
 import { getUserSaves, getUserNotifications } from '../lib/community';
 import { subscribeArticleHistory, type ArticleHistoryItem } from '../lib/reading';
-import { getNotificationPreferences, type NotificationPreferences, subscribeNotificationPreferences, getReadingQueue, removeReadingQueueItem, type ReadingQueueItem, mergeDashboardData, type AccountActivity } from '../lib/account';
+import { getNotificationPreferences, type NotificationPreferences, subscribeNotificationPreferences, getReadingQueue, removeReadingQueueItem, type ReadingQueueItem, mergeDashboardData, type AccountActivity, getAccountDrafts, deleteAccountDraft, type DraftSummary } from '../lib/account';
 import type { CommunityUser, Notification, PageView, UserSavedItem, Article } from '../types';
 
 interface Props {
@@ -23,6 +23,7 @@ export const AccountDashboardView: React.FC<Props> = ({ onNavigate, articles, us
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [prefs, setPrefs] = useState<NotificationPreferences>({ comments: true, replies: true, mentions: true, follows: true, reactions: true, productNews: true });
   const [activity, setActivity] = useState<AccountActivity[]>([]);
+  const [drafts, setDrafts] = useState<DraftSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,9 +31,9 @@ export const AccountDashboardView: React.FC<Props> = ({ onNavigate, articles, us
     setLoading(true);
     let dead = false;
     const load = async () => {
-      const [s, n, q, p] = await Promise.all([getUserSaves(user.uid), getUserNotifications(user.uid), getReadingQueue(), getNotificationPreferences()]);
+      const [s, n, q, p, d] = await Promise.all([getUserSaves(user.uid), getUserNotifications(user.uid), getReadingQueue(), getNotificationPreferences(), getAccountDrafts()]);
       if (dead) return;
-      setSaved(s); setNotifications(n); setQueue(q); setPrefs(p);
+      setSaved(s); setNotifications(n); setQueue(q); setPrefs(p); setDrafts(d);
       setLoading(false);
     };
     void load();
@@ -82,8 +83,11 @@ export const AccountDashboardView: React.FC<Props> = ({ onNavigate, articles, us
         <button onClick={()=>onNavigate('saved')} className="border-2 border-black p-4 text-left bg-white hover:bg-[var(--color-primary)]"><Bookmark className="w-5 h-5"/><div className="font-mono text-[9px] uppercase mt-4">SAVED</div><div className="font-display font-black text-3xl">{saved.length}</div><div className="font-mono text-[9px] mt-1">{savedArticleCount} ARTICLES</div></button>
         <button onClick={()=>onNavigate('history')} className="border-2 border-black p-4 text-left bg-white hover:bg-[var(--color-secondary)]"><History className="w-5 h-5"/><div className="font-mono text-[9px] uppercase mt-4">HISTORY</div><div className="font-display font-black text-3xl">{history.length}</div><div className="font-mono text-[9px] mt-1">NO DUPLICATE OPENS</div></button>
         <button onClick={()=>onNavigate('notifications')} className="border-2 border-black p-4 text-left bg-white hover:bg-[var(--color-accent)]"><Bell className="w-5 h-5"/><div className="font-mono text-[9px] uppercase mt-4">NOTIFICATIONS</div><div className="font-display font-black text-3xl">{unread}</div><div className="font-mono text-[9px] mt-1">UNREAD</div></button>
-        <button onClick={()=>onNavigate('preferences')} className="border-2 border-black p-4 text-left bg-white hover:bg-neutral-100"><Settings className="w-5 h-5"/><div className="font-mono text-[9px] uppercase mt-4">PREFERENCES</div><div className="font-display font-black text-2xl uppercase mt-2">CONTROL</div><div className="font-mono text-[9px] mt-1">NOTIFICATION SETTINGS</div></button>
+        <button onClick={()=>onNavigate('preferences')} className="border-2 border-black p-4 text-left bg-white hover:bg-neutral-100"><Settings className="w-5 h-5"/><div className="font-mono text-[9px] uppercase mt-4">PREFERENCES</div><div className="font-display font-black text-2xl uppercase mt-2">CONTROL</div><div className="font-mono text-[9px] mt-1">NOTIFICATION + APPEARANCE</div></button>
+        <div className="border-2 border-black p-4 text-left bg-white"><div className="font-mono text-[9px] uppercase">DRAFTS</div><div className="font-display font-black text-3xl mt-2">{drafts.length}</div><div className="font-mono text-[9px] mt-1">AUTO-SAVED / RECOVERABLE</div></div>
       </div>
+
+      {drafts.length>0 && <section className="border-4 border-black bg-white neo-shadow p-5 mb-5"><div className="flex items-center justify-between gap-3 mb-4"><div><div className="font-mono text-[10px] uppercase">CREATOR STUDIO</div><h2 className="font-display font-black text-3xl uppercase">DRAFT MANAGER</h2></div><div className="font-mono text-[9px] text-neutral-500">{drafts.length} CLOUD DRAFTS</div></div><div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">{drafts.map(d=><div key={d.id} className="border-2 border-black p-3"><div className="font-mono text-[9px] text-neutral-500 uppercase">{d.type||'draft'} · {d.updatedAt?timeLabel(d.updatedAt):'recent'}</div><div className="font-display font-black uppercase mt-1 line-clamp-2">{d.title}</div><div className="font-mono text-[9px] mt-2">{d.wordCount||0} WORDS</div><button onClick={()=>{void deleteAccountDraft(d.id).then(()=>setDrafts(prev=>prev.filter(x=>x.id!==d.id)));}} className="mt-3 border-2 border-black px-2 py-1 font-mono text-[9px] font-black">DELETE DRAFT</button></div>)}</div></section>}
 
       <div className="grid lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 border-4 border-black bg-white neo-shadow p-5">
