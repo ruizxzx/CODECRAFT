@@ -392,11 +392,11 @@ service cloud.firestore {
           isAdmin()
           || isPlatformModerator()
           || (request.auth.uid == existing().authorId
-              && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'editedAt', 'updatedAt'])
+              && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'seriesId', 'seriesName', 'seriesOrder', 'editedAt', 'updatedAt'])
               && existing().get('promotedToArticleSlug', '') == ''
               && existing().get('mainPublicationStatus', '') != 'published')
           || (request.auth.uid == existing().authorId
-              && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'editedAt', 'updatedAt', 'editReviewStatus', 'editReviewRequestedAt', 'editReviewedAt', 'editReviewedBy'])
+              && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'seriesId', 'seriesName', 'seriesOrder', 'editedAt', 'updatedAt', 'editReviewStatus', 'editReviewRequestedAt', 'editReviewedAt', 'editReviewedBy'])
               && (existing().get('promotedToArticleSlug', '') != '' || existing().get('mainPublicationStatus', '') == 'published')
               && incoming().get('editReviewStatus', '') == 'pending'
               && incoming().get('editReviewRequestedAt', null) is timestamp
