@@ -28,6 +28,8 @@ import { CommunityProfileView } from './components/CommunityProfileView';
 import { SavedView } from './components/SavedView';
 import { NotificationsView } from './components/NotificationsView';
 import { ExploreView } from './components/ExploreView';
+import { SeriesView } from './components/SeriesView';
+import { CreatorView } from './components/CreatorView';
 import { SocialHubView } from './components/SocialHubView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
@@ -283,6 +285,18 @@ export default function App() {
       } else if (hash === 'notifications') {
         setCurrentPage('notifications');
         setActiveArticleSlug(null);
+      } else if (hash === 'series' || hash.startsWith('series/')) {
+        setCurrentPage('series');
+        setActiveArticleSlug(hash.startsWith('series/') ? hash.replace('series/', '') : null);
+      } else if (hash.startsWith('creator/')) {
+        setCurrentPage('creator');
+        setActiveArticleSlug(hash.replace('creator/', ''));
+      } else if (hash === 'series' || hash.startsWith('series/')) {
+        setCurrentPage('series');
+        setActiveArticleSlug(hash.startsWith('series/') ? hash.replace('series/', '') : null);
+      } else if (hash.startsWith('creator/')) {
+        setCurrentPage('creator');
+        setActiveArticleSlug(hash.replace('creator/', ''));
       } else if (hash === 'explore' || hash.startsWith('explore/')) {
         setCurrentPage('explore');
         setActiveArticleSlug(hash.startsWith('explore/') ? hash.replace('explore/', '') : null);
@@ -321,6 +335,14 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('community_profile');
       window.location.hash = `@${param}`;
+    } else if (page === 'series') {
+      setActiveArticleSlug(param || null);
+      setCurrentPage('series');
+      window.location.hash = param ? `series/${param}` : 'series';
+    } else if (page === 'creator' && param) {
+      setActiveArticleSlug(param);
+      setCurrentPage('creator');
+      window.location.hash = `creator/${param}`;
     } else if (page === 'explore') {
       setActiveArticleSlug(param || null);
       setCurrentPage('explore');
@@ -571,6 +593,14 @@ export default function App() {
             )}
             {currentPage === 'explore' && (
               <ExploreView articles={articles} userAuth={userAuth} userProfile={userProfile} onNavigate={navigateTo} initialHashtag={activeArticleSlug || ''} />
+            )}
+
+            {currentPage === 'series' && (
+              <SeriesView articles={articles} onNavigate={navigateTo} selectedSeriesId={activeArticleSlug} />
+            )}
+
+            {currentPage === 'creator' && activeArticleSlug && (
+              <CreatorView username={activeArticleSlug} articles={articles} onNavigate={navigateTo} />
             )}
 
             {currentPage === 'community' && (

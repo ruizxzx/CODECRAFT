@@ -27,6 +27,35 @@ export interface ArticleContentBlock {
   quoteAuthor?: string;
 }
 
+
+export interface Series {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  coverImage?: string;
+  ownerId: string;
+  ownerUsername?: string;
+  ownerName?: string;
+  tags?: string[];
+  articleCount: number;
+  estimatedMinutes?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatorPageConfig {
+  tagline?: string;
+  heroTitle?: string;
+  heroText?: string;
+  layout?: 'grid' | 'list' | 'magazine';
+  themeColor?: string;
+  featuredArticleSlugs?: string[];
+  featuredSeriesIds?: string[];
+  showStats?: boolean;
+  showSocialLinks?: boolean;
+}
+
 export interface Article {
   id: string;
   slug: string;
@@ -136,6 +165,7 @@ export interface SiteConfig {
   customCategories?: string[];
   authorProfileUid?: string;
   authorProfileUsername?: string;
+  creatorPage?: CreatorPageConfig;
 }
 
 export interface BentoLink {
@@ -148,7 +178,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'notifications' | 'explore' | 'social';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'notifications' | 'explore' | 'social' | 'series' | 'creator';
 
 export interface CommunityUser {
   uid: string;
@@ -175,6 +205,7 @@ export interface CommunityUser {
   verificationColor?: string;
   createdAt: string;
   updatedAt: string;
+  creatorPage?: CreatorPageConfig;
 }
 
 export interface CommunityPost {

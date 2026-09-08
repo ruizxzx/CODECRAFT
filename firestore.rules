@@ -89,9 +89,10 @@ service cloud.firestore {
         && incoming().get('verificationColor', '#2196F3') == existing().get('verificationColor', '#2196F3')
         && incoming().get('isAuthor', false) == existing().get('isAuthor', false)
         && incoming().get('role', '') == existing().get('role', '')
-        && incoming().get('platformRole', 'member') == existing().get('platformRole', 'member'))
-        || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
-        || (isAdmin() && incoming().username == 'krishsarkar' && incoming().isAuthor == true && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
+        && incoming().get('platformRole', 'member') == existing().get('platformRole', 'member')
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'updatedAt']))
+        || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
+        || (isAdmin() && incoming().username == 'krishsarkar' && incoming().isAuthor == true && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])) || (isPlatformModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt']))
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))
@@ -474,6 +475,21 @@ service cloud.firestore {
       }
     }
     
+
+    match /series/{seriesId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+        && incoming().ownerId == request.auth.uid
+        && incoming().title is string && incoming().title.size() <= 160
+        && incoming().slug is string && incoming().slug.size() <= 80
+        && incoming().description is string && incoming().description.size() <= 1000
+        && incoming().articleCount is number;
+      allow update: if isSignedIn()
+        && (existing().ownerId == request.auth.uid || isAdmin())
+        && incoming().ownerId == existing().ownerId;
+      allow delete: if isSignedIn() && (existing().ownerId == request.auth.uid || isAdmin());
+    }
+
     match /carousel_slides/{slideId} {
       allow read: if true;
       allow write: if isAdmin();

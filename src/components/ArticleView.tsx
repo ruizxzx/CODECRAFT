@@ -398,6 +398,14 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           </aside>
         )}
 
+        {article.seriesId && seriesArticles.length > 0 && (() => {
+          const idx = seriesArticles.findIndex(x => x.slug === article.slug);
+          const prev = idx > 0 ? seriesArticles[idx - 1] : null;
+          const next = idx >= 0 && idx < seriesArticles.length - 1 ? seriesArticles[idx + 1] : null;
+          const progress = idx >= 0 ? Math.round(((idx + 1) / seriesArticles.length) * 100) : 0;
+          return <div className="mb-10 border-2 border-black bg-white p-4"><div className="flex justify-between font-mono text-[10px] uppercase"><span>PART {idx + 1} OF {seriesArticles.length}</span><span>{progress}% COMPLETE</span></div><div className="h-3 border-2 border-black mt-2 bg-white"><div className="h-full bg-[var(--color-primary)]" style={{width:`${progress}%`}} /></div><div className="grid grid-cols-2 gap-2 mt-3"><button disabled={!prev} onClick={()=>prev&&onSelectArticle(prev.slug)} className="border-2 border-black p-3 text-left font-mono text-[10px] disabled:opacity-30">← PREVIOUS<br/><b className="font-display text-sm">{prev?.title || 'START'}</b></button><button disabled={!next} onClick={()=>next&&onSelectArticle(next.slug)} className="border-2 border-black p-3 text-right font-mono text-[10px] disabled:opacity-30">NEXT →<br/><b className="font-display text-sm">{next?.title || 'END'}</b></button></div></div>;
+        })()}
+
         {toc.length > 0 && (
           <nav className="mb-10 border-4 border-black bg-neutral-50 neo-shadow" aria-label="Table of contents">
             <div className="flex items-center justify-between gap-3 p-4 border-b-2 border-black">

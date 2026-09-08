@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Article, CommunityPost, CommunityUser, PageView } from '../types';
 import { getPosts, getUserFollowing, extractHashtags } from '../lib/community';
 import { getCommunities, getQuestions, getTopics, SocialCommunity, SocialQuestion, SocialTopic } from '../lib/social';
+import { getSeriesList } from '../lib/series';
+import { Series } from '../types';
 import { Search, Compass, TrendingUp, Sparkles, Hash, ArrowUp, MessageSquare, Repeat2, Loader2, BookOpen } from 'lucide-react';
 import { VerifiedBadge } from './VerifiedBadge';
 import { CommunityPostExtras } from './CommunityPostExtras';
@@ -18,13 +20,14 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
   const [communities, setCommunities] = useState<SocialCommunity[]>([]);
   const [questions, setQuestions] = useState<SocialQuestion[]>([]);
   const [topics, setTopics] = useState<SocialTopic[]>([]);
+  const [series, setSeries] = useState<Series[]>([]);
 
   useEffect(() => { setQuery(initialHashtag ? `#${initialHashtag.replace(/^#/, '')}` : ''); }, [initialHashtag]);
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([getPosts(), userAuth ? getUserFollowing(userAuth.uid).catch(() => []) : Promise.resolve([]), getCommunities().catch(() => []), getQuestions().catch(() => []), getTopics().catch(() => [])])
-      .then(([all, following, cs, qs, ts]) => { if (!active) return; setPosts(all); setFollowingIds((following as any[]).map(x => x.uid)); setCommunities(cs as SocialCommunity[]); setQuestions(qs as SocialQuestion[]); setTopics(ts as SocialTopic[]); })
+    Promise.all([getPosts(), userAuth ? getUserFollowing(userAuth.uid).catch(() => []) : Promise.resolve([]), getCommunities().catch(() => []), getQuestions().catch(() => []), getTopics().catch(() => []), getSeriesList(12).catch(() => [])])
+      .then(([all, following, cs, qs, ts, ss]) => { if (!active) return; setPosts(all); setFollowingIds((following as any[]).map(x => x.uid)); setCommunities(cs as SocialCommunity[]); setQuestions(qs as SocialQuestion[]); setTopics(ts as SocialTopic[]); setSeries(ss as Series[]); })
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [userAuth?.uid]);
@@ -87,6 +90,8 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
         <Search className="w-5 h-5 mr-2"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search posts, articles, @handles or #hashtags..." className="w-full bg-transparent focus:outline-none font-mono text-sm"/>
       </div>
     </div>
+
+    {series.length > 0 && <section className="border-4 border-black bg-white p-5 neo-shadow-sm"><div className="font-mono text-[10px] uppercase">SERIES</div><div className="flex items-end justify-between gap-3"><h2 className="font-display font-black text-2xl uppercase">Structured paths</h2><button onClick={()=>onNavigate('series')} className="font-mono text-[10px] underline">VIEW ALL →</button></div><div className="grid md:grid-cols-3 gap-3 mt-4">{series.slice(0,6).map(s=><button key={s.id} onClick={()=>onNavigate('series',s.id)} className="text-left border-2 border-black p-3 hover:bg-[var(--color-secondary)]"><div className="font-mono text-[9px]">{s.articleCount||0} PARTS</div><div className="font-display font-black uppercase mt-1">{s.title}</div><div className="text-xs mt-1 line-clamp-2">{s.description}</div></button>)}</div></section>}
 
     {(communities.length > 0 || questions.length > 0 || topics.length > 0) && <section className="grid md:grid-cols-3 gap-4">
       <div className="bg-white border-4 border-black p-5"><div className="font-mono text-[10px] font-black uppercase text-neutral-500">COMMUNITIES</div><h3 className="font-display font-black text-xl uppercase mt-1">Find your people</h3><div className="space-y-2 mt-4">{communities.slice(0,3).map(c=><button key={c.id} onClick={()=>onNavigate('social')} className="w-full text-left border-2 border-black p-3 hover:bg-[var(--color-primary)]"><b>c/{c.slug}</b><div className="font-mono text-[9px]">{c.membersCount} members · by @{c.ownerUsername||'creator'}</div></button>)}</div><button onClick={()=>onNavigate('social')} className="mt-3 font-mono text-[10px] font-black underline">VIEW ALL →</button></div>

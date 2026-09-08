@@ -7,7 +7,10 @@ import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
 import { syncUserIdentityAcrossContent } from '../lib/community';
 import { formatDisplayDate } from '../lib/dateUtils';
-import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText, Camera, Link as LinkIcon, MapPin, Search as SearchIcon, Shield } from 'lucide-react';
+import { getSeriesList } from '../lib/series';
+import { CreatorPageBuilder } from './CreatorPageBuilder';
+import type { CreatorPageConfig } from '../types';
+import { ArrowLeft, User, Sparkles, Settings, UserPlus, UserMinus, Loader2, Trash, ArrowUp, Repeat2, MessageSquare, FileText, Camera, Link as LinkIcon, MapPin, Search as SearchIcon, Shield, Layers } from 'lucide-react';
 
 interface CommunityProfileViewProps {
   username: string;
@@ -15,7 +18,7 @@ interface CommunityProfileViewProps {
   currentUserProfile?: CommunityUser | null;
 }
 
-type ProfileTab = 'articles' | 'posts' | 'upvotes' | 'reposts' | 'comments';
+type ProfileTab = 'articles' | 'posts' | 'upvotes' | 'reposts' | 'comments' | 'series';
 
 export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ username, onNavigate, currentUserProfile }) => {
   const [profile, setProfile] = useState<CommunityUser | null>(null);
@@ -24,6 +27,8 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [upvotedPosts, setUpvotedPosts] = useState<CommunityPost[]>([]);
   const [repostedPosts, setRepostedPosts] = useState<CommunityPost[]>([]);
   const [comments, setComments] = useState<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>>([]);
+  const [series, setSeries] = useState<any[]>([]);
+  const [showCreatorBuilder, setShowCreatorBuilder] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('posts');
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -108,11 +113,12 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
           getUserPosts(p.uid, p.username),
           getUserUpvotedPosts(p.uid),
           getUserRepostedPosts(p.uid),
-          getUserComments(p.uid)
+          getUserComments(p.uid),
+          getSeriesList().catch(() => [])
         ]);
         if (cancelled) return;
 
-        const [articleResult, postsResult, upvotesResult, repostsResult, commentsResult] = results;
+        const [articleResult, postsResult, upvotesResult, repostsResult, commentsResult, seriesResult] = results;
         if (articleResult.status === 'fulfilled') {
           const allArticles = articleResult.value;
           const articleList = Array.isArray((allArticles as any)?.articles) ? (allArticles as any).articles : (Array.isArray(allArticles) ? allArticles : []);
@@ -134,6 +140,8 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         else { console.warn('Profile reposts failed to load:', repostsResult.reason); setRepostedPosts([]); }
         if (commentsResult.status === 'fulfilled') setComments(commentsResult.value);
         else { console.warn('Profile comments failed to load:', commentsResult.reason); setComments([]); }
+        if (seriesResult.status === 'fulfilled') setSeries((seriesResult.value as any[]).filter((x:any)=>x.ownerId===p.uid || x.ownerUsername===p.username));
+        else setSeries([]);
         if (auth.currentUser && auth.currentUser.uid !== p.uid) {
           setIsFollowing(await checkIsFollowing(auth.currentUser.uid, p.uid));
         } else setIsFollowing(false);
@@ -241,6 +249,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
 
   const tabs: Array<{ id: ProfileTab; label: string; count: number; icon: React.ReactNode }> = [
     { id: 'articles', label: 'Articles', count: articles.length, icon: <FileText className="w-4 h-4" /> },
+    { id: 'series', label: 'Series', count: series.length, icon: <Layers className="w-4 h-4" /> },
     { id: 'posts', label: 'Posts', count: posts.length, icon: <FileText className="w-4 h-4" /> },
     { id: 'upvotes', label: 'Upvotes', count: upvotedPosts.length, icon: <ArrowUp className="w-4 h-4" /> },
     { id: 'reposts', label: 'Reposts', count: repostedPosts.length, icon: <Repeat2 className="w-4 h-4" /> },
@@ -284,7 +293,12 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
               {profile.socialTelegram && <a href={profile.socialTelegram} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="px-2 py-1 border-2 border-black bg-white hover:bg-[var(--color-primary)]">Telegram</a>}
               {profile.socialInstagram && <a href={profile.socialInstagram} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="px-2 py-1 border-2 border-black bg-white hover:bg-[var(--color-primary)]">Instagram</a>}
             </div>}
-            <div className="flex flex-wrap gap-3 font-mono text-xs">
+            <div className="flex flex-wrap gap-2 mb-4">
+            <button type="button" onClick={() => onNavigate('creator', profile.username)} className="border-2 border-black bg-[var(--color-primary)] px-3 py-2 font-mono text-[10px] font-black uppercase">OPEN CREATOR PAGE →</button>
+            {isOwner && <button type="button" onClick={() => setShowCreatorBuilder(v => !v)} className="border-2 border-black bg-white px-3 py-2 font-mono text-[10px] font-black uppercase">{showCreatorBuilder ? 'CLOSE BUILDER' : 'CUSTOMIZE PAGE'}</button>}
+          </div>
+          {showCreatorBuilder && isOwner && <div className="mb-5"><CreatorPageBuilder profile={profile} articles={articles} series={series} onSaved={(config: CreatorPageConfig) => { setProfile(prev => prev ? ({...prev, creatorPage: config} as any) : prev); setShowCreatorBuilder(false); }} /></div>}
+          <div className="flex flex-wrap gap-3 font-mono text-xs">
             <button type="button" onClick={() => setRelationModal('followers')} className="underline underline-offset-4 hover:bg-[var(--color-primary)] px-1 py-0.5 font-bold">{profile.followersCount || 0} Followers</button>
             <button type="button" onClick={() => setRelationModal('following')} className="underline underline-offset-4 hover:bg-[var(--color-primary)] px-1 py-0.5 font-bold">{profile.followingCount || 0} Following</button>
           </div></div>}
@@ -295,7 +309,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         {tabs.map(tab => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 min-w-[140px] px-4 py-3 border-r-2 last:border-r-0 border-black font-display font-black text-xs uppercase flex items-center justify-center gap-2 ${activeTab === tab.id ? 'bg-[var(--color-primary)]' : 'hover:bg-neutral-100'}`}>{tab.icon}{tab.label} ({tab.count})</button>)}
       </div>
 
-      {activeTab === 'comments' ? <div className="space-y-4">{comments.length === 0 ? <p className="font-mono text-sm text-neutral-500">No comments yet.</p> : comments.map(c => <div key={`${c.articleSlug || c.postId}-${c.id}`} onClick={() => c.postId ? onNavigate('community_post', c.postId) : c.articleSlug ? onNavigate('article', c.articleSlug) : undefined} className="bg-white border-4 border-black p-5 cursor-pointer"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">{c.articleSlug ? `ARTICLE: ${c.articleSlug}` : 'COMMUNITY POST'}</div><div className="flex items-center gap-2 mb-2 font-mono text-[10px] font-bold uppercase">
+      {activeTab === 'series' ? <div className="grid md:grid-cols-2 gap-4">{series.length===0 ? <p className="font-mono text-sm text-neutral-500">No series yet.</p> : series.map((item:any) => <button key={item.id} onClick={() => onNavigate('series', item.id)} className="text-left bg-white border-4 border-black p-5 hover:bg-[var(--color-secondary)] neo-shadow-sm"><div className="font-mono text-[10px]">{item.articleCount || 0} PARTS</div><h3 className="font-display font-black text-xl uppercase mt-1">{item.title}</h3><p className="text-sm mt-2">{item.description}</p></button>)}</div> : activeTab === 'comments' ? <div className="space-y-4">{comments.length === 0 ? <p className="font-mono text-sm text-neutral-500">No comments yet.</p> : comments.map(c => <div key={`${c.articleSlug || c.postId}-${c.id}`} onClick={() => c.postId ? onNavigate('community_post', c.postId) : c.articleSlug ? onNavigate('article', c.articleSlug) : undefined} className="bg-white border-4 border-black p-5 cursor-pointer"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">{c.articleSlug ? `ARTICLE: ${c.articleSlug}` : 'COMMUNITY POST'}</div><div className="flex items-center gap-2 mb-2 font-mono text-[10px] font-bold uppercase">
               {profile.photoURL ? <img src={profile.photoURL} alt="" className="w-5 h-5 rounded-full border border-black object-cover" /> : null}
               <span>@{profile.username}</span><VerifiedBadge verified={profile.isVerified} color={profile.verificationColor} className="w-3.5 h-3.5" />
             </div><p className="font-sans text-sm">{c.content}</p><div className="mt-3 font-mono text-[10px] text-neutral-500">{formatDisplayDate(c.createdAt)}</div></div>)}</div> : <div className="space-y-6">{activeTab === 'articles' ? (articles.length ? articles.map(article => <div key={article.slug} onClick={() => onNavigate('article', article.slug)} className="bg-white border-4 border-black p-5 cursor-pointer neo-shadow-sm hover:-translate-y-1 transition-all"><div className="font-mono text-[10px] uppercase text-neutral-500 mb-2">MAIN ARTICLE • {article.category}</div><h3 className="font-display font-black text-xl uppercase">{article.title}</h3><p className="mt-2 text-sm text-neutral-600">{article.excerpt}</p></div>) : <p className="font-mono text-sm text-neutral-500">No main articles yet.</p>) : activeTab === 'posts' ? (posts.length ? posts.map(p => renderPost(p)) : <p className="font-mono text-sm text-neutral-500">No community posts yet.</p>) : activeTab === 'upvotes' ? (upvotedPosts.length ? upvotedPosts.map(p => renderPost(p, 'UPVOTED')) : <p className="font-mono text-sm text-neutral-500">No upvoted posts yet.</p>) : (repostedPosts.length ? repostedPosts.map(p => renderPost(p, 'REPOST')) : <p className="font-mono text-sm text-neutral-500">No reposts yet.</p>)}</div>}

@@ -29,7 +29,8 @@ import {
   Plus,
   Trash,
   BadgeCheck,
-  MousePointer2
+  MousePointer2,
+  Layers
 } from 'lucide-react';
 import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
 import { isPlatformModerator } from '../lib/social';
@@ -54,6 +55,8 @@ import {
 import { SocialAdminPanel } from './SocialAdminPanel';
 import { CarouselBuilder } from './CarouselBuilder';
 import { AdminControlPanel } from './AdminControlPanel';
+import { createSeries, deleteSeries, getSeriesList, updateSeries } from '../lib/series';
+import type { Series } from '../types';
 
 interface AdminStudioModalProps {
   isOpen: boolean;
@@ -131,7 +134,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setCurrentUserEmail(null);
   };
 
-  const [activeTab, setActiveTab] = useState<'settings' | 'create' | 'manage' | 'links' | 'carousel' | 'social' | 'control'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'create' | 'manage' | 'links' | 'carousel' | 'social' | 'control' | 'series'>('settings');
 
   // Carousel State
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([]);
@@ -172,6 +175,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       loadCarousel();
     }
   }, [isOpen, isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated) { getSeriesList(100).then(setSeriesList).catch(() => setSeriesList([])); }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (activeTab === 'carousel' && isAuthenticated) {
@@ -567,6 +574,15 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [newTakeaway, setNewTakeaway] = useState('');
   const [newIsFeatured, setNewIsFeatured] = useState(false);
   const [newIsPinned, setNewIsPinned] = useState(false);
+  const [newSeriesId, setNewSeriesId] = useState('');
+  const [newSeriesName, setNewSeriesName] = useState('');
+  const [newSeriesOrder, setNewSeriesOrder] = useState<number | ''>('');
+  const [seriesList, setSeriesList] = useState<Series[]>([]);
+  const [seriesTitleInput, setSeriesTitleInput] = useState('');
+  const [seriesSlugInput, setSeriesSlugInput] = useState('');
+  const [seriesDescInput, setSeriesDescInput] = useState('');
+  const [seriesCoverInput, setSeriesCoverInput] = useState('');
+  const [seriesBusy, setSeriesBusy] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishSuccess, setPublishSuccess] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -746,6 +762,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
         featured: newIsFeatured || newIsPinned,
         pinned: newIsPinned || newIsFeatured,
         trending: true,
+        seriesId: newSeriesId.trim() || undefined,
+        seriesName: newSeriesName.trim() || undefined,
+        seriesOrder: newSeriesOrder === '' ? undefined : Number(newSeriesOrder),
         viewsCount: 1,
         clapsCount: 0,
         author: {
@@ -789,6 +808,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setNewCoverAlt(article.coverImageAlt || '');
     setNewCoverCaption(article.coverImageCaption || '');
     setNewReadingTime(article.readingTimeMinutes);
+    setNewSeriesId(article.seriesId || '');
+    setNewSeriesName(article.seriesName || '');
+    setNewSeriesOrder(article.seriesOrder || '');
     
     setContentBlocks(article.content?.length ? article.content.map(block => ({ ...block })) : [{ type: 'paragraph', content: article.excerpt }]);
     setShowCustomCategoryInput(!['Web Development','Artificial Intelligence','Software Engineering','Computer Science','Developer Tools','System Design'].includes(article.category));
@@ -823,6 +845,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setShowCustomCategoryInput(false);
     setNewIsFeatured(false);
     setNewIsPinned(false);
+    setNewSeriesId('');
+    setNewSeriesName('');
+    setNewSeriesOrder('');
     setNewCoverImage('https://images.unsplash.com/photo-1555066931-4365d14bab8c?q=80&w=1200&auto=format&fit=crop');
     setPublishError(null);
   };
@@ -1014,6 +1039,14 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                 <span className="hidden sm:inline">BENTO LINKS</span>
               </button>}
               
+              {!isModerator && <button
+                onClick={() => setActiveTab('series')}
+                className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${activeTab === 'series' ? 'bg-[var(--color-primary)] text-black border-r-2 border-black' : 'hover:bg-neutral-100 border-r-2 border-black'}`}
+              >
+                <Layers className="w-4 h-4" />
+                <span className="hidden sm:inline">SERIES</span>
+              </button>}
+
               {!isModerator && <button
                 onClick={() => setActiveTab('carousel')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
@@ -1452,6 +1485,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       />
                     </div>
 
+                    <div className="border-2 border-black bg-neutral-50 p-3 space-y-3">
+                      <div className="font-display font-black text-sm uppercase">SERIES</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <select value={newSeriesId} onChange={e=>{ const id=e.target.value; setNewSeriesId(id); const found=seriesList.find(x=>x.id===id); if(found){setNewSeriesName(found.title);}}} className="border-2 border-black p-2 font-mono text-xs bg-white">
+                          <option value="">No series</option>
+                          {seriesList.map(x=><option key={x.id} value={x.id}>{x.title}</option>)}
+                        </select>
+                        <input value={newSeriesName} onChange={e=>setNewSeriesName(e.target.value)} placeholder="Series name" className="border-2 border-black p-2 font-mono text-xs" />
+                        <input type="number" min="1" value={newSeriesOrder} onChange={e=>setNewSeriesOrder(e.target.value===''?'':Math.max(1,Number(e.target.value)))} placeholder="Part #" className="border-2 border-black p-2 font-mono text-xs" />
+                      </div>
+                      <p className="font-mono text-[9px] text-neutral-500 uppercase">Create a series from the SERIES tab, then assign each article to it and give it a part number.</p>
+                    </div>
+
                     <div className="space-y-1">
                       <label className="font-mono text-xs font-bold uppercase text-black">
                         Excerpt / Executive Abstract *
@@ -1829,6 +1875,20 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
             {activeTab === 'control' && !isModerator && <AdminControlPanel onSiteConfigRestored={async () => { onUpdateSiteConfig(await getSiteConfig()); }} />}
 
             {/* TAB: CAROUSEL */}
+            {activeTab === 'series' && (
+              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6">
+                <div className="border-4 border-black bg-[var(--color-primary)] p-5 neo-shadow"><div className="font-mono text-[10px]">PHASE 2 / STRUCTURED PUBLISHING</div><h2 className="font-display font-black text-3xl uppercase">SERIES MANAGER</h2><p className="text-sm mt-1">Create reusable reading paths, then assign articles to numbered parts from the article publisher.</p></div>
+                <form onSubmit={async e=>{e.preventDefault(); if(!seriesTitleInput.trim()) return; setSeriesBusy(true); try { const slug=(seriesSlugInput.trim()||seriesTitleInput.trim()).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60); const created=await createSeries({id:slug,slug,title:seriesTitleInput.trim(),description:seriesDescInput.trim(),coverImage:seriesCoverInput.trim()||undefined,ownerId:auth.currentUser!.uid,ownerUsername:'krishsarkar',ownerName:authorName}); setSeriesList(p=>[created,...p]); setSeriesTitleInput('');setSeriesSlugInput('');setSeriesDescInput('');setSeriesCoverInput(''); } catch(err:any){alert(err?.message||'Failed to create series.')} finally{setSeriesBusy(false)}}} className="border-4 border-black p-4 bg-white space-y-3">
+                  <h3 className="font-display font-black uppercase">CREATE SERIES</h3>
+                  <div className="grid md:grid-cols-2 gap-2"><input required value={seriesTitleInput} onChange={e=>setSeriesTitleInput(e.target.value)} placeholder="Series title" className="border-2 border-black p-3"/><input value={seriesSlugInput} onChange={e=>setSeriesSlugInput(e.target.value)} placeholder="Slug (optional)" className="border-2 border-black p-3 font-mono text-xs"/></div>
+                  <textarea value={seriesDescInput} onChange={e=>setSeriesDescInput(e.target.value)} placeholder="What is this series about?" rows={3} className="w-full border-2 border-black p-3"/>
+                  <input value={seriesCoverInput} onChange={e=>setSeriesCoverInput(e.target.value)} placeholder="Cover image URL (optional)" className="w-full border-2 border-black p-3 font-mono text-xs"/>
+                  <button disabled={seriesBusy} className="border-2 border-black bg-black text-white px-4 py-2 font-mono text-xs font-black uppercase">{seriesBusy?'CREATING…':'CREATE SERIES'}</button>
+                </form>
+                <div className="space-y-3">{seriesList.map(item=><div key={item.id} className="border-4 border-black bg-white p-4 flex flex-wrap items-center gap-3"><div className="flex-1 min-w-[220px]"><div className="font-mono text-[10px]">{articles.filter(a=>a.seriesId===item.id || a.seriesId===item.slug).length || item.articleCount || 0} PARTS · /series/{item.id}</div><h3 className="font-display font-black text-xl uppercase">{item.title}</h3><p className="text-sm">{item.description}</p></div><button onClick={async()=>{try{await deleteSeries(item.id);setSeriesList(x=>x.filter(y=>y.id!==item.id))}catch(e:any){alert(e?.message||'Could not delete series.')}}} className="border-2 border-black bg-red-100 px-3 py-2 font-mono text-[10px]">DELETE</button></div>)}</div>
+              </div>
+            )}
+
             {activeTab === 'carousel' && (
               <div className="p-6 max-h-[70vh] overflow-y-auto space-y-8 bg-neutral-50">
                 <div>

@@ -22,7 +22,8 @@ import {
   Plus,
   Smartphone,
   Bell,
-  Compass
+  Compass,
+  Layers
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -109,6 +110,7 @@ export const Header: React.FC<HeaderProps> = ({
     { label: 'Saved', page: 'saved', count: savedCount, icon: Bookmark },
     { label: 'Notifications', page: 'notifications', count: unreadNotificationCount, icon: Bell },
     { label: 'Explore', page: 'explore', icon: Compass },
+    { label: 'Series', page: 'series', icon: Layers },
   ];
 
   const secondaryNavLinks = [
