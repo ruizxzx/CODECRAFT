@@ -232,6 +232,16 @@ export interface SiteConfig {
   authorProfileUid?: string;
   authorProfileUsername?: string;
   creatorPage?: CreatorPageConfig;
+  popupAnnouncement?: {
+    id?: string;
+    enabled: boolean;
+    title: string;
+    message: string;
+    targetPage?: 'all' | 'home' | 'blog' | 'article' | 'social' | 'explore' | 'series' | 'creator' | 'changelog';
+    linkLabel?: string;
+    linkTarget?: string;
+    dismissible?: boolean;
+  };
 }
 
 export interface BentoLink {
@@ -244,7 +254,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'activity' | 'creator_studio' | 'creators' | 'preferences' | 'health';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'activity' | 'creator_studio' | 'creators' | 'preferences' | 'health' | 'changelog';
 
 export interface CommunityUser {
   uid: string;

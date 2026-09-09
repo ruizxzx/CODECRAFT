@@ -419,7 +419,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
               <span>{post.downvotesCount}</span>
             </button>
           </div>
-          <button onClick={handleToggleRepost} disabled={isReposting} className={`px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 sm:gap-2 shrink-0 ${isReposted ? 'bg-[var(--color-primary)]' : 'bg-white'}`}><Repeat2 className="w-4 h-4" />{isReposted ? 'REPOSTED' : 'REPOST'} ({post.repostsCount || 0})</button>
+          <button onClick={handleToggleRepost} disabled={isReposting} className={`px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 sm:gap-2 shrink-0 ${isReposted ? 'bg-[var(--color-primary)] shadow-[3px_3px_0_#000]' : 'bg-white hover:bg-[var(--color-primary)]'}`}><Repeat2 className="w-4 h-4" />{isReposted ? 'REPOSTED' : 'REPOST'} ({post.repostsCount || 0})</button>
           <button onClick={() => setIsQuoteOpen(true)} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100"><Repeat2 className="w-4 h-4" />QUOTE</button>
           <ShareMenu target={{type:'post',slug:(post as any)?.slug || postId}} title={(post as any)?.title || 'OFFSCRPT post'} />
           <ReportButton targetType="post" targetId={postId} />
@@ -427,7 +427,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           {activeUser?.uid === post.authorId && <button onClick={openEdit} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100"><Pencil className="w-4 h-4" />EDIT</button>}
           <button 
             onClick={handleToggleSave}
-            className={`flex items-center space-x-2 font-mono text-xs sm:text-sm font-bold uppercase px-3 sm:px-4 py-2 border-2 border-black shrink-0 transition-colors ${effectiveIsSaved ? 'bg-[var(--color-secondary)]' : 'hover:bg-neutral-100'}`}
+            className={`flex items-center space-x-2 font-mono text-xs sm:text-sm font-bold uppercase px-3 sm:px-4 py-2 border-2 border-black shrink-0 transition-colors ${effectiveIsSaved ? 'bg-[var(--color-secondary)] shadow-[3px_3px_0_#000]' : 'hover:bg-[var(--color-primary)]'}`}
           >
             <Bookmark className={`w-4 h-4 ${effectiveIsSaved ? 'fill-black' : ''}`} />
             <span>{effectiveIsSaved ? 'Saved' : 'Save'}</span>

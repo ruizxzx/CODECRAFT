@@ -18,6 +18,7 @@ const DEFAULT_NAV: FooterLink[] = [
   { id: 'fallback-series', label: 'Series', type: 'internal', target: 'series', visible: true },
   { id: 'fallback-about', label: 'About Krish', type: 'internal', target: 'about', visible: true },
   { id: 'fallback-contact', label: 'Contact Desk', type: 'internal', target: 'contact', visible: true },
+  { id: 'fallback-changelog', label: 'Changelog', type: 'internal', target: 'changelog', visible: true },
 ];
 
 const DEFAULT_HUB: FooterLink[] = [
@@ -147,7 +148,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenCms, onOpenRss
 
           <div className="lg:col-span-2 space-y-3 font-display">
             <div className="font-mono text-xs font-bold text-[var(--color-primary)] uppercase tracking-wider">{siteConfig.footerNavigationTitle || 'NAVIGATION'}</div>
-            <ul className="space-y-2 text-sm font-bold uppercase">{navLinks.map(renderLink)}</ul>
+            <ul className="space-y-2 text-sm font-bold uppercase">{navLinks.map(renderLink)}{!navLinks.some(x => x.type === 'internal' && x.target === 'changelog') && renderLink({id:'footer-nav-changelog',label:'Changelog',type:'internal',target:'changelog',visible:true})}</ul>
           </div>
 
           <div className="lg:col-span-3 space-y-3">

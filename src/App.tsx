@@ -42,6 +42,8 @@ import { SocialHubView } from './components/SocialHubView';
 import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { SystemHealthView } from './components/SystemHealthView';
+import { ChangelogView } from './components/ChangelogView';
+import { SiteAnnouncementPopup } from './components/SiteAnnouncementPopup';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
 import { getCommunityProfile, ensureCommunityProfileForUser, subscribeUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor, subscribeCommunityProfile } from './lib/community';
@@ -449,6 +451,9 @@ export default function App() {
       } else if (hash === 'contact') {
         setCurrentPage('contact');
         setActiveArticleSlug(null);
+      } else if (hash === 'changelog') {
+        setCurrentPage('changelog');
+        setActiveArticleSlug(null);
       } else if (hash === 'links') {
         setCurrentPage('links');
         setActiveArticleSlug(null);
@@ -539,6 +544,8 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('creator');
       window.location.hash = `creator/${param}`;
+    } else if (page === 'changelog') {
+      setActiveArticleSlug(null); setCurrentPage('changelog'); window.location.hash='changelog';
     } else if (page === 'creators') {
       setActiveArticleSlug(null); setCurrentPage('creators'); window.location.hash='creators';
     } else if (page === 'explore') {
@@ -924,6 +931,10 @@ export default function App() {
             {currentPage === 'contact' && (
               <ContactView siteConfig={siteConfig} />
             )}
+
+            {currentPage === 'changelog' && (
+              <ChangelogView onNavigate={navigateTo} currentPage={currentPage} />
+            )}
               </>
             )}
           </>
@@ -986,6 +997,8 @@ export default function App() {
           setIsHandleModalOpen(false);
         }}
       />
+
+      <SiteAnnouncementPopup siteConfig={siteConfig} currentPage={currentPage} onNavigate={navigateTo} />
 
       {/* Footer */}
       <Footer
