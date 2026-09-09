@@ -24,12 +24,16 @@ export const UniqueHandleModal: React.FC<UniqueHandleModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    // Handles are explicit user choices. Never pre-fill the Google display name
-    // as a claimed handle, because that would reserve names before the user agrees.
     if (currentUser?.email && (currentUser.email === 'ruizxzxz@gmail.com' || currentUser.email === 'krishsarkar456@gmail.com')) {
       setHandle('krishsarkar');
-    } else {
-      setHandle('');
+      return;
+    }
+    if (currentUser?.displayName) {
+      const suggested = currentUser.displayName
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '')
+        .substring(0, 20);
+      setHandle(suggested);
     }
   }, [currentUser]);
 

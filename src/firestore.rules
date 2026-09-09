@@ -77,27 +77,10 @@ service cloud.firestore {
     }
 
     // USER VALIDATION
-    function validProfileUpdate(next, prev) {
-      let changed = next.diff(prev).affectedKeys();
-      return
-        (!changed.hasAny(["username"]) || (next.get("username", "") is string && next.get("username", "").size() <= 32 && (next.get("username", "") == "" || next.get("username", "").matches("^[a-zA-Z0-9_]+$"))))
-        && (!changed.hasAny(["displayName"]) || (next.get("displayName", "") is string && next.get("displayName", "").size() <= 64))
-        && (!changed.hasAny(["photoURL"]) || (next.get("photoURL", "") is string && next.get("photoURL", "").size() <= 2048))
-        && (!changed.hasAny(["coverImageUrl"]) || (next.get("coverImageUrl", "") is string && next.get("coverImageUrl", "").size() <= 2048))
-        && (!changed.hasAny(["websiteUrl"]) || (next.get("websiteUrl", "") is string && next.get("websiteUrl", "").size() <= 512))
-        && (!changed.hasAny(["location"]) || (next.get("location", "") is string && next.get("location", "").size() <= 100))
-        && (!changed.hasAny(["socialX"]) || (next.get("socialX", "") is string && next.get("socialX", "").size() <= 512))
-        && (!changed.hasAny(["socialGithub"]) || (next.get("socialGithub", "") is string && next.get("socialGithub", "").size() <= 512))
-        && (!changed.hasAny(["socialTelegram"]) || (next.get("socialTelegram", "") is string && next.get("socialTelegram", "").size() <= 512))
-        && (!changed.hasAny(["socialInstagram"]) || (next.get("socialInstagram", "") is string && next.get("socialInstagram", "").size() <= 512))
-        && (!changed.hasAny(["bio"]) || (next.get("bio", "") is string && next.get("bio", "").size() <= 500))
-        && (!changed.hasAny(["themeColor"]) || (next.get("themeColor", "#000000") is string && next.get("themeColor", "#000000").matches("^#[0-9a-fA-F]{6}$")));
-    }
-
     function isValidUser(data) {
       return data.keys().hasAll(["uid", "username", "displayName", "createdAt", "updatedAt"])
         && data.uid is string && data.uid.size() <= 128
-        && data.username is string && data.username.size() <= 32 && (data.username == '' || data.username.matches('^[a-zA-Z0-9_]+$'))
+        && data.username is string && data.username.size() <= 32 && data.username.matches('^[a-zA-Z0-9_]+$')
         && data.displayName is string && data.displayName.size() <= 64
         && data.get('photoURL', '') is string && data.get('photoURL', '').size() <= 2048
         && data.get('coverImageUrl', '') is string && data.get('coverImageUrl', '').size() <= 2048
@@ -135,9 +118,6 @@ service cloud.firestore {
       // Nobody else gets to enumerate the moderator registry.
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       allow create, update, delete: if isAdmin();
-      allow update: if isSignedIn() && request.auth.uid == userId
-        && existing().uid == request.auth.uid
-        && incoming().diff(existing()).affectedKeys().hasOnly(['username','displayName','updatedAt']);
     }
 
     match /presence/{scopeId}/members/{userId} {
@@ -154,23 +134,8 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
 
-    // Allow a signed-in user to refresh only their own denormalized identity snapshots across nested collections.
-    // The queryable fields mirror the UID used by the document owners, so this cannot expose another user's identity records.
-    match /{path=**}/members/{memberId} {
-      allow read: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid && memberId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid && memberId == request.auth.uid
-        && incoming().uid == existing().uid
-        && incoming().diff(existing()).affectedKeys().hasOnly(['username','updatedAt']);
-    }
-    match /{path=**}/following/{followingId} {
-      allow read: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid && followingId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid && followingId == request.auth.uid
-        && incoming().uid == existing().uid
-        && incoming().diff(existing()).affectedKeys().hasOnly(['username','updatedAt']);
-    }
-
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow read: if true;
       allow create: if isSignedIn() 
         && (registrationsEnabled() || isAdmin())
         && isValidId(userId)
@@ -181,22 +146,25 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && incoming().get('platformRole', 'member') == (isAdmin() ? 'master_admin' : 'member')
         && incoming().get('role', '') == (isAdmin() ? 'Master Admin' : '')
-        && (incoming().username == '' || existsAfter(/databases/$(database)/documents/usernames/$(incoming().username)));
-      allow update: if isSignedIn()
+        && existsAfter(/databases/$(database)/documents/usernames/$(incoming().username));
+      allow update: if (isSignedIn()
         && request.auth.uid == userId
+        && isValidUser(incoming())
         && incoming().uid == existing().uid
+        && incoming().username == existing().username
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'updatedAt'])
-        && validProfileUpdate(incoming(), existing())
-        && (incoming().get('username', '') == existing().get('username', '')
-          || incoming().get('username', '') == ''
-          || existsAfter(/databases/$(database)/documents/usernames/$(incoming().get('username', ''))))
+        && incoming().get('isBlocked', false) == existing().get('isBlocked', false)
+        && incoming().get('isVerified', false) == existing().get('isVerified', false)
+        && incoming().get('verificationColor', '#2196F3') == existing().get('verificationColor', '#2196F3')
+        && incoming().get('isAuthor', false) == existing().get('isAuthor', false)
+        && incoming().get('role', '') == existing().get('role', '')
+        && incoming().get('platformRole', 'member') == existing().get('platformRole', 'member')
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'updatedAt']))
         || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
         || (isAdmin() && existing().username == 'krishsarkar' && existing().get('isAuthor', false) == true && incoming().uid == existing().uid && incoming().username == existing().username && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'isSuspended', 'restrictCommenting', 'restrictPosting', 'restrictCommunities', 'restrictReactions', 'restrictFollowing', 'moderatorNote', 'warningCount', 'suspensionUntil', 'updatedAt']))
-        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt']))
-        || (isPlatformModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt']))
+        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])) || (isPlatformModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt']))
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))
         || (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']))
         || (isAdmin() && isValidUser(incoming()));
@@ -217,9 +185,6 @@ service cloud.firestore {
           && request.auth.uid == userId
           && incoming().keys().hasAll(["createdAt", "uid", "username"])
           && incoming().uid == followingId;
-        allow update: if isSignedIn() && request.auth.uid == followingId && existing().uid == request.auth.uid
-          && incoming().uid == existing().uid
-          && incoming().diff(existing()).affectedKeys().hasOnly(['username','updatedAt']);
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
 
@@ -361,11 +326,7 @@ service cloud.firestore {
         allow update: if isSignedIn() && (
           isAdmin() ||
           isCommunityOwner(communityId) ||
-          (isPlatformModerator() && memberId != get(/databases/$(database)/documents/communities/$(communityId)).data.ownerId) ||
-          (request.auth.uid == memberId
-            && existing().uid == request.auth.uid
-            && incoming().uid == existing().uid
-            && incoming().diff(existing()).affectedKeys().hasOnly(['username','updatedAt']))
+          (isPlatformModerator() && memberId != get(/databases/$(database)/documents/communities/$(communityId)).data.ownerId)
         );
         allow delete: if isSignedIn() && (
           isAdmin() ||
@@ -400,7 +361,6 @@ service cloud.firestore {
             (existing().get('promotedToArticleSlug', '') == '' && existing().get('mainPublicationStatus', '') != 'published') ||
             (incoming().get('editReviewStatus', '') == 'pending' && incoming().get('editReviewRequestedAt', null) is timestamp && incoming().get('editReviewedAt', null) == null && incoming().get('editReviewedBy', null) == null)
           ))
-          || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName','authorAvatar','authorUsername','isVerified','verificationColor','updatedAt']))
         );
         allow update: if !isSignedIn()
           && incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
@@ -432,13 +392,11 @@ service cloud.firestore {
       allow read: if true;
       allow create: if userMayPost(request.auth.uid) && (isAdmin() || hasModeratorPermission('moderatePosts') || questionsEnabled()) && incoming().authorId == request.auth.uid && validText(incoming().title,256) && validText(incoming().details,100000) && incoming().answersCount == 0;
       allow update: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId);
-      allow update: if isSignedIn() && request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorUsername','authorName','authorAvatar','updatedAt']);
       allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId);
       match /answers/{answerId} {
         allow read: if true;
         allow create: if isSignedIn() && incoming().authorId == request.auth.uid && validText(incoming().content,100000);
         allow update: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId || request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId);
-        allow update: if isSignedIn() && request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorUsername','authorName','authorAvatar','updatedAt']);
         allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId || request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId);
       }
       match /votes/{userId} {
@@ -456,7 +414,7 @@ service cloud.firestore {
     match /topics/{topicId} {
       allow read: if true;
       allow create: if userMayPost(request.auth.uid) && (isAdmin() || hasModeratorPermission('moderatePosts') || topicsEnabled()) && incoming().createdBy == request.auth.uid && validText(incoming().name,80) && validText(incoming().slug,80);
-      allow update: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().createdBy || incoming().diff(existing()).affectedKeys().hasOnly(['followersCount','updatedAt']) || (request.auth.uid == existing().createdBy && incoming().diff(existing()).affectedKeys().hasOnly(['creatorUsername','updatedAt'])));
+      allow update: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().createdBy || incoming().diff(existing()).affectedKeys().hasOnly(['followersCount','updatedAt']));
       allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().createdBy);
       match /followers/{userId} {
         allow read: if true;
@@ -468,15 +426,14 @@ service cloud.firestore {
     match /messages/{messageId} {
       allow read: if isAdmin() || (isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.recipientId || request.auth.uid in resource.data.get('participants', [])));
       allow create: if userMayWrite(request.auth.uid) && (isAdmin() || hasModeratorPermission('moderatePosts') || directMessagesEnabled()) && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participants && incoming().recipientId in incoming().participants && validText(incoming().content,5000);
-      allow update: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId) && incoming().diff(existing()).affectedKeys().hasOnly(['content','read'])) || (isSignedIn() && request.auth.uid == existing().senderId && incoming().diff(existing()).affectedKeys().hasOnly(['senderUsername','senderName','senderAvatar','updatedAt']));
+      allow update: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId) && incoming().diff(existing()).affectedKeys().hasOnly(['content','read']));
       allow delete: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId));
     }
 
     match /reports/{reportId} {
       allow read: if hasModeratorPermission('manageReports') || (isSignedIn() && resource.data.reporterId == request.auth.uid);
       allow create: if isSignedIn() && incoming().reporterId == request.auth.uid && validText(incoming().reason,500) && incoming().status == 'open' && validText(incoming().targetType,40) && validText(incoming().targetId,256);
-      allow update: if hasModeratorPermission('manageReports') || (isSignedIn() && request.auth.uid == existing().reporterId && incoming().diff(existing()).affectedKeys().hasOnly(['reporterUsername','updatedAt']));
-      allow delete: if hasModeratorPermission('manageReports');
+      allow update, delete: if hasModeratorPermission('manageReports');
     }
 
     match /admin_notifications/{notificationId} {
@@ -486,7 +443,7 @@ service cloud.firestore {
         && incoming().message is string && incoming().message.size() <= 500
         && incoming().read is bool
         && incoming().createdAt is timestamp;
-      allow update, delete: if isAdmin() || hasModeratorPermission('moderatePosts') || (isSignedIn() && existing().actorId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['actorUsername','actorName','actorAvatar','updatedAt']));
+      allow update, delete: if isAdmin() || hasModeratorPermission('moderatePosts');
     }
 
     match /users/{userId}/mutes/{targetUid} {
@@ -509,8 +466,7 @@ service cloud.firestore {
     }
 
     match /users/{userId}/notifications/{notificationId} {
-      allow read, delete: if isSignedIn() && request.auth.uid == userId;
-      allow update: if (isSignedIn() && request.auth.uid == userId) || (isSignedIn() && existing().actorId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['actorUsername','actorName','actorAvatar','updatedAt']));
+      allow read, update, delete: if isSignedIn() && request.auth.uid == userId;
       allow create: if isSignedIn()
         && request.resource.data.actorId is string
         && request.resource.data.actorId == request.auth.uid
@@ -525,32 +481,13 @@ service cloud.firestore {
       allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
 
-
-    // Public profile projection. Contains only public identity/presentation fields.
-    // It is keyed by the claimed handle, never by the private Firebase UID.
-    match /publicProfiles/{username} {
-      allow read: if true;
-      allow create, update: if isSignedIn() && (
-        (request.resource.data.username == username && request.resource.data.username == getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username)
-        || isAdmin()
-      );
-      allow delete: if isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/usernames/$(username)) && get(/databases/$(database)/documents/usernames/$(username)).data.uid == request.auth.uid);
-    }
-
     match /usernames/{username} {
       allow read: if true;
-      allow update: if isSignedIn()
-        && existing().uid == request.auth.uid
-        && incoming().uid == request.auth.uid
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username;
+      allow update: if isSignedIn() && existing().uid == request.auth.uid && incoming().uid == request.auth.uid;
       allow create: if isSignedIn()
         && incoming().keys().hasAll(["uid"]) && incoming().keys().size() == 1
         && incoming().uid is string && incoming().uid == request.auth.uid
-        && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username;
-      allow delete: if isSignedIn()
-        && existing().uid == request.auth.uid
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username != username;
+        && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
     // Private resume point for an authenticated reader. This is deliberately
@@ -808,10 +745,7 @@ service cloud.firestore {
       allow delete: if isAdmin() || hasModeratorPermission('deleteArticles');
       allow update: if isAdmin() || hasModeratorPermission('editArticles') || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount','updatedAt'])
         && request.resource.data.get('viewsCount', 0) == resource.data.get('viewsCount', 0) + 1
-        && request.resource.data.updatedAt is timestamp)
-        || (isSignedIn() && resource.data.get('author', {}).get('uid', '') == request.auth.uid
-          && request.resource.data.get('author', {}).get('uid', '') == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['author','authorUsername','authorName','authorAvatar','updatedAt']));
+        && request.resource.data.updatedAt is timestamp);
 
       match /reactions/{userId} {
         allow read: if true;
@@ -841,7 +775,6 @@ service cloud.firestore {
           && incoming().updatedAt == request.time
           && ((request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt','mentionedUsernames','editedAt']))
             || (hasModeratorPermission('moderateComments') && incoming().diff(existing()).affectedKeys().hasOnly(['isHidden','moderationReason','updatedAt']))
-            || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName','authorAvatar','authorUsername','isVerified','verificationColor','updatedAt']))
             || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['authorName','authorAvatar','authorUsername','isVerified','verificationColor','updatedAt']))
             || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isDeleted','content','updatedAt']))
             || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['likeCount','updatedAt']) && (incoming().likeCount == existing().get('likeCount',0) + 1 || incoming().likeCount == existing().get('likeCount',0) - 1)));
@@ -938,10 +871,7 @@ service cloud.firestore {
     }
     match /communities/{communityId}/posts/{postId}/comments/{commentId} {
       allow read: if true;
-      allow update: if isAdmin() || hasModeratorPermission('moderateComments')
-        || (isSignedIn() && existing().authorId == request.auth.uid
-          && incoming().authorId == existing().authorId
-          && incoming().diff(existing()).affectedKeys().hasOnly(['authorName','authorAvatar','authorUsername','isVerified','verificationColor','updatedAt']));
+      allow update: if isAdmin() || hasModeratorPermission('moderateComments');
       allow delete: if isAdmin() || hasModeratorPermission('moderateComments');
     }
 

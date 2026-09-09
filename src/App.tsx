@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Article, PageView, SiteConfig, BentoLink, CommunityUser } from './types';
 import { 
   subscribeArticles, 
@@ -27,7 +27,6 @@ import { RssModal } from './components/RssModal';
 import { CommunityView } from './components/CommunityView';
 import { CommunityPostView } from './components/CommunityPostView';
 import { CommunityProfileView } from './components/CommunityProfileView';
-import { backfillPublicProfilesForAllUsers } from './lib/community';
 import { SavedView } from './components/SavedView';
 import { NotificationsView } from './components/NotificationsView';
 import { AccountDashboardView } from './components/AccountDashboardView';
@@ -189,19 +188,6 @@ export default function App() {
   const [continueReadingSlug, setContinueReadingSlug] = useState<string | null>(null);
   const [readingQueueIds, setReadingQueueIds] = useState<string[]>([]);
   const [isHandleModalOpen, setIsHandleModalOpen] = useState(false);
-  const handlePromptedUidRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const onProfileUpdated = (event: Event) => {
-      const profile = (event as CustomEvent).detail as CommunityUser | undefined;
-      if (profile?.uid === auth.currentUser?.uid) {
-        setUserProfile(profile);
-        if (profile.username) setIsHandleModalOpen(false);
-      }
-    };
-    window.addEventListener('offscrpt:profile-updated', onProfileUpdated);
-    return () => window.removeEventListener('offscrpt:profile-updated', onProfileUpdated);
-  }, []);
 
   // Sync auth state & cloud saved items
   useEffect(() => {
@@ -213,7 +199,7 @@ export default function App() {
       if (user) {
         // Load or automatically create the persistent cloud profile.
         // Existing handles are restored from Firestore; first-time accounts
-        // start unclaimed and are prompted to explicitly choose a unique handle.
+        // receive a generated unique handle without showing the claim modal.
         try {
           let prof = await getCommunityProfile(user.uid);
           if (!prof) {
@@ -248,19 +234,11 @@ export default function App() {
           }
           if (generation !== authGenerationRef.current) return;
           setUserProfile(prof);
-          // Prompt only once per auth session for an actually unclaimed account.
-          // A successful handle claim must not reopen the modal on an auth refresh.
-          const shouldPromptHandle = !prof.username && handlePromptedUidRef.current !== user.uid;
-          if (shouldPromptHandle) handlePromptedUidRef.current = user.uid;
-          setIsHandleModalOpen(shouldPromptHandle);
-          // Newly-created accounts have no reserved @handle. Prompt once so the
-          // user can explicitly claim a globally unique handle instead of silently
-          // reserving their Google display name. Cancel remains supported; the same
-          // identity editor is available from Settings.
+          setIsHandleModalOpen(false);
         } catch (e) {
           console.error('Error loading/creating user profile:', e);
           // Do not repeatedly force users into the manual claim modal. It is
-          // is only a recovery UI if profile creation/loading fails.
+          // now a recovery UI only; normal accounts are auto-provisioned.
           setUserProfile(null);
         }
 
@@ -401,22 +379,6 @@ export default function App() {
     const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (themeMeta) themeMeta.content = siteConfig.themePrimaryColor || '#FFD600';
   }, [siteConfig.logoImageUrl, siteConfig.logoPart1, siteConfig.logoPart2, siteConfig.themePrimaryColor]);
-
-  // One-time master-admin repair keeps the public handle directory complete for
-  // existing accounts. New/updated profiles mirror themselves on login/edit.
-  useEffect(() => {
-    if (!userAuth?.uid || !checkIsAdmin(userAuth.email)) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const result = await backfillPublicProfilesForAllUsers();
-        if (!cancelled && result.mirrored > 0) console.info('Public profile directory repaired:', result);
-      } catch (error) {
-        if (!cancelled) console.warn('Public profile directory repair skipped:', error);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [userAuth?.uid, userAuth?.email]);
 
   // URL Hash Sync for standard navigation & browser back button support
   useEffect(() => {
@@ -913,7 +875,6 @@ export default function App() {
                 username={activeArticleSlug} 
                 onNavigate={navigateTo} 
                 currentUserProfile={userProfile} 
-                onProfileUpdated={(p) => { setUserProfile(p); setIsHandleModalOpen(false); }}
               />
             )}
 
