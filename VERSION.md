@@ -1,10 +1,7 @@
-# OFFSCRPT V75.6
+# OFFSCRPT V75.6.1
 
-Cloudflare R2 media upload integration.
+R2 media upload authentication hotfix.
 
-- Added authenticated R2 presigned upload API.
-- Added direct browser uploads with progress.
-- Added profile avatar and cover uploads.
-- Added article cover, inline image and video uploads.
-- Added admin carousel image uploads.
-- Firestore remains the metadata/source-of-truth database.
+- Correctly validates Firebase ID tokens with Firebase Auth `accounts:lookup` instead of Google OAuth `tokeninfo`.
+- Accepts both the canonical R2 environment names and the earlier Vercel aliases for a smoother upgrade.
+- Keeps R2 credentials server-side and uses short-lived presigned uploads.

@@ -10,7 +10,8 @@ const ADMIN_EMAILS = new Set(
 const MAX_IMAGE_BYTES = Number(process.env.OFFSCRPT_MAX_IMAGE_BYTES || 10 * 1024 * 1024);
 const MAX_VIDEO_BYTES = Number(process.env.OFFSCRPT_MAX_VIDEO_BYTES || 250 * 1024 * 1024);
 const MAX_FILE_BYTES = Number(process.env.OFFSCRPT_MAX_FILE_BYTES || 25 * 1024 * 1024);
-const TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo';
+const FIREBASE_API_KEY = process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY || 'AIzaSyC1_eau-5rsMTreEzCNmTsn2FGcSa448ug';
+const FIREBASE_LOOKUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_API_KEY)}`;
 
 const hmac = (key: Buffer | string, value: string) => createHmac('sha256', key).update(value).digest();
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -64,17 +65,28 @@ function signPresignedPut(input: { endpoint: string; accessKey: string; secretKe
 }
 
 async function verifyFirebaseIdToken(token: string) {
-  const response = await fetch(`${TOKENINFO_URL}?id_token=${encodeURIComponent(token)}`);
-  if (!response.ok) throw new Error('INVALID_FIREBASE_TOKEN');
-  const data = await response.json() as Record<string, string>;
-  if (data.aud !== PROJECT_ID) throw new Error('INVALID_FIREBASE_AUDIENCE');
-  if (data.iss !== 'https://securetoken.google.com/' + PROJECT_ID) throw new Error('INVALID_FIREBASE_ISSUER');
-  if (!data.sub) throw new Error('INVALID_FIREBASE_SUBJECT');
-  if (data.expires_in && Number(data.expires_in) <= 0) throw new Error('EXPIRED_FIREBASE_TOKEN');
+  // Firebase ID tokens are not Google OAuth ID tokens. Use Firebase Auth's
+  // accounts:lookup endpoint so valid Firebase sessions are accepted while
+  // invalid/revoked tokens are rejected server-side.
+  const response = await fetch(FIREBASE_LOOKUP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken: token }),
+  });
+  if (!response.ok) {
+    const failure = await response.json().catch(() => ({} as Record<string, unknown>));
+    const code = String((failure as any)?.error?.message || 'INVALID_ID_TOKEN');
+    if (code.includes('USER_DISABLED')) throw new Error('FIREBASE_USER_DISABLED');
+    if (code.includes('TOKEN_EXPIRED')) throw new Error('EXPIRED_FIREBASE_TOKEN');
+    throw new Error('INVALID_FIREBASE_TOKEN');
+  }
+  const data = await response.json() as { users?: Array<Record<string, unknown>> };
+  const authUser = data.users?.[0];
+  if (!authUser?.localId) throw new Error('INVALID_FIREBASE_TOKEN');
   return {
-    uid: data.user_id || data.sub,
-    email: (data.email || '').toLowerCase(),
-    emailVerified: data.email_verified === 'true',
+    uid: String(authUser.localId),
+    email: String(authUser.email || '').toLowerCase(),
+    emailVerified: Boolean(authUser.emailVerified),
   };
 }
 
@@ -102,11 +114,11 @@ export default async function handler(req: any, res: any) {
     if (kind === 'video' && !['video/mp4','video/webm','video/quicktime'].includes(contentType)) return res.status(415).json({ error: 'Unsupported video format.' });
     if (kind === 'file' && !['application/pdf'].includes(contentType)) return res.status(415).json({ error: 'Only PDF files are supported as generic attachments.' });
 
-    const accountId = process.env.R2_ACCOUNT_ID;
+    const accountId = process.env.R2_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID;
     const bucket = process.env.R2_BUCKET_NAME;
     const accessKey = process.env.R2_ACCESS_KEY_ID;
     const secretKey = process.env.R2_SECRET_ACCESS_KEY;
-    const publicBaseUrl = String(process.env.R2_PUBLIC_BASE_URL || '').replace(/\/$/, '');
+    const publicBaseUrl = String(process.env.R2_PUBLIC_BASE_URL || process.env.R2_PUBLIC_URL || '').replace(/\/$/, '');
     const endpoint = String(process.env.R2_S3_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : ''));
     if (!accountId || !bucket || !accessKey || !secretKey || !publicBaseUrl) {
       return res.status(503).json({ error: 'R2 media storage is not configured on the server.' });

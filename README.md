@@ -241,6 +241,8 @@ going forward.
 
 ## V75.6 — Cloudflare R2 media uploads
 
+V75.6.1 fixes R2 upload authentication by validating Firebase ID tokens through Firebase Auth. The upload API also accepts the earlier `CLOUDFLARE_ACCOUNT_ID`/`R2_PUBLIC_URL` aliases.
+
 OFFSCRPT now uses Cloudflare R2 for image/video/PDF binary uploads while Firestore remains the application database. Uploads are authorized through `/api/media/upload-url` using the signed-in Firebase user token; browsers receive a short-lived R2 presigned PUT URL and upload directly to R2. Firestore stores only public media URLs/object metadata.
 
 ### Vercel environment variables

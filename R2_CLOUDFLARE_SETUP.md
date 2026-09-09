@@ -29,7 +29,7 @@ Add the production custom domain as another allowed origin when you deploy it.
 ## 5. Vercel environment variables
 Add the following to the Vercel project. These are server-side values; never prefix them with `VITE_`.
 
-- `R2_ACCOUNT_ID`
+- `R2_ACCOUNT_ID` (or the backwards-compatible `CLOUDFLARE_ACCOUNT_ID`)
 - `R2_BUCKET_NAME`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
@@ -54,3 +54,7 @@ The frontend calls `/api/media/upload-url` with a Firebase ID token. The API ver
 
 ## 8. Important
 This release does not remove Firebase Storage rules or migrate existing Firebase Storage objects. The new upload buttons use R2. Existing legacy URLs continue to work.
+
+## V75.6.1 authentication fix
+
+The upload API verifies Firebase ID tokens with Firebase Authentication's `accounts:lookup` endpoint. It does not use Google's generic OAuth `tokeninfo` endpoint, because Firebase ID tokens are a distinct token type.
