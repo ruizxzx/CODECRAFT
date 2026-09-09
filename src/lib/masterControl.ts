@@ -115,6 +115,11 @@ const toBool = (v: unknown) => v === true;
 async function audit(action: string, target: string, before?: unknown, after?: unknown): Promise<void> {
   const actor = auth.currentUser;
   if (!actor) return;
+  // Match lib/audit.ts's authorization standard: only master admins or resolved master-access
+  // accounts may write audit entries, so the log itself can't be spoofed by a lower-privilege
+  // caller who happens to reach one of these functions.
+  const authorized = checkIsAdmin(actor.email) || await resolveMasterAccess(actor);
+  if (!authorized) return;
   try {
     await addDoc(collection(db, 'adminAuditLog'), {
       actorId: actor.uid,

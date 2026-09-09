@@ -51,6 +51,7 @@ import { notifyToast } from './lib/toast';
 import { recordArticleAnalyticsEvent } from './lib/analytics';
 import { runSyncedOperation } from './lib/sync';
 import { resolveMasterAccess } from './lib/masterControl';
+import { reportRuntimeError } from './lib/runtime';
 
 const SAVED_SLUGS_GUEST_KEY = 'offscrpt_saved_slugs_guest_v1';
 const SAVED_COMMUNITY_GUEST_KEY = 'offscrpt_saved_community_guest_v1';
@@ -63,7 +64,10 @@ class PageErrorBoundary extends React.Component<{children: React.ReactNode}, {ha
   static getDerivedStateFromError(error: unknown) {
     return { hasError: true, message: error instanceof Error ? error.message : String(error || 'Unexpected error') };
   }
-  componentDidCatch(error: unknown) { console.error('OFFSCRPT page runtime error:', error); }
+  componentDidCatch(error: unknown) {
+    console.error('OFFSCRPT page runtime error:', error);
+    void reportRuntimeError(error, 'page-boundary');
+  }
   componentDidUpdate(prevProps: {children: React.ReactNode}) {
     if (prevProps.children !== this.props.children && this.state.hasError) this.setState({hasError:false, message:''});
   }
