@@ -79,7 +79,9 @@ export interface MasterAdminEntry {
 export interface PlatformAnalytics {
   users: { total: number; new7d: number; new30d: number };
   content: { articles: number; posts: number; communities: number; comments: number; series: number };
-  engagement: { reactions: number; shares: number; bookmarks: number; analyticsEvents: number; reportsOpen: number };
+  engagement: { reactions: number; shares: number; bookmarks: number; analyticsEvents: number; reportsOpen: number; uniqueReaders: number; completedSessions: number; totalReadingTimeMs: number; averageScrollDepth: number; periods: Record<'7D'|'30D'|'90D'|'ALL', { sessions: number; uniqueReaders: number; completedSessions: number; shares: number; readingTimeMs: number; averageScrollDepth: number; }>; };
+  articles: Array<{ slug:string; title:string; authorUsername:string; sessions:number; uniqueReaders:number; completedSessions:number; completionRate:number; readingTimeMs:number; averageScrollDepth:number; shares:number; reactions:number; bookmarks:number; }>;
+  creators: Array<{ uid:string; username:string; name:string; articles:number; sessions:number; uniqueReaders:number; completedSessions:number; completionRate:number; readingTimeMs:number; shares:number; reactions:number; bookmarks:number; }>;
   measuredAt: number;
 }
 
@@ -138,7 +140,7 @@ export async function resolveMasterAccess(user = auth.currentUser): Promise<bool
     const byUid = await getDoc(doc(db, 'masterAdmins', user.uid));
     if (byUid.exists() && byUid.data().enabled !== false) return true;
     const email = normalizedEmail(user.email || '');
-    if (!email) return false;
+    if (!email || user.emailVerified !== true) return false;
     const byEmail = await getDoc(doc(db, 'masterAdminEmails', email));
     return byEmail.exists() && byEmail.data().enabled !== false;
   } catch {
@@ -458,40 +460,81 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
   const now = Date.now();
   const d7 = new Date(now - 7 * 86400000);
   const d30 = new Date(now - 30 * 86400000);
-  const [users, articles, posts, communities, comments, series, reports, events, reactions, shares, bookmarks, new7dCount, new30dCount] = await Promise.all([
+  const [users, articlesSnap, posts, communities, comments, series, reportsOpenCount, analyticsSnap] = await Promise.all([
     getCountFromServer(collection(db, 'users')),
-    getCountFromServer(collection(db, 'articles')),
+    getDocs(query(collection(db, 'articles'), limit(500))),
     getCountFromServer(collection(db, 'posts')),
     getCountFromServer(collection(db, 'communities')),
     getCountFromServer(collectionGroup(db, 'comments')),
     getCountFromServer(collection(db, 'series')),
-    getCountFromServer(query(collection(db, 'reports'), where('status', '==', 'open'))),
-    getCountFromServer(collectionGroup(db, 'analytics')),
-    getCountFromServer(query(collectionGroup(db, 'analytics'), where('type', '==', 'reaction'))),
-    getCountFromServer(query(collectionGroup(db, 'analytics'), where('type', '==', 'share'))),
-    getCountFromServer(query(collectionGroup(db, 'analytics'), where('type', '==', 'bookmark'))),
-    getCountFromServer(query(collection(db, 'users'), where('createdAt', '>=', d7))),
-    getCountFromServer(query(collection(db, 'users'), where('createdAt', '>=', d30))),
+    getCountFromServer(query(collection(db, 'reports'), where('status', 'in', ['open', 'under_review', 'action_taken']))),
+    getDocs(collectionGroup(db, 'analytics')),
   ]);
-  const new7d = new7dCount.data().count;
-  const new30d = new30dCount.data().count;
+
+  type Row = Record<string, any> & { id:string; path:string; articleSlug:string };
+  const rows: Row[] = analyticsSnap.docs.map(d => ({
+    id: d.id,
+    path: d.ref.path,
+    articleSlug: d.ref.parent.parent?.id || '',
+    ...(d.data() as Record<string, unknown>),
+  }));
+  const articleRows = articlesSnap.docs.map(d => ({ slug: d.id, ...(d.data() as Record<string, any>) }));
+  const dateValue = (value: unknown): number => value && typeof (value as any).toDate === 'function' ? (value as any).toDate().getTime() : typeof value === 'string' ? Date.parse(value) || 0 : typeof value === 'number' ? value : 0;
+  const eventRows = rows.filter(r => r.type !== 'session');
+  const sessions = rows.filter(r => r.type === 'session');
+
+  const latestState = new Map<string, Row>();
+  for (const e of eventRows.filter(r => r.type === 'bookmark' || r.type === 'reaction')) {
+    const identity = String(e.userId || e.visitorId || e.id || '');
+    if (!identity) continue;
+    const key = `${e.articleSlug}:${e.type}:${identity}`;
+    const current = latestState.get(key);
+    if (!current || dateValue(current.createdAt) <= dateValue(e.createdAt)) latestState.set(key, e);
+  }
+
+  const metricForArticle = (slug:string, cutoff:number|null) => {
+    const ss = sessions.filter(s => s.articleSlug === slug && dateValue(s.createdAt || s.openedAt || s.lastSeenAt) >= (cutoff ?? 0));
+    const es = eventRows.filter(e => e.articleSlug === slug && dateValue(e.createdAt) >= (cutoff ?? 0));
+    const ids = new Set<string>(); let duration=0; let scroll=0; let done=0;
+    for (const s of ss) { const id=String(s.userId||s.visitorId||s.id||''); if(id) ids.add(id); duration+=Math.max(0,Math.min(86400000,Number(s.durationMs||0))); scroll+=Math.max(0,Math.min(100,Number(s.maxScrollPercent||0))); if(s.completed===true||Number(s.maxScrollPercent||0)>=100) done++; }
+    return {sessions:ss.length,uniqueReaders:ids.size,completedSessions:done,completionRate:ss.length?Math.round((done/ss.length)*1000)/10:0,readingTimeMs:duration,averageScrollDepth:ss.length?Math.round((scroll/ss.length)*10)/10:0,shares:es.filter(e=>e.type==='share').length};
+  };
+
+  const articleAgg = articleRows.map(a => {
+    const m = metricForArticle(a.slug, null);
+    const react = [...latestState.values()].filter(e => e.articleSlug===a.slug && e.type==='reaction' && e.active!==false).length;
+    const book = [...latestState.values()].filter(e => e.articleSlug===a.slug && e.type==='bookmark' && e.active!==false).length;
+    return {slug:a.slug,title:String(a.title||a.slug),authorUsername:String(a.author?.username||a.authorUsername||''),...m,reactions:react,bookmarks:book};
+  }).sort((a,b)=>b.sessions-a.sessions).slice(0,100);
+
+  const authorBySlug = new Map(articleRows.map(a=>[a.slug,{uid:String(a.author?.uid||a.authorId||''),username:String(a.author?.username||a.authorUsername||''),name:String(a.author?.name||a.authorName||'')} ]));
+  const creators = new Map<string, any>();
+  for (const a of articleAgg) {
+    const owner=authorBySlug.get(a.slug); if(!owner || !owner.uid) continue;
+    const current=creators.get(owner.uid)||{uid:owner.uid,username:owner.username,name:owner.name,articles:0,sessions:0,uniqueReaderSet:new Set<string>(),completedSessions:0,readingTimeMs:0,shares:0,reactions:0,bookmarks:0};
+    current.articles++;
+    const ss=sessions.filter(s=>s.articleSlug===a.slug);
+    for(const sess of ss){const id=String(sess.userId||sess.visitorId||sess.id||'');if(id)current.uniqueReaderSet.add(id);}
+    current.sessions+=a.sessions; current.completedSessions+=a.completedSessions; current.readingTimeMs+=a.readingTimeMs; current.shares+=a.shares; current.reactions+=a.reactions; current.bookmarks+=a.bookmarks;
+    creators.set(owner.uid,current);
+  }
+  const creatorAgg=[...creators.values()].map(c=>({uid:c.uid,username:c.username,name:c.name,articles:c.articles,sessions:c.sessions,uniqueReaders:c.uniqueReaderSet.size,completedSessions:c.completedSessions,completionRate:c.sessions?Math.round((c.completedSessions/c.sessions)*1000)/10:0,readingTimeMs:c.readingTimeMs,shares:c.shares,reactions:c.reactions,bookmarks:c.bookmarks})).sort((a,b)=>b.sessions-a.sessions).slice(0,100);
+
+  const allUniqueReaders = new Set<string>(); let totalDuration=0; let totalScroll=0; let completed=0;
+  for(const s of sessions){const id=String(s.userId||s.visitorId||s.id||'');if(id)allUniqueReaders.add(id);totalDuration+=Math.max(0,Math.min(86400000,Number(s.durationMs||0)));totalScroll+=Math.max(0,Math.min(100,Number(s.maxScrollPercent||0)));if(s.completed===true||Number(s.maxScrollPercent||0)>=100)completed++;}
+  const bookmarks=[...latestState.values()].filter(e=>e.type==='bookmark'&&e.active!==false).length;
+  const reactions=[...latestState.values()].filter(e=>e.type==='reaction'&&e.active!==false).length;
+  const shares=eventRows.filter(e=>e.type==='share').length;
+  const periodMetrics=(days:number|null)=>{const cutoff=days===null?0:now-days*86400000;const ps=sessions.filter(s=>dateValue(s.createdAt||s.openedAt||s.lastSeenAt)>=cutoff);const pe=eventRows.filter(e=>dateValue(e.createdAt)>=cutoff);const ids=new Set<string>();let duration=0,scroll=0,done=0;for(const s of ps){const id=String(s.userId||s.visitorId||s.id||'');if(id)ids.add(id);duration+=Math.max(0,Math.min(86400000,Number(s.durationMs||0)));scroll+=Math.max(0,Math.min(100,Number(s.maxScrollPercent||0)));if(s.completed===true||Number(s.maxScrollPercent||0)>=100)done++;}return {sessions:ps.length,uniqueReaders:ids.size,completedSessions:done,shares:pe.filter(e=>e.type==='share').length,readingTimeMs:duration,averageScrollDepth:ps.length?Math.round((scroll/ps.length)*10)/10:0};};
+  const periods={'7D':periodMetrics(7),'30D':periodMetrics(30),'90D':periodMetrics(90),'ALL':periodMetrics(null)};
+
   return {
-    users: { total: users.data().count, new7d, new30d },
-    content: {
-      articles: articles.data().count,
-      posts: posts.data().count,
-      communities: communities.data().count,
-      comments: comments.data().count,
-      series: series.data().count,
-    },
-    engagement: {
-      reactions: reactions.data().count,
-      shares: shares.data().count,
-      bookmarks: bookmarks.data().count,
-      analyticsEvents: events.data().count,
-      reportsOpen: reports.data().count,
-    },
-    measuredAt: now,
+    users:{total:users.data().count,new7d:(await getCountFromServer(query(collection(db,'users'),where('createdAt','>=',d7)))).data().count,new30d:(await getCountFromServer(query(collection(db,'users'),where('createdAt','>=',d30)))).data().count},
+    content:{articles:articlesSnap.size,posts:posts.data().count,communities:communities.data().count,comments:comments.data().count,series:series.data().count},
+    engagement:{reactions,shares,bookmarks,analyticsEvents:rows.length,reportsOpen:reportsOpenCount.data().count,uniqueReaders:allUniqueReaders.size,completedSessions:completed,totalReadingTimeMs:totalDuration,averageScrollDepth:sessions.length?Math.round((totalScroll/sessions.length)*10)/10:0,periods},
+    articles:articleAgg,
+    creators:creatorAgg,
+    measuredAt:now,
   };
 }
 

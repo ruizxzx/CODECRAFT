@@ -1,22 +1,11 @@
-# OFFSCRPT V73.0
+# OFFSCRPT V74.0
 
-## Master Control Restoration
+Master Control parity + analytics hardening release.
 
-Restores the high-authority Master Control Center on top of V72.2 integrity hardening.
-
-Key additions:
-- Master admin allowlist by Firebase UID and verified email
-- Moderator promotion/revocation and granular permissions
-- User moderation, restrictions, warnings, profile cleanup and preference reset
-- Article publishing, unpublishing, feature/pin, archive, delete, full JSON edit and revision restore/duplicate controls
-- Root/community post moderation controls
-- Central reports workflow with cloud status updates
-- Real comment moderation for article, root-post and community-post comments
-- Firestore-backed emergency controls with Security Rules enforcement
-- Realtime system configuration synchronization
-- Platform aggregate analytics and cloud recommendation-source health
-- Presence count health check without exposing reader identities
-- Privileged audit logging
-- Emergency admin lock that only bootstrap masters can clear
-
-The release does not claim Firebase Authentication deletion of another user's account from the browser. The user-management delete action removes the Firestore profile; Auth-account deletion remains a trusted-server operation.
+- Restores dedicated legacy Master Control sections: Posts, Communities, Questions, Topics, Reports, Users, Messages, Moderators, Site Control, Navigation, Backups.
+- Keeps V73 authority/security controls: master allowlist, emergency lock, granular moderator permissions, system health, runtime diagnostics, audit.
+- Fixes Master Control analytics with Firestore-backed platform, article and creator aggregates and 7D/30D/90D/ALL windows.
+- Adds latest-state bookmark/reaction aggregation and excludes reader identities from creator-facing analytics.
+- Makes Master Control loading resilient with per-resource cloud diagnostics instead of a single failed permission query blanking the entire panel.
+- Fixes root-post comment-lock control to use `commentsLocked`, not post `isLocked`.
+- Fixes System Health presence probe to avoid the reserved `__health__` resource identifier.

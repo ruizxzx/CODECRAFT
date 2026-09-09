@@ -55,7 +55,7 @@ export async function runClientHealthChecks(): Promise<HealthCheckResult[]> {
       resolve({ name: 'Realtime / Presence', status, latencyMs: Math.round(performance.now() - started), detail, checkedAt: Date.now() });
     };
     try {
-      stop = subscribePresence('__health__', (count) => {
+      stop = subscribePresence('healthcheck', (count) => {
         finish('healthy', `Presence collection is readable; ${count} active member record(s) returned.`);
       }, (error) => {
         finish('unavailable', error instanceof Error ? error.message : String(error));

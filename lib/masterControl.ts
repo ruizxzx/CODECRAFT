@@ -79,7 +79,7 @@ export interface MasterAdminEntry {
 export interface PlatformAnalytics {
   users: { total: number; new7d: number; new30d: number };
   content: { articles: number; posts: number; communities: number; comments: number; series: number };
-  engagement: { reactions: number; shares: number; bookmarks: number; analyticsEvents: number; reportsOpen: number };
+  engagement: { reactions: number; shares: number; bookmarks: number; analyticsEvents: number; reportsOpen: number; uniqueReaders: number; completedSessions: number; totalReadingTimeMs: number; averageScrollDepth: number; periods: Record<'7D'|'30D'|'90D'|'ALL', { sessions: number; uniqueReaders: number; completedSessions: number; shares: number; readingTimeMs: number; averageScrollDepth: number; }> };
   measuredAt: number;
 }
 
@@ -138,7 +138,7 @@ export async function resolveMasterAccess(user = auth.currentUser): Promise<bool
     const byUid = await getDoc(doc(db, 'masterAdmins', user.uid));
     if (byUid.exists() && byUid.data().enabled !== false) return true;
     const email = normalizedEmail(user.email || '');
-    if (!email) return false;
+    if (!email || user.emailVerified !== true) return false;
     const byEmail = await getDoc(doc(db, 'masterAdminEmails', email));
     return byEmail.exists() && byEmail.data().enabled !== false;
   } catch {
@@ -458,25 +458,61 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
   const now = Date.now();
   const d7 = new Date(now - 7 * 86400000);
   const d30 = new Date(now - 30 * 86400000);
-  const [users, articles, posts, communities, comments, series, reports, events, reactions, shares, bookmarks, new7dCount, new30dCount] = await Promise.all([
+  const [users, articles, posts, communities, comments, series, reportsOpenCount, analyticsSnap] = await Promise.all([
     getCountFromServer(collection(db, 'users')),
     getCountFromServer(collection(db, 'articles')),
     getCountFromServer(collection(db, 'posts')),
     getCountFromServer(collection(db, 'communities')),
     getCountFromServer(collectionGroup(db, 'comments')),
     getCountFromServer(collection(db, 'series')),
-    getCountFromServer(query(collection(db, 'reports'), where('status', '==', 'open'))),
-    getCountFromServer(collectionGroup(db, 'analytics')),
-    getCountFromServer(query(collectionGroup(db, 'analytics'), where('type', '==', 'reaction'))),
-    getCountFromServer(query(collectionGroup(db, 'analytics'), where('type', '==', 'share'))),
-    getCountFromServer(query(collectionGroup(db, 'analytics'), where('type', '==', 'bookmark'))),
-    getCountFromServer(query(collection(db, 'users'), where('createdAt', '>=', d7))),
-    getCountFromServer(query(collection(db, 'users'), where('createdAt', '>=', d30))),
+    getCountFromServer(query(collection(db, 'reports'), where('status', 'in', ['open', 'under_review', 'action_taken']))),
+    getDocs(collectionGroup(db, 'analytics')),
   ]);
-  const new7d = new7dCount.data().count;
-  const new30d = new30dCount.data().count;
+
+  const rows = analyticsSnap.docs.map(d => ({
+    id: d.id,
+    path: d.ref.path,
+    articleSlug: d.ref.parent.parent?.id || '',
+    ...(d.data() as Record<string, unknown>),
+  }));
+  const dateValue = (value: unknown): number => value && typeof (value as any).toDate === 'function' ? (value as any).toDate().getTime() : typeof value === 'string' ? Date.parse(value) || 0 : typeof value === 'number' ? value : 0;
+  const isWithin = (row: Record<string, unknown>, cutoff: number) => dateValue(row.createdAt || row.lastSeenAt || row.openedAt) >= cutoff;
+  const eventRows = rows.filter(r => r.type !== 'session');
+  const sessions = rows.filter(r => r.type === 'session');
+  const uniqueReaders = new Set<string>();
+  let totalDuration = 0;
+  let totalScroll = 0;
+  let completed = 0;
+  const latestState = new Map<string, Record<string, unknown>>();
+  for (const s of sessions) {
+    const identity = String(s.userId || s.visitorId || s.id || '');
+    if (identity) uniqueReaders.add(identity);
+    totalDuration += Math.max(0, Math.min(86400000, Number(s.durationMs || 0)));
+    totalScroll += Math.max(0, Math.min(100, Number(s.maxScrollPercent || 0)));
+    if (s.completed === true || Number(s.maxScrollPercent || 0) >= 100) completed++;
+  }
+  for (const e of eventRows.filter(r => r.type === 'bookmark' || r.type === 'reaction')) {
+    const identity = String(e.userId || e.visitorId || e.id || '');
+    if (!identity) continue;
+    const key = `${e.articleSlug}:${e.type}:${identity}`;
+    const current = latestState.get(key);
+    if (!current || dateValue(current.createdAt) <= dateValue(e.createdAt)) latestState.set(key, e);
+  }
+  const bookmarks = [...latestState.values()].filter(e => e.type === 'bookmark' && e.active !== false).length;
+  const reactions = [...latestState.values()].filter(e => e.type === 'reaction' && e.active !== false).length;
+  const shares = eventRows.filter(e => e.type === 'share').length;
+  const periodMetrics = (days: number | null) => {
+    const cutoff = days === null ? 0 : now - days * 86400000;
+    const ps = sessions.filter(s => dateValue(s.createdAt || s.openedAt || s.lastSeenAt) >= cutoff);
+    const pe = eventRows.filter(e => dateValue(e.createdAt) >= cutoff);
+    const ids = new Set<string>(); let duration = 0; let scroll = 0; let done = 0;
+    for (const s of ps) { const identity = String(s.userId || s.visitorId || s.id || ''); if (identity) ids.add(identity); duration += Math.max(0, Math.min(86400000, Number(s.durationMs || 0))); scroll += Math.max(0, Math.min(100, Number(s.maxScrollPercent || 0))); if (s.completed === true || Number(s.maxScrollPercent || 0) >= 100) done++; }
+    return { sessions: ps.length, uniqueReaders: ids.size, completedSessions: done, shares: pe.filter(e => e.type === 'share').length, readingTimeMs: duration, averageScrollDepth: ps.length ? Math.round((scroll / ps.length) * 10) / 10 : 0 };
+  };
+  const periods = { '7D': periodMetrics(7), '30D': periodMetrics(30), '90D': periodMetrics(90), 'ALL': periodMetrics(null) };
+
   return {
-    users: { total: users.data().count, new7d, new30d },
+    users: { total: users.data().count, new7d: (await getCountFromServer(query(collection(db, 'users'), where('createdAt', '>=', d7)))).data().count, new30d: (await getCountFromServer(query(collection(db, 'users'), where('createdAt', '>=', d30)))).data().count },
     content: {
       articles: articles.data().count,
       posts: posts.data().count,
@@ -485,11 +521,16 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
       series: series.data().count,
     },
     engagement: {
-      reactions: reactions.data().count,
-      shares: shares.data().count,
-      bookmarks: bookmarks.data().count,
-      analyticsEvents: events.data().count,
-      reportsOpen: reports.data().count,
+      reactions,
+      shares,
+      bookmarks,
+      analyticsEvents: rows.length,
+      reportsOpen: reportsOpenCount.data().count,
+      uniqueReaders: uniqueReaders.size,
+      completedSessions: completed,
+      totalReadingTimeMs: totalDuration,
+      averageScrollDepth: sessions.length ? Math.round((totalScroll / sessions.length) * 10) / 10 : 0,
+      periods,
     },
     measuredAt: now,
   };
