@@ -24,17 +24,11 @@ export const UniqueHandleModal: React.FC<UniqueHandleModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    if (currentUser?.email && (currentUser.email === 'ruizxzxz@gmail.com' || currentUser.email === 'krishsarkar456@gmail.com')) {
-      setHandle('krishsarkar');
-      return;
-    }
-    if (currentUser?.displayName) {
-      const suggested = currentUser.displayName
-        .toLowerCase()
-        .replace(/[^a-z0-9_]/g, '')
-        .substring(0, 20);
-      setHandle(suggested);
-    }
+    // A handle is always an explicit user choice. Never prefill a Google display
+    // name or an administrator-specific handle into the claim form.
+    setHandle('');
+    setErrorMessage('');
+    setStatus('idle');
   }, [currentUser]);
 
   useEffect(() => {

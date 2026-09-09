@@ -216,22 +216,89 @@ export async function getCommunityProfile(uid: string): Promise<CommunityUser | 
 }
 
 export async function getProfileByUsername(username: string): Promise<CommunityUser | null> {
-  const p = `users`;
+  const clean = normalizeUsername(username);
+  if (!clean) return null;
   try {
-    const q = query(collection(db, 'users'), where('username', '==', username), limit(1));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      return mapDocDates(snap.docs[0].data()) as CommunityUser;
+    // First resolve the caller's own canonical profile. This repairs the most
+    // important failure mode: a user can still open their profile immediately
+    // after changing a handle even if its public projection is missing/stale.
+    const currentUid = auth.currentUser?.uid || '';
+    if (currentUid) {
+      const own = await getCommunityProfile(currentUid);
+      if (own?.username && normalizeUsername(own.username) === clean) {
+        try { await upsertPublicProfile(own); } catch (e) { console.warn('Own public profile repair failed:', e); }
+        return own;
+      }
+    }
+
+    // Public profile lookup never requires authentication. It is keyed by the
+    // claimed handle and contains only public presentation fields.
+    const publicSnap = await getDoc(doc(db, 'publicProfiles', clean));
+    if (publicSnap.exists()) {
+      const publicProfile = mapDocDates(publicSnap.data()) as CommunityUser;
+      // A signed-in viewer may resolve the internal UID only when the identity
+      // registry is available. The UID is never rendered in the public profile.
+      if (auth.currentUser) {
+        const reservation = await getDoc(doc(db, 'usernames', clean));
+        const uid = reservation.exists() ? String(reservation.data()?.uid || '') : '';
+        if (uid) (publicProfile as any).uid = uid;
+      }
+      return publicProfile;
+    }
+
+    // Preserve old public links after a handle change. The alias contains only the
+    // successor handle and never exposes the private Firebase UID.
+    try {
+      const aliasSnap = await getDoc(doc(db, 'handleAliases', clean));
+      const nextHandle = aliasSnap.exists() ? normalizeUsername(String(aliasSnap.data()?.newUsername || '')) : '';
+      if (nextHandle && nextHandle !== clean) {
+        const redirected = await getProfileByUsername(nextHandle);
+        if (redirected) return redirected;
+      }
+    } catch (aliasError) {
+      console.warn('Handle alias lookup skipped:', aliasError);
+    }
+
+    // Legacy repair path. Only the account owner or Master Admin may read the
+    // private user document and rebuild the missing public projection.
+    const handleSnap = await getDoc(doc(db, 'usernames', clean));
+    const handleUid = handleSnap.exists() ? String(handleSnap.data()?.uid || '') : '';
+    if (handleUid) {
+      const canReadPrivateIdentity = !!auth.currentUser && (
+        auth.currentUser.uid === handleUid || checkIsAdmin(auth.currentUser.email)
+      );
+      if (canReadPrivateIdentity) {
+        const legacy = await getCommunityProfile(handleUid);
+        if (legacy?.username && normalizeUsername(legacy.username) === clean) {
+          try { await upsertPublicProfile(legacy); } catch (e) { console.warn('Legacy public profile repair failed:', e); }
+          return legacy;
+        }
+      }
     }
     return null;
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, p);
+    console.warn('Public profile lookup failed:', error);
     return null;
   }
 }
 
 function normalizeUsername(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9_]/g, '').slice(0, 30);
+}
+
+function validateUsername(value: string): string {
+  const username = normalizeUsername(value);
+  if (username && (username.length < 3 || username.length > 30)) {
+    throw new Error('Handle must be 3–30 characters.');
+  }
+  return username;
+}
+
+function generateNewUserDisplayName(): string {
+  const prefixes = ['Builder', 'Member', 'Creator', 'Reader', 'Dev'];
+  const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+  const number = Math.floor(1000 + Math.random() * 9000);
+  return `${prefix} ${number}`;
 }
 
 async function chooseAvailableUsername(base: string): Promise<string> {
@@ -247,19 +314,18 @@ async function chooseAvailableUsername(base: string): Promise<string> {
 
 /**
  * Returns the cloud profile for a signed-in Google account, creating one
- * automatically when this is the account's first visit. A deterministic
- * available handle is selected from the Google display name/email, so users
- * never have to manually claim a handle just to enter the site.
+ * automatically when this is the account's first visit. New accounts get a
+ * temporary random display name; the @handle remains explicitly unclaimed until
+ * the user chooses one.
  */
 export async function getAllCommunityUsers(): Promise<CommunityUser[]> {
   try {
-    const [snap, modSnap] = await Promise.all([getDocs(collection(db, 'users')), getDocs(collection(db, 'siteModerators')).catch(() => ({docs:[]} as any))]);
-    const moderators = new Set((modSnap.docs || []).map((d:any)=>d.id));
-    return snap.docs.map(d => { const u:any = mapDocDates(d.data()) as CommunityUser; if (moderators.has(u.uid)) { u.platformRole='moderator'; u.role='Moderator'; } return u; })
+    const snap = await getDocs(collection(db, 'publicProfiles'));
+    return snap.docs.map(d => mapDocDates(d.data()) as CommunityUser)
       .filter(u => !!u?.username)
       .sort((a, b) => a.username.localeCompare(b.username));
   } catch (error) {
-    console.warn('Failed to load community users:', error);
+    console.warn('Failed to load public community users:', error);
     return [];
   }
 }
@@ -290,30 +356,25 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
 
   const existing = await getCommunityProfile(user.uid);
   if (existing) {
+    if (existing.username) { try { await upsertPublicProfile(existing); } catch (error) { console.warn('Public profile projection refresh failed:', error); } }
     if (checkIsAdmin(user.email) && existing.platformRole !== 'master_admin') {
-      try { await updateDoc(doc(db,'users',user.uid), { platformRole:'master_admin', role:'Master Admin', email:user.email || '', updatedAt:serverTimestamp() }); existing.platformRole='master_admin'; existing.role='Master Admin'; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          platformRole: 'master_admin', role: 'Master Admin', email: user.email || '', updatedAt: serverTimestamp()
+        });
+        existing.platformRole = 'master_admin'; existing.role = 'Master Admin'; existing.email = user.email || '';
+      } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     }
     return existing;
   }
 
-  const emailBase = (user.email || '').split('@')[0] || '';
-  const displayBase = user.displayName || emailBase || 'user';
-  let username = await chooseAvailableUsername(displayBase);
-  const candidates = [username];
-  if (emailBase) candidates.push(normalizeUsername(emailBase));
-  candidates.push('user');
-
-  for (const base of candidates) {
-    if (base) {
-      const candidate = await chooseAvailableUsername(base);
-      if (candidate) { username = candidate; break; }
-    }
-  }
-
+  // IMPORTANT: a Google display name is not a claimed @handle. New accounts start
+  // with an empty username and no username reservation document. The user must
+  // explicitly claim a unique handle through the claim modal/profile settings.
   const profile: any = {
     uid: user.uid,
-    username,
-    displayName: user.displayName || username,
+    username: '',
+    displayName: generateNewUserDisplayName(),
     photoURL: user.photoURL || '',
     bio: 'Software builder & writer',
     themeColor: '#D97706',
@@ -329,48 +390,94 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
     updatedAt: serverTimestamp(),
   };
 
-  // Claim the handle and create the profile atomically. If another client
-  // races for the same username, retry with another generated suffix.
-  for (let attempt = 0; attempt < 8; attempt++) {
-    try {
-      const usernameRef = doc(db, 'usernames', username);
-      const userRef = doc(db, 'users', user.uid);
-      const created = await runTransaction(db, async (tx) => {
-        const [userSnap, usernameSnap] = await Promise.all([tx.get(userRef), tx.get(usernameRef)]);
-        if (userSnap.exists()) return userSnap.data() as CommunityUser;
-        if (usernameSnap.exists() && usernameSnap.data()?.uid !== user.uid) return null;
-        tx.set(usernameRef, { uid: user.uid }, { merge: false });
-        tx.set(userRef, profile);
-        return null;
-      });
-      const resolved = created || await getCommunityProfile(user.uid);
-      if (resolved) {
-        try { await ensureFollowingAuthor(user.uid, resolved.username); } catch (err) { console.warn('Auto-follow author failed:', err); }
-        return resolved;
-      }
-    } catch (error) {
-      console.warn('Automatic handle claim retry:', error);
-    }
-    username = await chooseAvailableUsername(`${normalizeUsername(displayBase).slice(0, 24) || 'user'}${attempt + 1}`);
-    profile.username = username;
-  }
+  const userRef = doc(db, 'users', user.uid);
+  await runTransaction(db, async tx => {
+    const userSnap = await tx.get(userRef);
+    if (userSnap.exists()) return;
+    tx.set(userRef, profile);
+  });
 
-  throw new Error('Unable to automatically create a unique handle.');
+  const resolved = await getCommunityProfile(user.uid);
+  if (!resolved) throw new Error('Unable to create your community profile.');
+  if (resolved.username) {
+    await upsertPublicProfile(resolved);
+    try { await ensureFollowingAuthor(user.uid, resolved.username); } catch (err) { console.warn('Auto-follow author failed:', err); }
+  }
+  return resolved;
+}
+
+export async function upsertPublicProfile(profile: CommunityUser): Promise<void> {
+  const username = normalizeUsername(profile.username || '');
+  if (!username) return;
+  // Public profile intentionally excludes email, roles, UID, moderation state,
+  // and other private/admin-only fields. The canonical private user document
+  // remains the authority for identity and authorization.
+  await setDoc(doc(db, 'publicProfiles', username), {
+    username, displayName: profile.displayName || 'User', photoURL: profile.photoURL || '',
+    coverImageUrl: profile.coverImageUrl || '', websiteUrl: profile.websiteUrl || '',
+    location: profile.location || '', socialX: profile.socialX || '',
+    socialGithub: profile.socialGithub || '', socialTelegram: profile.socialTelegram || '',
+    socialInstagram: profile.socialInstagram || '', bio: profile.bio || '',
+    themeColor: profile.themeColor || '#D97706', followersCount: Number(profile.followersCount || 0),
+    followingCount: Number(profile.followingCount || 0), isVerified: !!profile.isVerified,
+    verificationColor: profile.verificationColor || '#2196F3', isAuthor: !!profile.isAuthor,
+    creatorPage: profile.creatorPage || null,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+/** Master-admin repair: mirror every claimed handle into the public-profile collection. */
+export async function backfillPublicProfilesForAllUsers(): Promise<{ scanned: number; mirrored: number; skipped: number }> {
+  const current = auth.currentUser;
+  if (!current || !checkIsAdmin(current.email)) throw new Error('Master administrator access required.');
+  const snap = await getDocs(collection(db, 'users'));
+  let mirrored = 0; let skipped = 0;
+  for (const d of snap.docs) {
+    const data = d.data() as CommunityUser;
+    if (!data.username) { skipped++; continue; }
+    try { await upsertPublicProfile({ ...data, uid: d.id } as CommunityUser); mirrored++; }
+    catch (error) { skipped++; console.warn('Public profile backfill failed for', d.id, error); }
+  }
+  return { scanned: snap.size, mirrored, skipped };
 }
 
 export async function createCommunityProfile(data: Omit<CommunityUser, 'createdAt' | 'updatedAt' | 'followersCount' | 'followingCount'>) {
   if (!auth.currentUser) throw new Error("Must be logged in");
   const uid = auth.currentUser.uid;
-  const username = normalizeUsername(data.username);
+  const username = validateUsername(data.username);
   if (username.length < 3) throw new Error('Username must be at least 3 characters.');
 
   const usernameRef = doc(db, 'usernames', username);
   const userRef = doc(db, 'users', uid);
   try {
-    const profile = await runTransaction(db, async (tx) => {
-      const [userSnap, usernameSnap] = await Promise.all([tx.get(userRef), tx.get(usernameRef)]);
-      if (userSnap.exists()) return userSnap.data() as CommunityUser;
-      if (usernameSnap.exists() && usernameSnap.data()?.uid !== uid) throw new Error('Username is already taken. Please choose another.');
+    const existingSnap = await getDoc(userRef);
+    if (existingSnap.exists()) {
+      const existing = existingSnap.data() as any;
+      if (String(existing.username || '')) {
+        if (existing.username === username) return existing as CommunityUser;
+        throw new Error('This account already has a handle. Edit it from Profile Settings.');
+      }
+      // First-time claim: preserve the auto-created Google profile and atomically
+      // reserve the requested handle.
+      await runTransaction(db, async tx => {
+        const [userSnap, handleSnap] = await Promise.all([tx.get(userRef), tx.get(usernameRef)]);
+        if (!userSnap.exists()) throw new Error('Profile not found.');
+        const current: any = userSnap.data();
+        if (String(current.username || '')) throw new Error('This account already has a handle.');
+        if (handleSnap.exists() && handleSnap.data()?.uid !== uid) throw new Error('Username is already taken. Please choose another.');
+        tx.set(usernameRef, { uid }, { merge: false });
+        tx.update(userRef, { username, updatedAt: serverTimestamp(), bio: data.bio || current.bio || 'Software builder & writer', themeColor: data.themeColor || current.themeColor || '#D97706' });
+      });
+      const resolved = await getCommunityProfile(uid);
+      if (!resolved) throw new Error('Unable to claim your handle.');
+      await upsertPublicProfile(resolved);
+      try { await ensureFollowingAuthor(uid, resolved.username); } catch (err) { console.warn('Failed to auto-follow @krishsarkar:', err); }
+      return resolved;
+    }
+
+    const profile = await runTransaction(db, async tx => {
+      const handleSnap = await tx.get(usernameRef);
+      if (handleSnap.exists() && handleSnap.data()?.uid !== uid) throw new Error('Username is already taken. Please choose another.');
       const userData: any = {
         ...data, uid, username,
         role: data.role || '', isAuthor: !!data.isAuthor, isVerified: !!data.isVerified,
@@ -382,6 +489,7 @@ export async function createCommunityProfile(data: Omit<CommunityUser, 'createdA
       return userData as CommunityUser;
     });
     const resolved = await getCommunityProfile(uid) || profile;
+    await upsertPublicProfile(resolved as CommunityUser);
     if (username !== 'krishsarkar') {
       try { await ensureFollowingAuthor(uid, username); } catch (err) { console.warn('Failed to auto-follow @krishsarkar:', err); }
     }
@@ -397,11 +505,15 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
   try {
     if (typeof uid !== 'string' || !uid.trim() || uid.length > 128 || uid.includes('/')) throw new Error('Invalid profile ID.');
     const current = auth.currentUser;
-    const adminMayManageCanonicalAuthor = !!current && checkIsAdmin(current.email) && (await getCommunityProfile(uid))?.username?.toLowerCase() === 'krishsarkar';
+    const existingProfile = await getCommunityProfile(uid);
+    const adminMayManageCanonicalAuthor = !!current && checkIsAdmin(current.email) && existingProfile?.username?.toLowerCase() === 'krishsarkar';
     if (!current || (current.uid !== uid && !adminMayManageCanonicalAuthor)) {
       throw new Error('You can only edit your own profile.');
     }
+
     const clean: any = { ...data };
+    const hasUsernameChange = Object.prototype.hasOwnProperty.call(clean, 'username');
+    const requestedUsername = hasUsernameChange ? validateUsername(String(clean.username || '')) : existingProfile?.username || '';
     delete clean.uid;
     delete clean.username;
     delete clean.createdAt;
@@ -415,7 +527,101 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
     delete clean.role;
     delete clean.platformRole;
     clean.updatedAt = serverTimestamp();
-    await updateDoc(doc(db, 'users', uid), clean);
+
+    const userRef = doc(db, 'users', uid);
+    const oldUsername = existingProfile?.username || '';
+
+    await runTransaction(db, async tx => {
+      const userSnap = await tx.get(userRef);
+      if (!userSnap.exists()) throw new Error('Profile not found.');
+      const currentData: any = userSnap.data();
+      const currentUsername = String(currentData.username || '');
+      let currentPublic: any = { ...currentData };
+      const nextUserData: any = { ...clean, username: requestedUsername };
+      const effectiveDisplayName = nextUserData.displayName ?? currentData.displayName ?? 'User';
+      const effectivePhotoURL = nextUserData.photoURL ?? currentData.photoURL ?? '';
+      const effectiveCover = nextUserData.coverImageUrl ?? currentData.coverImageUrl ?? '';
+      const effectiveWebsite = nextUserData.websiteUrl ?? currentData.websiteUrl ?? '';
+      const effectiveLocation = nextUserData.location ?? currentData.location ?? '';
+      const effectiveSocialX = nextUserData.socialX ?? currentData.socialX ?? '';
+      const effectiveSocialGithub = nextUserData.socialGithub ?? currentData.socialGithub ?? '';
+      const effectiveSocialTelegram = nextUserData.socialTelegram ?? currentData.socialTelegram ?? '';
+      const effectiveSocialInstagram = nextUserData.socialInstagram ?? currentData.socialInstagram ?? '';
+      const effectiveBio = nextUserData.bio ?? currentData.bio ?? '';
+      const effectiveTheme = nextUserData.themeColor ?? currentData.themeColor ?? '#D97706';
+      const effectiveVerified = nextUserData.isVerified ?? !!currentData.isVerified;
+      const effectiveVerificationColor = nextUserData.verificationColor ?? currentData.verificationColor ?? '#2196F3';
+      const effectiveAuthor = nextUserData.isAuthor ?? !!currentData.isAuthor;
+      const effectiveFollowers = Number(currentData.followersCount || 0);
+      const effectiveFollowing = Number(currentData.followingCount || 0);
+      const makePublic = (handle: string) => ({
+        username: handle,
+        displayName: effectiveDisplayName,
+        photoURL: effectivePhotoURL,
+        coverImageUrl: effectiveCover,
+        websiteUrl: effectiveWebsite,
+        location: effectiveLocation,
+        socialX: effectiveSocialX,
+        socialGithub: effectiveSocialGithub,
+        socialTelegram: effectiveSocialTelegram,
+        socialInstagram: effectiveSocialInstagram,
+        bio: effectiveBio,
+        themeColor: effectiveTheme,
+        followersCount: effectiveFollowers,
+        followingCount: effectiveFollowing,
+        isVerified: !!effectiveVerified,
+        verificationColor: effectiveVerificationColor,
+        isAuthor: !!effectiveAuthor,
+        creatorPage: nextUserData.creatorPage ?? currentData.creatorPage ?? null,
+        updatedAt: serverTimestamp(),
+      });
+
+      if (hasUsernameChange && requestedUsername !== currentUsername) {
+        const newUsernameRef = requestedUsername ? doc(db, 'usernames', requestedUsername) : null;
+        const oldUsernameRef = currentUsername ? doc(db, 'usernames', currentUsername) : null;
+        const newSnap = newUsernameRef ? await tx.get(newUsernameRef) : null;
+        const oldSnap = oldUsernameRef ? await tx.get(oldUsernameRef) : null;
+        if (newSnap?.exists() && newSnap.data()?.uid !== uid) {
+          throw new Error('Username is already taken. Please choose another.');
+        }
+        if (currentUsername && (!oldSnap?.exists() || oldSnap.data()?.uid !== uid)) {
+          throw new Error('Current handle reservation is missing. Contact an administrator.');
+        }
+        if (requestedUsername) tx.set(newUsernameRef!, { uid }, { merge: false });
+        if (oldUsernameRef && currentUsername !== requestedUsername) tx.delete(oldUsernameRef);
+        if (oldUsernameRef && currentUsername !== requestedUsername) tx.delete(doc(db, 'publicProfiles', currentUsername));
+        if (oldUsernameRef && currentUsername !== requestedUsername) {
+          tx.set(doc(db, 'handleAliases', currentUsername), { newUsername: requestedUsername, updatedAt: serverTimestamp() }, { merge: true });
+        }
+        if (newUsernameRef) tx.set(newUsernameRef, { uid }, { merge: false });
+        if (requestedUsername) tx.set(doc(db, 'publicProfiles', requestedUsername), makePublic(requestedUsername), { merge: true });
+      } else if (requestedUsername) {
+        tx.set(doc(db, 'publicProfiles', requestedUsername), makePublic(requestedUsername), { merge: true });
+      }
+
+      tx.update(userRef, nextUserData);
+    });
+
+    // Identity propagation is deliberately separate from the canonical transaction.
+    // The profile/handle is already committed; if a secondary snapshot cannot be
+    // refreshed, the user still has a valid public profile and stable UID identity.
+    const identityChanged = hasUsernameChange || Object.prototype.hasOwnProperty.call(clean, 'displayName') || Object.prototype.hasOwnProperty.call(clean, 'photoURL');
+    if (identityChanged) {
+      const latest = await getCommunityProfile(uid);
+      if (latest) {
+        try {
+          await syncUserIdentityAcrossContent(uid, {
+            displayName: latest.displayName || '',
+            photoURL: latest.photoURL || '',
+            username: latest.username || '',
+            isVerified: !!latest.isVerified,
+            verificationColor: latest.verificationColor || '#2196F3'
+          });
+        } catch (syncError) {
+          console.warn('Identity propagation incomplete; canonical profile saved:', syncError);
+        }
+      }
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, p);
   }
@@ -429,6 +635,45 @@ export function subscribeCommunityProfile(uid: string, callback: (profile: Commu
     snap => callback(snap.exists() ? (mapDocDates(snap.data()) as CommunityUser) : null),
     error => {
       console.warn(`Realtime profile subscription failed for ${uid}:`, error);
+      onError?.(error);
+    }
+  );
+}
+
+export function subscribePublicProfileByUsername(username: string, callback: (profile: CommunityUser | null) => void, onError?: (error: unknown) => void): () => void {
+  const clean = normalizeUsername(username);
+  if (!clean) { callback(null); return () => {}; }
+  return onSnapshot(
+    doc(db, 'publicProfiles', clean),
+    async snap => {
+      if (snap.exists()) {
+        const publicProfile = mapDocDates(snap.data()) as CommunityUser;
+        if (auth.currentUser) {
+          try {
+            const reservation = await getDoc(doc(db, 'usernames', clean));
+            const uid = reservation.exists() ? String(reservation.data()?.uid || '') : '';
+            if (uid) (publicProfile as any).uid = uid;
+          } catch (e) { console.warn('Public handle UID resolution skipped:', e); }
+        }
+        callback(publicProfile);
+        return;
+      }
+      // Self-heal the authenticated owner's own profile when the public projection
+      // is missing. This does not expose a private user document to other viewers.
+      if (auth.currentUser) {
+        try {
+          const own = await getCommunityProfile(auth.currentUser.uid);
+          if (own?.username && normalizeUsername(own.username) === clean) {
+            try { await upsertPublicProfile(own); } catch (e) { console.warn('Public profile projection repair skipped:', e); }
+            callback(own);
+            return;
+          }
+        } catch (e) { console.warn('Own profile fallback failed:', e); }
+      }
+      callback(null);
+    },
+    error => {
+      console.warn(`Realtime public profile subscription failed for @${clean}:`, error);
       onError?.(error);
     }
   );
@@ -697,14 +942,13 @@ export async function getUserPosts(userId: string, username?: string): Promise<C
   const cleanUsername = username?.toLowerCase().trim();
   const byId = new Map<string, CommunityPost & { sourceType?: string; communityId?: string; communitySlug?: string }>();
   try {
-    const authorSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
-    authorSnap.docs.forEach(d => byId.set(`root:${d.id}`, { ...mapDocDates(d.data()), id: d.id, sourceType: 'root' } as any));
+    if (userId) {
+      const authorSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
+      authorSnap.docs.forEach(d => byId.set(`root:${d.id}`, { ...mapDocDates(d.data()), id: d.id, sourceType: 'root' } as any));
+    }
     if (cleanUsername) {
-      const allSnap = await getDocs(query(collection(db, 'posts'), limit(500)));
-      allSnap.docs.forEach(d => {
-        const post = { ...mapDocDates(d.data()), id: d.id } as CommunityPost;
-        if (post.authorUsername?.toLowerCase() === cleanUsername) byId.set(`root:${d.id}`, { ...post, sourceType: 'root' } as any);
-      });
+      const authorUsernameSnap = await getDocs(query(collection(db, 'posts'), where('authorUsername', '==', cleanUsername), limit(500)));
+      authorUsernameSnap.docs.forEach(d => byId.set(`root:${d.id}`, { ...mapDocDates(d.data()), id: d.id, sourceType: 'root' } as any));
     }
   } catch (error) {
     console.warn('Root profile post query failed:', error);
@@ -952,6 +1196,62 @@ export async function deleteComment(postId: string, commentId: string) {
   }
 }
 
+export async function adminChangeUserHandle(targetUid: string, requestedUsernameInput: string): Promise<CommunityUser> {
+  const admin = auth.currentUser;
+  if (!admin || !checkIsAdmin(admin.email)) throw new Error('Master administrator access required.');
+  if (!targetUid || targetUid.includes('/')) throw new Error('Invalid target user ID.');
+  const requestedUsername = validateUsername(requestedUsernameInput);
+  const userRef = doc(db, 'users', targetUid);
+  let updated: CommunityUser | null = null;
+  await runTransaction(db, async tx => {
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists()) throw new Error('Target user profile not found.');
+    const current: any = userSnap.data();
+    const currentUsername = normalizeUsername(String(current.username || ''));
+    if (currentUsername === requestedUsername) return;
+    const newRef = requestedUsername ? doc(db, 'usernames', requestedUsername) : null;
+    const oldRef = currentUsername ? doc(db, 'usernames', currentUsername) : null;
+    const newSnap = newRef ? await tx.get(newRef) : null;
+    if (newSnap?.exists() && String(newSnap.data()?.uid || '') !== targetUid) throw new Error('Username is already taken. Please choose another.');
+    if (requestedUsername) tx.set(newRef!, { uid: targetUid }, { merge: false });
+    if (oldRef && currentUsername !== requestedUsername) {
+      const oldSnap = await tx.get(oldRef);
+      if (oldSnap.exists() && String(oldSnap.data()?.uid || '') === targetUid) tx.delete(oldRef);
+      tx.delete(doc(db, 'publicProfiles', currentUsername));
+      tx.set(doc(db, 'handleAliases', currentUsername), { newUsername: requestedUsername, updatedAt: serverTimestamp() }, { merge: true });
+    }
+    if (requestedUsername) {
+      const publicData = {
+        username: requestedUsername, displayName: current.displayName || 'User', photoURL: current.photoURL || '',
+        coverImageUrl: current.coverImageUrl || '', websiteUrl: current.websiteUrl || '', location: current.location || '',
+        socialX: current.socialX || '', socialGithub: current.socialGithub || '', socialTelegram: current.socialTelegram || '',
+        socialInstagram: current.socialInstagram || '', bio: current.bio || '', themeColor: current.themeColor || '#D97706',
+        followersCount: Number(current.followersCount || 0), followingCount: Number(current.followingCount || 0),
+        isVerified: !!current.isVerified, verificationColor: current.verificationColor || '#2196F3',
+        isAuthor: !!current.isAuthor, creatorPage: current.creatorPage || null, updatedAt: serverTimestamp()
+      };
+      tx.set(doc(db, 'publicProfiles', requestedUsername), publicData, { merge: true });
+    }
+    tx.update(userRef, { username: requestedUsername, updatedAt: serverTimestamp() });
+    updated = { ...current, uid: targetUid, username: requestedUsername };
+  });
+  if (!updated) {
+    const latest = await getCommunityProfile(targetUid);
+    if (!latest) throw new Error('Profile update could not be confirmed.');
+    updated = latest;
+  }
+  try {
+    await syncUserIdentityAcrossContent(targetUid, {
+      displayName: updated.displayName || '', photoURL: updated.photoURL || '', username: updated.username || '',
+      isVerified: !!updated.isVerified, verificationColor: updated.verificationColor || '#2196F3'
+    });
+  } catch (error) {
+    console.warn('Admin handle propagation incomplete; canonical profile is saved:', error);
+  }
+  try { await upsertPublicProfile(updated); } catch (error) { console.warn('Admin public profile refresh skipped:', error); }
+  return updated;
+}
+
 export async function setUserVerificationByUsername(usernameInput: string, isVerified: boolean, verificationColor: string): Promise<CommunityUser> {
   const admin = auth.currentUser;
   if (!admin || !admin.email) throw new Error('You must be signed in as an admin.');
@@ -1094,6 +1394,7 @@ async function getProfileList(userId: string, relation: 'followers' | 'following
     const targetUid = data.uid || d.id;
     const profile = await getCommunityProfile(targetUid);
     if (profile) {
+      if (!profile.username) return null;
       return {
         uid: profile.uid,
         username: profile.username,
@@ -1103,16 +1404,17 @@ async function getProfileList(userId: string, relation: 'followers' | 'following
         verificationColor: profile.verificationColor || '#2196F3'
       };
     }
+    if (!data.username) return null;
     return {
       uid: targetUid,
-      username: data.username || targetUid,
+      username: data.username,
       displayName: data.displayName || data.username || targetUid,
       photoURL: data.photoURL || '',
       isVerified: !!data.isVerified,
       verificationColor: data.verificationColor || '#2196F3'
     };
   }));
-  return entries.sort((a, b) => a.username.localeCompare(b.username));
+  return entries.filter(Boolean).sort((a, b) => a!.username.localeCompare(b!.username)) as ProfileListEntry[];
 }
 
 export async function getUserFollowers(userId: string): Promise<ProfileListEntry[]> {
@@ -1135,45 +1437,143 @@ export async function getUserRepostedPosts(userId: string): Promise<CommunityPos
   return posts.filter(Boolean) as CommunityPost[];
 }
 
-export async function syncUserIdentityAcrossContent(userId: string, profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username' | 'isVerified' | 'verificationColor'>): Promise<{ posts: number; comments: number }> {
+export async function syncUserIdentityAcrossContent(
+  userId: string,
+  profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username' | 'isVerified' | 'verificationColor'>
+): Promise<{ posts: number; comments: number; communityPosts: number; communities: number; memberships: number; relationships: number; questions: number; answers: number; articles: number; messages: number; notifications: number; reports: number; topics: number; series: number; moderators: number; adminNotifications: number }> {
+  if (!userId) throw new Error('Invalid user ID.');
+  const identity = {
+    authorName: profile.displayName || '',
+    authorAvatar: profile.photoURL || '',
+    authorUsername: profile.username || '',
+    isVerified: !!profile.isVerified,
+    verificationColor: profile.verificationColor || '#2196F3',
+    updatedAt: serverTimestamp()
+  };
+  const actorIdentity = {
+    actorUsername: profile.username || '',
+    actorName: profile.displayName || '',
+    actorAvatar: profile.photoURL || '',
+    updatedAt: serverTimestamp()
+  };
   const writes: Array<{ ref: any; data: any }> = [];
-  let postsCount = 0;
-  let commentsCount = 0;
-  const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
-  postsSnap.docs.forEach(d => { postsCount += 1; writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }); });
-  let commentsSnap;
-  try {
-    commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
-  } catch (indexError) {
-    console.warn('Comments author index unavailable during identity sync; using fallback scan:', indexError);
-    const allComments = await getDocs(collectionGroup(db, 'comments'));
-    commentsSnap = { docs: allComments.docs.filter(d => d.data()?.authorId === userId) } as any;
-  }
-  commentsSnap.docs.forEach(d => { commentsCount += 1; writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }); });
+  const counters = { posts:0, comments:0, communityPosts:0, communities:0, memberships:0, relationships:0, questions:0, answers:0, articles:0, messages:0, notifications:0, reports:0, topics:0, series:0, moderators:0, adminNotifications:0 };
 
-  // Articles are admin-managed in Firestore. When a trusted admin edits the
-  // canonical @krishsarkar profile, update only articles that belong to that
-  // author so the public publication stays consistent without broad rewrites.
-  if (checkIsAdmin(auth.currentUser?.email) && profile.username.toLowerCase() === 'krishsarkar') {
-    const articlesSnap = await getDocs(collection(db, 'articles'));
-    articlesSnap.docs.forEach(d => {
-      const article = d.data();
-      const a = article.author || {};
-      if (a.uid === userId || a.username?.toLowerCase() === 'krishsarkar') {
-        writes.push({ ref: d.ref, data: {
-          author: { ...a, uid: userId, username: 'krishsarkar', name: profile.displayName, avatar: profile.photoURL || '', bio: a.bio || '', isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3' },
+  const collectByQuery = async (q: any, data: any, key: keyof typeof counters) => {
+    const snap = await getDocs(q);
+    counters[key] += snap.size;
+    snap.docs.forEach((d:any) => writes.push({ ref:d.ref, data }));
+  };
+
+  // Canonical root posts.
+  await collectByQuery(query(collection(db, 'posts'), where('authorId', '==', userId)), identity, 'posts');
+
+  // Community posts + article/community comments + question answers.
+  try {
+    await collectByQuery(query(collectionGroup(db, 'posts'), where('authorId', '==', userId)), identity, 'communityPosts');
+  } catch (e) {
+    console.warn('Community-post identity query failed:', e);
+  }
+  try {
+    await collectByQuery(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)), identity, 'comments');
+  } catch (e) {
+    console.warn('Comment identity query failed:', e);
+  }
+  await collectByQuery(query(collection(db, 'questions'), where('authorId', '==', userId)), identity, 'questions');
+  try {
+    await collectByQuery(query(collectionGroup(db, 'answers'), where('authorId', '==', userId)), identity, 'answers');
+  } catch (e) {
+    console.warn('Answer identity query failed:', e);
+  }
+
+  // Community ownership records.
+  await collectByQuery(query(collection(db, 'communities'), where('ownerId', '==', userId)), {
+    ownerUsername: profile.username || '', ownerName: profile.displayName || '', ownerAvatar: profile.photoURL || '', updatedAt: serverTimestamp()
+  }, 'communities');
+
+  // Every community membership owned by this UID. This is safe because rules
+  // restrict the update to the matching member UID and username-only fields.
+  try {
+    await collectByQuery(query(collectionGroup(db, 'members'), where('uid', '==', userId)), {
+      username: profile.username || '', updatedAt: serverTimestamp()
+    }, 'memberships');
+  } catch (e) {
+    console.warn('Membership identity query failed:', e);
+  }
+
+  // Following records that cache this user's username.
+  try {
+    await collectByQuery(query(collectionGroup(db, 'following'), where('uid', '==', userId)), {
+      username: profile.username || '', updatedAt: serverTimestamp()
+    }, 'relationships');
+  } catch (e) {
+    console.warn('Following identity query failed:', e);
+  }
+
+  // Topics/series created or owned by this user.
+  try { await collectByQuery(query(collection(db, 'topics'), where('createdBy', '==', userId)), { creatorUsername: profile.username || '', updatedAt: serverTimestamp() }, 'topics'); } catch (e) { console.warn('Topic identity query failed:', e); }
+  try { await collectByQuery(query(collection(db, 'series'), where('ownerId', '==', userId)), { ownerUsername: profile.username || '', updatedAt: serverTimestamp() }, 'series'); } catch (e) { console.warn('Series identity query failed:', e); }
+
+  // Messages sent by this user.
+  try {
+    await collectByQuery(query(collection(db, 'messages'), where('senderId', '==', userId)), {
+      senderUsername: profile.username || '', senderName: profile.displayName || '', senderAvatar: profile.photoURL || '', updatedAt: serverTimestamp()
+    }, 'messages');
+  } catch (e) { console.warn('Message identity query failed:', e); }
+
+  // Notification documents belong to recipients and are private. Do not query every recipient's
+  // notification collection from the actor's browser. Their actorId remains the stable link.
+  // Notification UI resolves the actor profile when rendering, so handle changes stay current without
+  // widening notification read permissions.
+
+  // Reports authored by this user.
+  try {
+    await collectByQuery(query(collection(db, 'reports'), where('reporterId', '==', userId)), { reporterUsername: profile.username || '', updatedAt: serverTimestamp() }, 'reports');
+  } catch (e) { console.warn('Report identity query failed:', e); }
+
+  // Admin notifications may contain moderation metadata and remain staff-private. Resolve actor identity
+  // from actorId instead of scanning all recipients' admin notifications.
+
+  // Site moderator registry entry, when the user is a moderator.
+  try {
+    const moderatorRef = doc(db, 'siteModerators', userId);
+    const moderatorSnap = await getDoc(moderatorRef);
+    if (moderatorSnap.exists()) {
+      counters.moderators = 1;
+      writes.push({ ref: moderatorRef, data: { username: profile.username || '', displayName: profile.displayName || '', updatedAt: serverTimestamp() } });
+    }
+  } catch (e) { console.warn('Moderator identity query failed:', e); }
+
+  // Main publication articles use a nested author object. Writers/admins are
+  // allowed to update identity-only fields on articles they own; the rules
+  // prevent any content or publication-state changes through this path.
+  try {
+    const articles = await getDocs(collection(db, 'articles'));
+    articles.docs.forEach((d:any) => {
+      const a:any = d.data()?.author || {};
+      const topAuthorId = d.data()?.authorId || '';
+      if (a.uid === userId || topAuthorId === userId) {
+        counters.articles += 1;
+        writes.push({ ref:d.ref, data:{
+          author: { ...a, uid:userId, username:profile.username || '', name:profile.displayName || '', avatar:profile.photoURL || '', isVerified:!!profile.isVerified, verificationColor:profile.verificationColor || '#2196F3' },
+          authorUsername: profile.username || '',
+          authorName: profile.displayName || '',
+          authorAvatar: profile.photoURL || '',
           updatedAt: serverTimestamp()
         }});
       }
     });
-  }
+  } catch (e) { console.warn('Article identity scan failed:', e); }
 
-  for (let i = 0; i < writes.length; i += 450) {
+  // Commit in safe Firestore batch sizes. Reads are intentionally scoped by UID
+  // wherever possible so username changes do not rewrite unrelated documents.
+  for (let i=0; i<writes.length; i+=450) {
     const batch = writeBatch(db);
-    writes.slice(i, i + 450).forEach(w => batch.update(w.ref, w.data));
+    writes.slice(i, i+450).forEach(w => batch.update(w.ref, w.data));
     await batch.commit();
   }
-  return { posts: postsCount, comments: commentsCount };
+
+  return counters;
 }
 
 export async function getUserComments(userId: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {

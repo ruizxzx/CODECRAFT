@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, Check, Loader2, Settings2 } from 'lucide-react';
+import { Bell, Check, Loader2, Settings2, AtSign, UserRound } from 'lucide-react';
 import { useAuthUser } from '../lib/useAuthUser';
 import { loginWithGoogle } from '../lib/firebase';
 import { getNotificationPreferences, saveNotificationPreferences, getThemePreference, saveThemePreference, type NotificationPreferences, type ThemePreference } from '../lib/account';
-import { PageView } from '../types';
+import { PageView, CommunityUser } from '../types';
+import { getCommunityProfile, isUsernameAvailable, updateCommunityProfile } from '../lib/community';
 
 interface Props { onNavigate: (page: PageView, param?: string) => void; }
 
@@ -14,11 +15,48 @@ export const PreferencesView: React.FC<Props> = ({ onNavigate }) => {
   const [saving, setSaving] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemePreference>('light');
   const [themeSaving, setThemeSaving] = useState(false);
+  const [profile, setProfile] = useState<CommunityUser | null>(null);
+  const [displayName, setDisplayName] = useState('');
+  const [handle, setHandle] = useState('');
+  const [handleStatus, setHandleStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'current' | 'invalid'>('idle');
+  const [profileSaving, setProfileSaving] = useState(false);
 
   useEffect(() => {
     if (!user) { setLoading(false); return; }
-    Promise.all([getNotificationPreferences(), getThemePreference()]).then(([nextPrefs, nextTheme]) => { setPrefs(nextPrefs); setTheme(nextTheme); document.documentElement.classList.toggle('dark', nextTheme === 'dark'); try { localStorage.setItem('offscrpt:theme', nextTheme); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }).finally(() => setLoading(false));
+    Promise.all([getNotificationPreferences(), getThemePreference(), getCommunityProfile(user.uid)]).then(([nextPrefs, nextTheme, nextProfile]) => { setPrefs(nextPrefs); setTheme(nextTheme); setProfile(nextProfile as CommunityUser | null); setDisplayName((nextProfile as CommunityUser | null)?.displayName || user.displayName || ''); setHandle((nextProfile as CommunityUser | null)?.username || ''); document.documentElement.classList.toggle('dark', nextTheme === 'dark'); try { localStorage.setItem('offscrpt:theme', nextTheme); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }).finally(() => setLoading(false));
   }, [user?.uid]);
+
+
+  useEffect(() => {
+    if (!user || !profile) return;
+    const clean = handle.toLowerCase().trim().replace(/[^a-z0-9_]/g, '').slice(0, 30);
+    if (!clean) { setHandleStatus('available'); return; }
+    if (clean === (profile.username || '').toLowerCase()) { setHandleStatus('current'); return; }
+    if (clean.length < 3) { setHandleStatus('invalid'); return; }
+    setHandleStatus('checking');
+    const timer = setTimeout(async () => {
+      try { setHandleStatus((await isUsernameAvailable(clean)) ? 'available' : 'taken'); }
+      catch { setHandleStatus('idle'); }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [handle, profile?.username, user?.uid]);
+
+  const saveProfileIdentity = async () => {
+    if (!user || !profile || profileSaving) return;
+    const cleanHandle = handle.toLowerCase().trim().replace(/[^a-z0-9_]/g, '').slice(0, 30);
+    const cleanName = displayName.trim() || profile.displayName || user.displayName || 'User';
+    if (cleanHandle && cleanHandle.length < 3) { setHandleStatus('invalid'); return; }
+    if (handleStatus === 'taken' || handleStatus === 'checking' || handleStatus === 'invalid') return;
+    setProfileSaving(true);
+    try {
+      await updateCommunityProfile(user.uid, { username: cleanHandle, displayName: cleanName });
+      const next = await getCommunityProfile(user.uid);
+      setProfile(next); setHandle(next?.username || ''); setDisplayName(next?.displayName || cleanName);
+      if (next) window.dispatchEvent(new CustomEvent('offscrpt:profile-updated', { detail: next }));
+    } catch (error) {
+      console.error('Profile identity update failed:', error);
+    } finally { setProfileSaving(false); }
+  };
 
 
   const toggleTheme = async () => {
@@ -48,6 +86,19 @@ export const PreferencesView: React.FC<Props> = ({ onNavigate }) => {
   ];
   return <section className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
     <div className="mb-8"><button onClick={()=>onNavigate('dashboard')} className="font-mono text-[10px] underline">← MY OFFSCRPT</button><div className="mt-3 font-mono text-[9px] text-neutral-500 uppercase">SETTINGS → APPEARANCE + NOTIFICATIONS</div><div className="font-mono text-[10px] uppercase text-neutral-500 mt-5 flex items-center gap-2"><Bell className="w-4 h-4"/> ACCOUNT SETTINGS</div><h1 className="font-display font-black text-4xl sm:text-6xl uppercase leading-none mt-2">CONTROL</h1><p className="mt-3 text-neutral-600">Appearance and notification controls are stored on your account and apply across devices.</p></div>
+    <div className="mb-6 border-4 border-black bg-white p-4 sm:p-5 neo-shadow">
+      <div className="font-mono text-[10px] uppercase text-neutral-500 flex items-center gap-2"><UserRound className="w-4 h-4"/> PROFILE</div>
+      <div className="font-display font-black text-2xl uppercase mt-1">IDENTITY</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+        <input value={displayName} onChange={e=>setDisplayName(e.target.value.slice(0,64))} maxLength={64} placeholder="Display name" className="px-3 py-2 border-2 border-black font-display font-bold text-sm"/>
+        <div>
+          <div className="relative"><AtSign className="absolute left-2 top-2.5 w-4 h-4"/><input value={handle} onChange={e=>setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,30))} maxLength={30} placeholder="Unique handle (optional)" className="w-full pl-8 pr-3 py-2 border-2 border-black font-mono text-sm"/></div>
+          <div className="font-mono text-[9px] mt-1">{handleStatus==='checking'?'CHECKING…':handleStatus==='available'?'HANDLE AVAILABLE':handleStatus==='current'?'CURRENT HANDLE':handleStatus==='taken'?'HANDLE TAKEN':handleStatus==='invalid'?'3–30 CHARS OR BLANK':'OPTIONAL — LEAVE BLANK TO STAY UNCLAIMED'}</div>
+        </div>
+      </div>
+      <button type="button" onClick={()=>void saveProfileIdentity()} disabled={profileSaving || handleStatus==='taken' || handleStatus==='checking' || handleStatus==='invalid'} className="mt-4 px-4 py-2 border-2 border-black bg-[var(--color-primary)] font-mono text-[10px] font-black uppercase disabled:opacity-50">{profileSaving?'SAVING…':'SAVE PROFILE'}</button>
+      <p className="font-mono text-[9px] text-neutral-500 mt-2">Display name and @handle are separate. Handle changes are validated against the global username registry and saved to Firestore.</p>
+    </div>
     <div className="mb-6 border-4 border-black bg-white p-4 sm:p-5 neo-shadow">
       <div className="flex items-center justify-between gap-4">
         <div><div className="font-mono text-[10px] uppercase text-neutral-500">APPEARANCE</div><div className="font-display font-black text-2xl uppercase mt-1">DARK MODE</div><div className="font-mono text-[9px] text-neutral-500 mt-1">Saved to your OFFSCRPT account and restored across devices.</div></div>
