@@ -1076,7 +1076,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         </div>
 
         {/* Comments Section */}
-        <CommentsSection articleSlug={article.slug} authorId={article.author?.uid} />
+        <CommentsSection articleSlug={article.slug} authorId={article.author?.uid} onOpenProfile={onOpenAuthorProfile} />
 
         {/* Related Posts Section */}
         {relatedArticles.length > 0 && (
