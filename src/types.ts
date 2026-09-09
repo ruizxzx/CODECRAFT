@@ -237,10 +237,20 @@ export interface SiteConfig {
     enabled: boolean;
     title: string;
     message: string;
+    type?: 'info' | 'update' | 'warning' | 'urgent' | 'maintenance' | 'feature' | 'bugfix' | 'event';
+    priority?: 'low' | 'normal' | 'high' | 'critical';
+    displayMode?: 'modal' | 'popup' | 'banner';
+    frequency?: 'once' | 'session' | 'daily' | 'every_visit' | 'until_dismissed';
+    audience?: 'everyone' | 'signed_in' | 'guests' | 'creators' | 'moderators' | 'master_admin';
+    startAt?: string;
+    endAt?: string;
     targetPage?: 'all' | 'home' | 'blog' | 'article' | 'social' | 'explore' | 'series' | 'creator' | 'changelog';
+    targetRoute?: string;
     linkLabel?: string;
     linkTarget?: string;
     dismissible?: boolean;
+    actionLabel?: string;
+    actionTarget?: string;
   };
 }
 

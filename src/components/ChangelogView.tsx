@@ -1,20 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileText, Send } from 'lucide-react';
 import { auth, loginWithGoogle } from '../lib/firebase';
-import { RECENT_CHANGELOG, ProblemReport, submitProblemReport, subscribeProblemReportsForReporter } from '../lib/siteFeatures';
+import { RECENT_CHANGELOG, ChangelogEntry, ProblemReport, submitProblemReport, subscribeProblemReportsForReporter, subscribeChangelogEntries } from '../lib/siteFeatures';
 import { PageView } from '../types';
 
 export const ChangelogView: React.FC<{ onNavigate: (page: PageView, param?: string) => void; currentPage?: PageView }> = ({ onNavigate, currentPage }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [issues, setIssues] = useState<ProblemReport[]>([]);
+  const [entries, setEntries] = useState<ChangelogEntry[]>(RECENT_CHANGELOG);
   const [status, setStatus] = useState('');
 
   useEffect(() => subscribeProblemReportsForReporter(setIssues), []);
+  useEffect(() => subscribeChangelogEntries(items => setEntries(items.length ? items : RECENT_CHANGELOG)), []);
 
   const report = async () => {
-    if (!auth.currentUser) { await loginWithGoogle(); return; }
     try {
+      if (!auth.currentUser) await loginWithGoogle();
+      if (!auth.currentUser) { setStatus('Sign-in was not completed. Your draft is still here — try SUBMIT again.'); return; }
       await submitProblemReport({ title, description, targetPage: currentPage || 'changelog' });
       setTitle(''); setDescription(''); setStatus('REPORT SUBMITTED TO OFFSCRPT.');
     } catch (e: any) { setStatus(e?.message || 'Could not submit report.'); }
@@ -29,7 +32,7 @@ export const ChangelogView: React.FC<{ onNavigate: (page: PageView, param?: stri
       <p className="font-mono text-xs text-neutral-300 mt-4 max-w-3xl">Version history, production fixes and a direct path for reporting problems to the team.</p>
     </header>
     <section className="space-y-4">
-      {RECENT_CHANGELOG.map(entry => <article key={`${entry.version}-${entry.title}`} className="border-4 border-black p-5 bg-white neo-shadow-sm">
+      {entries.map(entry => <article key={`${entry.version}-${entry.title}`} className="border-4 border-black p-5 bg-white neo-shadow-sm">
         <div className="flex flex-wrap justify-between gap-3 items-start"><div><div className="font-mono text-[10px] font-black">{entry.version} · {entry.date}</div><h2 className="font-display font-black text-2xl uppercase mt-1">{entry.title}</h2></div><span className="border-2 border-black px-2 py-1 font-mono text-[9px] font-black">{kind(entry.kind)}</span></div>
         <ul className="mt-4 space-y-2">{entry.changes.map((change, i) => <li key={i} className="font-sans text-sm flex gap-2"><span className="mt-1">→</span><span>{change}</span></li>)}</ul>
       </article>)}

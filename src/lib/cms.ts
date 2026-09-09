@@ -139,7 +139,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   socialAnnouncementLink: "",
   socialDefaultSort: 'new',
   customCategories: [],
-  popupAnnouncement: { id: 'default-announcement', enabled: false, title: '', message: '', targetPage: 'all', linkLabel: '', linkTarget: '', dismissible: true },
+  popupAnnouncement: { id: 'default-announcement', enabled: false, title: '', message: '', type: 'info', priority: 'normal', displayMode: 'popup', frequency: 'until_dismissed', audience: 'everyone', targetPage: 'all', linkLabel: '', linkTarget: '', actionLabel: '', actionTarget: '', dismissible: true },
   authorProfileUid: '',
   authorProfileUsername: 'krishsarkar'
 };

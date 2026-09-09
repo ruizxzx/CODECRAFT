@@ -34,14 +34,23 @@ read/write shape the client code actually sends.
 Vite's `root` is explicitly set to `src/` in `vite.config.ts`, and `src/index.html` loading
 `src/main.tsx` is the real entry point. **Every application source file lives under `src/`.**
 
-This project has twice accumulated a duplicate top-level `components/`, `lib/`, `data/` tree
-(with copies of `App.tsx`, `main.tsx`, `index.html`, etc. at the repo root) that looked like a
-mirror of `src/` but silently drifted out of sync — in one case an entire runtime-error
-reporting feature existed in one tree and not the other; in another, a component referenced a
-variable (`inputRef`) that only failed at runtime for signed-in users, because the file that
-actually shipped was not the file that had been edited. **If you ever see a root-level
-`components/` or `lib/` directory that mirrors `src/`, it is stale. Delete it — do not try to
-keep it in sync by hand.** Editing a file means editing it under `src/`, full stop.
+This project has repeatedly (three times as of V75.5) accumulated a duplicate top-level
+`components/`, `lib/`, `data/` tree (with copies of `App.tsx`, `main.tsx`, `index.html`,
+`package.json`, `VERSION.md`, etc. at the repo root or inside `src/`) that looked like a
+mirror of the canonical tree but silently drifted out of sync — in one case an entire
+runtime-error reporting feature existed in one tree and not the other; in another, a component
+referenced a variable (`inputRef`) that only failed at runtime for signed-in users, because the
+file that actually shipped was not the file that had been edited; most recently, three
+headline features of a release (`ChangelogView.tsx`, `SiteAnnouncementPopup.tsx`,
+`lib/siteFeatures.ts`) existed only in `src/` and were never even copied to the stale root tree.
+**If you ever see a root-level `components/` or `lib/` directory that mirrors `src/`, or a
+second `package.json`/`VERSION.md` inside `src/`, it is stale. Delete it — do not try to keep
+it in sync by hand, and do not assume a changelog note claiming "synchronized" or "parity" is
+accurate without actually diffing the two trees first.** Editing a file means editing it under
+`src/`, full stop. This has recurred despite this exact warning already being in the README —
+if you're an agent regenerating this project from a template or prior snapshot, check whether
+your generation process is the one reintroducing the duplicate tree, since deleting it after
+the fact only fixes it until the next regeneration.
 
 ### Verify before you call something done
 
@@ -167,6 +176,12 @@ src/
 - **Reliability**: page- and app-level React error boundaries, both wired to
   `lib/runtime.ts`'s error reporting (Firestore-backed for signed-in users, local-queued and
   flushed-on-login for signed-out users), plus a System Health view for admins.
+- **Changelog & announcements**: a public `/changelog` page reading Firestore-backed release
+  entries in realtime (`lib/siteFeatures.ts`'s `changelogEntries`, admin-editable, falling back
+  to a hardcoded list only if the collection is empty), a user-facing problem-report form
+  (`siteProblemReports`), and a cloud-configured popup/banner announcement system with audience
+  targeting, scheduling, and per-user cloud-synced dismissal state (`users/{uid}/announcementState`).
+  See "A note on the announcement system" below before editing this feature.
 
 ### Admin / moderator model
 
@@ -184,6 +199,27 @@ Every sensitive admin/moderator mutation should call the shared `audit()` helper
 `masterControl.ts`) or `writeAdminAudit()` (in `audit.ts`) so it lands in `adminAuditLog`,
 visible from the Admin panel's Audit tab.
 
+### A note on the announcement system
+
+`SiteAnnouncementPopup.tsx` renders as a full-screen fixed overlay (`inset-0`) when
+`displayMode` is `popup`/`modal`. If an announcement is published with `dismissible: false`
+and no working `actionLabel`/`actionTarget` or `linkLabel`/`linkTarget` pair, there is no way
+for a visitor to close it — and since `targetPage` defaults to `all`, this can block the
+entire site for every visitor with no recovery path short of an admin editing Firestore
+directly or a redeploy. This happened (V75.3–V75.4) before a fix shipped in V75.5.
+
+Two layers of protection exist now, and **both should stay in place** if this component is
+ever rewritten:
+
+1. `AdminControlPanel.tsx`'s publish handler refuses to save an enabled announcement with
+   neither a dismiss option nor a working action button.
+2. `SiteAnnouncementPopup.tsx` itself computes `effectivelyDismissible` and forces dismiss
+   controls (plus Escape-to-close) to render whenever no other close route exists, as a
+   safety net against stale config or a future editing path that skips check #1.
+
+If you change this component, keep both checks, or add an equivalent guarantee that an
+enabled announcement can never render as fully inescapable.
+
 ---
 
 ## Version history
@@ -193,3 +229,11 @@ been consolidated away since they were single-use scratch notes that didn't stay
 after the next release. `VERSION.md` holds the current release's changelog. For anything
 older, check git history / prior zip exports rather than expecting a markdown file per version
 going forward.
+
+
+## V75.4 Announcement + Changelog system
+
+- Master Admin controls cloud-backed announcements with type, priority, display mode, frequency, audience, target page, schedule, and actions.
+- Signed-in dismissal state is stored per account under `users/{uid}/announcementState/{announcementId}`; guests use browser-local state.
+- Published changelog entries are stored in `changelogEntries` and rendered publicly in realtime.
+- Master Admin can create, edit, delete and publish changelog entries from Master Control.

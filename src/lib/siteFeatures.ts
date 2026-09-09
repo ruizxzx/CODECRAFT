@@ -1,4 +1,4 @@
-import { collection, addDoc, doc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, addDoc, doc, deleteDoc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
 import { auth, checkIsAdmin } from './firebase';
 import { db } from './firebase';
 
@@ -18,6 +18,7 @@ export interface ProblemReport {
 }
 
 export interface ChangelogEntry {
+  id?: string;
   version: string;
   date: string;
   title: string;
@@ -89,9 +90,83 @@ export async function updateProblemReport(id: string, patch: Pick<ProblemReport,
   });
 }
 
-export function subscribeProblemReportsForReporter(callback: (items: ProblemReport[]) => void) {
+
+
+export async function markAnnouncementSeen(announcementId: string) {
   const user = auth.currentUser;
-  if (!user) { callback([]); return () => {}; }
-  const q = query(collection(db, 'siteProblemReports'), where('reporterId', '==', user.uid), limit(25));
-  return onSnapshot(q, snap => callback(snap.docs.map(toProblem).sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime())), err => { console.warn('Problem report subscription failed:', err); callback([]); });
+  if (!user || !announcementId) return;
+  await setDoc(doc(db, 'users', user.uid, 'announcementState', announcementId), { seenAt: serverTimestamp() }, { merge: true });
+}
+
+export async function dismissAnnouncementForUser(announcementId: string) {
+  const user = auth.currentUser;
+  if (!user || !announcementId) return;
+  await setDoc(doc(db, 'users', user.uid, 'announcementState', announcementId), { dismissedAt: serverTimestamp() }, { merge: true });
+}
+
+export async function getAnnouncementState(announcementId: string) {
+  const user = auth.currentUser;
+  if (!user || !announcementId) return null;
+  const snap = await getDoc(doc(db, 'users', user.uid, 'announcementState', announcementId));
+  return snap.exists() ? snap.data() : null;
+}
+
+export function subscribeAnnouncementState(announcementId: string, callback: (state: any | null) => void) {
+  const user = auth.currentUser;
+  if (!user || !announcementId) { callback(null); return () => {}; }
+  return onSnapshot(doc(db, 'users', user.uid, 'announcementState', announcementId), snap => callback(snap.exists() ? snap.data() : null), () => callback(null));
+}
+
+export async function createChangelogEntry(input: Omit<ChangelogEntry, 'id' | 'createdAt' | 'updatedAt'>) {
+  const user = auth.currentUser;
+  if (!user || !checkIsAdmin(user.email)) throw new Error('Master admin access required.');
+  const ref = await addDoc(collection(db, 'changelogEntries'), { ...input, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), createdBy: user.uid, published: true });
+  return ref.id;
+}
+
+export async function updateChangelogEntry(id: string, patch: Partial<Omit<ChangelogEntry, 'id'>>) {
+  const user = auth.currentUser;
+  if (!user || !checkIsAdmin(user.email)) throw new Error('Master admin access required.');
+  await updateDoc(doc(db, 'changelogEntries', id), { ...patch, updatedAt: serverTimestamp(), updatedBy: user.uid });
+}
+
+export async function deleteChangelogEntry(id: string) {
+  const user = auth.currentUser;
+  if (!user || !checkIsAdmin(user.email)) throw new Error('Master admin access required.');
+  await deleteDoc(doc(db, 'changelogEntries', id));
+}
+
+const toChangelog = (snap: any): ChangelogEntry & { id: string; published?: boolean } => {
+  const d = snap.data() || {};
+  return { id: snap.id, version: String(d.version || ''), date: String(d.date || ''), title: String(d.title || ''), changes: Array.isArray(d.changes) ? d.changes.map(String).filter(Boolean).slice(0, 30) : [], kind: (['feature','fix','security','maintenance'].includes(d.kind) ? d.kind : 'feature') as any, published: d.published !== false, createdAt: d.createdAt, updatedAt: d.updatedAt };
+};
+
+export function subscribeChangelogEntries(callback: (items: Array<ChangelogEntry & { id: string }>) => void) {
+  const q = query(collection(db, 'changelogEntries'), orderBy('createdAt', 'desc'), limit(200));
+  return onSnapshot(q, snap => callback(snap.docs.map(toChangelog).filter(x => x.published !== false)), err => { console.warn('Changelog subscription failed:', err); callback([]); });
+}
+
+export async function getChangelogEntriesForAdmin() {
+  const user = auth.currentUser;
+  if (!user || !checkIsAdmin(user.email)) throw new Error('Master admin access required.');
+  const snap = await getDocs(query(collection(db, 'changelogEntries'), orderBy('createdAt', 'desc'), limit(200)));
+  return snap.docs.map(toChangelog);
+}
+
+export function subscribeProblemReportsForReporter(callback: (items: ProblemReport[]) => void) {
+  // Re-subscribes on auth state changes so a user who signs in from the same screen (e.g. via
+  // the report form's own sign-in prompt) sees their reports populate without a page reload,
+  // rather than capturing auth.currentUser once at call time and never re-checking it.
+  let unsubQuery: (() => void) | null = null;
+  const unsubAuth = auth.onAuthStateChanged(user => {
+    if (unsubQuery) { unsubQuery(); unsubQuery = null; }
+    if (!user) { callback([]); return; }
+    const q = query(collection(db, 'siteProblemReports'), where('reporterId', '==', user.uid), limit(25));
+    unsubQuery = onSnapshot(
+      q,
+      snap => callback(snap.docs.map(toProblem).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())),
+      err => { console.warn('Problem report subscription failed:', err); callback([]); },
+    );
+  });
+  return () => { if (unsubQuery) unsubQuery(); unsubAuth(); };
 }
