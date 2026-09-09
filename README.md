@@ -269,3 +269,36 @@ Community creators can upload a logo/icon and banner when creating a community, 
 
 ## V75.8 — Media-rich community, discovery & links
 Community creators can upload a logo/icon and banner when creating a community, and existing community managers can continue updating both. Home personalization cards now render article covers. The Links/Bento admin builder accepts an uploaded logo/image per link; public link cards render that image when available and otherwise retain the configured solid color.
+
+## V75.9 — Global Image Crop + Preview
+
+All local image uploads now open a reusable crop/preview editor before any R2 upload occurs. Users can drag, zoom, rotate, select common aspect ratios, preview the processed output, and explicitly confirm with USE IMAGE. The processed image is then uploaded through the existing authenticated R2 presigned-upload flow. Video/PDF uploads remain unchanged, and external image URLs continue to work as URL fields without triggering the cropper.
+EOF
+cat > /mnt/data/v759work/V75.9_IMAGE_CROP_PREVIEW.md <<'EOF'
+# V75.9 — Global Image Crop + Preview
+
+## Workflow
+
+SELECT IMAGE → IMAGE EDITOR → PREVIEW CROP → USE IMAGE → PROCESS → R2 UPLOAD → SAVE URL
+
+## Coverage
+
+The reusable MediaUploadButton now intercepts every local image selection site-wide. Existing video and PDF upload flows bypass the cropper. Existing image URL inputs remain URL inputs.
+
+## Context defaults
+
+- Avatar/profile picture/icon/logo: 1:1 circle, 800×800
+- Cover/banner/carousel/hero: 16:9, 1600×900
+- Post image: 4:3, 1400×1050
+- General article/content images: Free, max-oriented 1600×1200
+
+## Output
+
+- PNG sources stay PNG for transparency preservation.
+- Other image sources prefer WebP at high quality.
+- Oversized outputs are bounded to a practical maximum.
+- Cropped result is uploaded instead of the original source file.
+
+## Failure behavior
+
+If the R2 upload fails, the processed crop is retained for retry and the existing field value is not changed by the uploader itself until `onUploaded` receives a successful URL.

@@ -1303,7 +1303,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       <label className="font-mono text-xs font-bold uppercase text-black">Logo Image (Optional)</label>
                       <div className="flex flex-col sm:flex-row gap-2">
                         <input type="text" value={logoImageUrl} onChange={(e) => setLogoImageUrl(e.target.value)} className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs focus:outline-none" placeholder="https://... or upload" />
-                        <MediaUploadButton folder="profile" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD LOGO" compact onUploaded={(url) => setLogoImageUrl(url)} />
+                        <MediaUploadButton folder="profile" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD LOGO" compact cropAspect="1:1" cropShape="rect" outputWidth={1000} outputHeight={1000} onUploaded={(url) => setLogoImageUrl(url)} />
                       </div>
                       {logoImageUrl && /^https?:\/\//i.test(logoImageUrl) && <img src={logoImageUrl} alt="Logo preview" className="h-16 max-w-[280px] object-contain border-2 border-black bg-white p-2" />}
                     </div>
@@ -1410,7 +1410,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                             onChange={(e) => setAuthorAvatarUrl(e.target.value)} 
                             className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs focus:outline-none bg-white" 
                             placeholder="https://images.unsplash.com/..."
-                          /><MediaUploadButton folder="profile" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD AVATAR" compact onUploaded={(url) => setAuthorAvatarUrl(url)} /></div>
+                          /><MediaUploadButton folder="profile" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD AVATAR" compact cropAspect="1:1" cropShape="circle" outputWidth={800} outputHeight={800} onUploaded={(url) => setAuthorAvatarUrl(url)} /></div>
                         </div>
                       </div>
                     </div>
@@ -1880,7 +1880,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         onChange={(e) => setNewCoverImage(e.target.value)}
                         placeholder="Or paste a public image URL..."
                         className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs bg-white"
-                      /><MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact onUploaded={(url) => setNewCoverImage(url)} /></div>
+                      /><MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact cropAspect="16:9" cropShape="rect" outputWidth={1600} outputHeight={900} onUploaded={(url) => setNewCoverImage(url)} /></div>
                       {newCoverImage && <img src={newCoverImage} alt="Cover preview" className="w-full h-40 object-cover border-2 border-black" />}
                       <p className="font-mono text-[10px] text-neutral-500 uppercase">Upload to OFFSCRPT media storage or paste a public image URL.</p>
                     </div>
@@ -1925,7 +1925,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                 {block.imageUrl ? <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-64 object-cover border-2 border-black" /> : <div className="h-32 border-2 border-dashed border-black flex items-center justify-center font-mono text-xs">NO IMAGE SELECTED</div>}
                                 <div className="flex flex-col sm:flex-row flex-wrap gap-2">
                                   <input type="url" value={block.imageUrl || ''} onChange={(e) => updateContentBlock(index,{imageUrl:e.target.value})} placeholder="Or paste image URL" className="flex-1 min-w-[220px] px-3 py-2 border-2 border-black font-mono text-xs" />
-                                  <MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url) => updateContentBlock(index,{imageUrl:url})} />
+                                  <MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact cropAspect="free" cropShape="rect" outputWidth={1600} onUploaded={(url) => updateContentBlock(index,{imageUrl:url})} />
                                 </div>
                                 <input value={block.imageAlt || ''} onChange={(e)=>updateContentBlock(index,{imageAlt:e.target.value})} placeholder="Alt text" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
                                 <input value={block.imageCaption || ''} onChange={(e)=>updateContentBlock(index,{imageCaption:e.target.value})} placeholder="Caption (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
@@ -2146,7 +2146,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                     <label className="font-mono text-xs font-bold uppercase">Logo / Image</label>
                     <div className="flex flex-col sm:flex-row gap-2">
                       <input type="url" value={bentoImageUrl} onChange={e=>setBentoImageUrl(e.target.value)} placeholder="https://... or upload" className="flex-1 px-3 py-2 border-2 border-black font-mono focus:outline-none text-xs" />
-                      <MediaUploadButton folder="site" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD LOGO" compact onUploaded={url=>setBentoImageUrl(url)} />
+                      <MediaUploadButton folder="site" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD LOGO" compact cropAspect="1:1" cropShape="rect" outputWidth={1000} outputHeight={1000} onUploaded={url=>setBentoImageUrl(url)} />
                     </div>
                     {bentoImageUrl && <img src={bentoImageUrl} alt="Link logo preview" className="w-20 h-20 object-contain border-2 border-black bg-white" />}
                     <p className="font-mono text-[9px] text-neutral-500 uppercase">Leave empty to keep the card as a solid color block.</p>
@@ -2290,7 +2290,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                   <h3 className="font-display font-black uppercase">CREATE SERIES</h3>
                   <div className="grid md:grid-cols-2 gap-2"><input required value={seriesTitleInput} onChange={e=>setSeriesTitleInput(e.target.value)} placeholder="Series title" className="border-2 border-black p-3"/><input value={seriesSlugInput} onChange={e=>setSeriesSlugInput(e.target.value)} placeholder="Slug (optional)" className="border-2 border-black p-3 font-mono text-xs"/></div>
                   <textarea value={seriesDescInput} onChange={e=>setSeriesDescInput(e.target.value)} placeholder="What is this series about?" rows={3} className="w-full border-2 border-black p-3"/>
-                  <div className="flex flex-col sm:flex-row gap-2"><input value={seriesCoverInput} onChange={e=>setSeriesCoverInput(e.target.value)} placeholder="Cover image URL or upload" className="flex-1 border-2 border-black p-3 font-mono text-xs"/><MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact onUploaded={(url)=>setSeriesCoverInput(url)} /></div>
+                  <div className="flex flex-col sm:flex-row gap-2"><input value={seriesCoverInput} onChange={e=>setSeriesCoverInput(e.target.value)} placeholder="Cover image URL or upload" className="flex-1 border-2 border-black p-3 font-mono text-xs"/><MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact cropAspect="16:9" cropShape="rect" outputWidth={1600} outputHeight={900} onUploaded={(url)=>setSeriesCoverInput(url)} /></div>
                   <button disabled={seriesBusy} className="border-2 border-black bg-black text-white px-4 py-2 font-mono text-xs font-black uppercase">{seriesBusy?'CREATING…':'CREATE SERIES'}</button>
                 </form>
                 <div className="space-y-3">{seriesList.map(item=><div key={item.id} className="border-4 border-black bg-white p-4 flex flex-wrap items-center gap-3"><div className="flex-1 min-w-[220px]"><div className="font-mono text-[10px]">{articles.filter(a=>a.seriesId===item.id || a.seriesId===item.slug).length || item.articleCount || 0} PARTS · /series/{item.id}</div><h3 className="font-display font-black text-xl uppercase">{item.title}</h3><p className="text-sm">{item.description}</p></div><button onClick={async()=>{try{await deleteSeries(item.id);setSeriesList(x=>x.filter(y=>y.id!==item.id))}catch(e:any){notifyToast(e?.message||'Could not delete series.')}}} className="border-2 border-black bg-red-100 px-3 py-2 font-mono text-[10px]">DELETE</button></div>)}</div>
@@ -2378,7 +2378,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Image URL</label>
                           <div className="flex flex-col sm:flex-row gap-2">
                             <input type="url" value={newSlideImageUrl} onChange={(e) => setNewSlideImageUrl(e.target.value)} placeholder="https://... or upload" className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm" /><MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url)=>setNewSlideImageUrl(url)} />
-                            <MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url) => setNewSlideImageUrl(url)} />
+                            <MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact cropAspect="16:9" cropShape="rect" outputWidth={1600} outputHeight={900} onUploaded={(url) => setNewSlideImageUrl(url)} />
                           </div>
                         </div>}
 
@@ -2518,7 +2518,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                     {editSlideMode === 'image' && <div>
                                       <label className="font-mono text-xs font-bold uppercase block mb-1">Image URL</label>
                                       <div className="flex gap-2">
-                                        <input type="url" value={editSlideImageUrl} onChange={(e) => setEditSlideImageUrl(e.target.value)} placeholder="https://... or upload" className="flex-1 px-3 py-2 border-2 border-black font-sans text-sm" /><MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url)=>setEditSlideImageUrl(url)} />
+                                        <input type="url" value={editSlideImageUrl} onChange={(e) => setEditSlideImageUrl(e.target.value)} placeholder="https://... or upload" className="flex-1 px-3 py-2 border-2 border-black font-sans text-sm" /><MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact cropAspect="16:9" cropShape="rect" outputWidth={1600} outputHeight={900} onUploaded={(url)=>setEditSlideImageUrl(url)} />
                                       </div>
                                     </div>}
                                     <div>

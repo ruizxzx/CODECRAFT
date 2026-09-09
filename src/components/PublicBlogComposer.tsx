@@ -290,7 +290,7 @@ export const PublicBlogComposer: React.FC<Props> = ({
         <>
           <div className="flex flex-col sm:flex-row gap-2">
             <input value={block.imageUrl || ''} onChange={(e) => updateBlock(index, { imageUrl: e.target.value })} placeholder="Image URL or upload" className="flex-1 border-2 border-black p-2 font-mono text-xs" />
-            <MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url) => updateBlock(index, { imageUrl: url })} />
+            <MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact cropAspect="free" cropShape="rect" outputWidth={1600} onUploaded={(url) => updateBlock(index, { imageUrl: url })} />
           </div>
           {block.imageUrl && /^https?:\/\//i.test(block.imageUrl) && <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-56 object-contain border-2 border-black bg-white" loading="lazy" />}
           <input value={block.imageAlt || ''} onChange={(e) => updateBlock(index, { imageAlt: e.target.value })} placeholder="Alt text" className="w-full border-2 border-black p-2 font-mono text-xs" />
@@ -376,7 +376,7 @@ export const PublicBlogComposer: React.FC<Props> = ({
             <div className="lg:col-span-1 space-y-2">
               <div className="flex flex-col sm:flex-row gap-2">
                 <input value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="Cover image URL" className="flex-1 border-2 border-black p-3" />
-                <MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact onUploaded={(url) => setCoverImage(url)} />
+                <MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact cropAspect="16:9" cropShape="rect" outputWidth={1600} outputHeight={900} onUploaded={(url) => setCoverImage(url)} />
               </div>
               {coverImage && /^https?:\/\//i.test(coverImage) && <img src={coverImage} alt={coverImageAlt || 'Cover preview'} className="w-full h-40 object-cover border-2 border-black" loading="lazy" />}
             </div>
