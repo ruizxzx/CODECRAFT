@@ -259,6 +259,7 @@ export interface BentoLink {
   title: string;
   url: string;
   icon: string;
+  imageUrl?: string;
   isFeatured: boolean;
   color: string;
   order: number;

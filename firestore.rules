@@ -484,6 +484,11 @@ service cloud.firestore {
       allow delete: if hasModeratorPermission('manageReports');
     }
 
+    match /changelogEntries/{entryId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
     match /siteProblemReports/{reportId} {
       allow create: if isSignedIn()
         && incoming().reporterId == request.auth.uid
@@ -539,6 +544,12 @@ service cloud.firestore {
 
     match /users/{userId}/drafts/{draftId} {
       allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Per-user announcement seen/dismissed state. Only ever contains seenAt/dismissedAt
+    // server timestamps, written via merge from markAnnouncementSeen/dismissAnnouncementForUser.
+    match /users/{userId}/announcementState/{announcementId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
 
 

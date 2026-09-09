@@ -84,13 +84,13 @@ export async function getCommunities():Promise<SocialCommunity[]> {
 
 export async function getCommunity(communityId:string):Promise<SocialCommunity|null>{ const s=await getDoc(doc(db,'communities',communityId)); return s.exists()?map(s) as SocialCommunity:null; }
 
-export async function createCommunity(user:CommunityUser,name:string,description:string,rules:string[]=[]):Promise<SocialCommunity>{
+export async function createCommunity(user:CommunityUser,name:string,description:string,rules:string[]=[],media:{iconUrl?:string;bannerUrl?:string}={}):Promise<SocialCommunity>{
   const clean=name.trim().slice(0,60); if(!clean) throw new Error('Community name is required');
   const base=clean.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,50)||'community';
   let slug=base; let n=2;
   while(!(await getDocs(query(collection(db,'communities'),where('slug','==',slug),limit(1)))).empty) slug=`${base}-${n++}`;
   const cid=id();
-  const data={name:clean,slug,description:description.trim().slice(0,1000),rules:rules.map(x=>x.trim()).filter(Boolean).slice(0,20),membersCount:1,postsCount:0,ownerId:user.uid,ownerUsername:user.username,ownerName:user.displayName,ownerAvatar:user.photoURL||'',isPrivate:false,isArchived:false,isLocked:false,allowLinks:true,allowMedia:true,defaultPostType:'discussion',createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+  const data={name:clean,slug,description:description.trim().slice(0,1000),rules:rules.map(x=>x.trim()).filter(Boolean).slice(0,20),membersCount:1,postsCount:0,ownerId:user.uid,ownerUsername:user.username,ownerName:user.displayName,ownerAvatar:user.photoURL||'',iconUrl:media.iconUrl||'',bannerUrl:media.bannerUrl||'',isPrivate:false,isArchived:false,isLocked:false,allowLinks:true,allowMedia:true,defaultPostType:'discussion',createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
   const b=writeBatch(db); b.set(doc(db,'communities',cid),data); b.set(doc(db,'communities',cid,'members',user.uid),{uid:user.uid,username:user.username,role:'owner',createdAt:serverTimestamp(),updatedAt:serverTimestamp()}); await b.commit();
   return {...data,id:cid,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as SocialCommunity;
 }

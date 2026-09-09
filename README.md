@@ -258,8 +258,14 @@ Allow your production site origin and `PUT`, `GET`, `HEAD` methods with the `Con
 Images 10 MB, videos 250 MB, PDFs 25 MB by default. These are server-side limits and can be changed with environment variables.
 
 
-## V75.7 — Site-wide media uploads
+## V75.8 — Media-rich community, discovery & links
 
 The shared `MediaUploadButton` now supports single or multiple files and is wired through the main media-bearing surfaces: public blogs, community posting, profile/cover editors, creator pages, series covers, carousel slides, Master User Control, global branding and the Master Admin Media Center.
 
 The Media Center supports site assets, article media, carousel media, videos and PDF attachments. Uploads still use authenticated Firebase ID tokens to create short-lived Cloudflare R2 presigned PUT URLs; the browser uploads directly to R2. `site` is a Master-only destination and is stored under `site/assets`.
+
+## V75.8 — Media-rich community, discovery & links
+Community creators can upload a logo/icon and banner when creating a community, and existing community managers can continue updating both. Home personalization cards now render article covers. The Links/Bento admin builder accepts an uploaded logo/image per link; public link cards render that image when available and otherwise retain the configured solid color.
+
+## V75.8 — Media-rich community, discovery & links
+Community creators can upload a logo/icon and banner when creating a community, and existing community managers can continue updating both. Home personalization cards now render article covers. The Links/Bento admin builder accepts an uploaded logo/image per link; public link cards render that image when available and otherwise retain the configured solid color.

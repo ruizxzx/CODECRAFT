@@ -800,6 +800,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [bentoIcon, setBentoIcon] = useState('link');
   const [bentoColor, setBentoColor] = useState('#ffffff');
   const [bentoIsFeatured, setBentoIsFeatured] = useState(false);
+  const [bentoImageUrl, setBentoImageUrl] = useState('');
   const [isSavingBento, setIsSavingBento] = useState(false);
 
   const handleAddBentoLink = async (e: React.FormEvent) => {
@@ -814,6 +815,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       icon: bentoIcon,
       color: bentoColor,
       isFeatured: bentoIsFeatured,
+      imageUrl: bentoImageUrl.trim() || undefined,
       order: bentoLinks.length > 0 ? Math.max(...bentoLinks.map(l => l.order)) + 1 : 1
     };
     
@@ -826,6 +828,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
       setBentoIcon('link');
       setBentoColor('#ffffff');
       setBentoIsFeatured(false);
+      setBentoImageUrl('');
     } catch (err: any) {
       console.error("Failed to save bento link:", err);
       notifyToast("Failed to save link: " + (err.message || "Permission denied"));
@@ -1304,7 +1307,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       </div>
                       {logoImageUrl && /^https?:\/\//i.test(logoImageUrl) && <img src={logoImageUrl} alt="Logo preview" className="h-16 max-w-[280px] object-contain border-2 border-black bg-white p-2" />}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
                         <label className="font-mono text-xs font-bold uppercase text-black">Logo Part 1</label>
                         <input type="text" value={logoPart1} onChange={(e) => setLogoPart1(e.target.value)} className="w-full px-3 py-2 border-2 border-black font-bold focus:outline-none" />
@@ -2139,6 +2142,16 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                     />
                   </div>
 
+                  <div className="border-2 border-black p-3 bg-white space-y-2">
+                    <label className="font-mono text-xs font-bold uppercase">Logo / Image</label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input type="url" value={bentoImageUrl} onChange={e=>setBentoImageUrl(e.target.value)} placeholder="https://... or upload" className="flex-1 px-3 py-2 border-2 border-black font-mono focus:outline-none text-xs" />
+                      <MediaUploadButton folder="site" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD LOGO" compact onUploaded={url=>setBentoImageUrl(url)} />
+                    </div>
+                    {bentoImageUrl && <img src={bentoImageUrl} alt="Link logo preview" className="w-20 h-20 object-contain border-2 border-black bg-white" />}
+                    <p className="font-mono text-[9px] text-neutral-500 uppercase">Leave empty to keep the card as a solid color block.</p>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className="font-mono text-xs font-bold uppercase">Icon</label>
@@ -2182,7 +2195,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                   {[...bentoLinks].sort((a, b) => a.order - b.order).map((link, index, arr) => (
                     <div key={link.id} className="flex items-center justify-between p-3 border-2 border-black bg-white neo-shadow-sm">
                       <div className="flex items-center space-x-3 overflow-hidden">
-                        <div className="w-4 h-4 rounded-full border border-black flex-shrink-0" style={{ backgroundColor: link.color }} />
+                        <div className="w-12 h-12 border-2 border-black bg-white flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ backgroundColor: link.imageUrl ? '#ffffff' : link.color }}>
+                          {link.imageUrl ? <img src={link.imageUrl} alt="" className="w-full h-full object-contain" /> : null}
+                        </div>
                         <div className="flex-1 truncate">
                           <div className="font-bold text-sm truncate flex items-center space-x-2">
                             <span>{link.title}</span>

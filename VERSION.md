@@ -1,11 +1,10 @@
-# OFFSCRPT V75.7
+# OFFSCRPT V75.8
 
-Site-wide Cloudflare R2 media upload expansion.
+Community branding + media-rich discovery + link media builder.
 
-- Added a Master Admin Media Center with destination folders and multi-file uploads.
-- Added upload support across creator publishing, community posting, series editing, creator pages, carousel management, site branding and Master User Control.
-- Added image previews and video previews after selection in major media fields.
-- Added multiple-file upload support to the shared media uploader.
-- Added `site` media storage for Master Admin site assets.
-- Added admin-targeted profile uploads so Master Control stores another user's avatar/cover under the target user's media path.
-- Kept Firestore as the application database; media binaries remain in Cloudflare R2 and URLs are stored with content.
+- Community creators can upload icon/logo and banner during creation and management.
+- Community cards and headers render uploaded branding.
+- Personalized home sections now render article covers with improved card layout and no-cover fallback.
+- Admin Links/Bento builder supports uploaded logos/images per link plus color fallback.
+- Public `/links` cards show uploaded logo media when present and use the configured solid color when absent.
+- Firestore remains the source of truth for metadata; media continues to use Cloudflare R2.

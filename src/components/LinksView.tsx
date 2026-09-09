@@ -74,9 +74,7 @@ export const LinksView: React.FC<LinksViewProps> = ({ links, siteConfig }) => {
               style={{ backgroundColor: link.color || '#ffffff' }}
             >
               <div className={`h-full flex ${link.isFeatured ? 'flex-col justify-between' : 'flex-col md:flex-row items-center justify-center md:justify-start space-y-3 md:space-y-0 md:space-x-6'}`}>
-                <div className="text-black transform transition-transform group-hover:scale-110 duration-200">
-                  {getIcon(link.icon)}
-                </div>
+                {link.imageUrl ? <div className={`border-2 border-black bg-white flex items-center justify-center overflow-hidden ${link.isFeatured ? 'w-28 h-28 md:w-40 md:h-40' : 'w-20 h-20 md:w-24 md:h-24'}`}><img src={link.imageUrl} alt={link.title} className="w-full h-full object-contain" /></div> : <div className={link.isFeatured ? 'h-8' : 'h-4'} />}
                 <div className={`${link.isFeatured ? 'mt-4' : 'text-center md:text-left'}`}>
                   <h3 className={`font-display font-black uppercase text-black leading-tight ${link.isFeatured ? 'text-2xl md:text-4xl' : 'text-base md:text-xl'}`}>
                     {link.title}
