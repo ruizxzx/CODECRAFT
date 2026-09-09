@@ -40,7 +40,8 @@ import {
   Eye,
   GitCompare,
   Clock3,
-  CheckCircle2
+  CheckCircle2,
+  UploadCloud
 } from 'lucide-react';
 import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
 import { resolveMasterAccess } from '../lib/masterControl';
@@ -160,7 +161,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
   const panelScrollClass = pageMode ? 'overflow-y-auto' : 'max-h-[70vh] overflow-y-auto';
 
-  const [activeTab, setActiveTab] = useState<'settings' | 'create' | 'manage' | 'links' | 'carousel' | 'social' | 'control' | 'series'>('settings');
+  const [activeTab, setActiveTab] = useState<'settings' | 'create' | 'manage' | 'links' | 'carousel' | 'social' | 'control' | 'series' | 'media'>('settings');
 
   // Carousel State
   const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([]);
@@ -189,6 +190,10 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [editSlideShowDots, setEditSlideShowDots] = useState(true);
   const [editSlideElements, setEditSlideElements] = useState<CarouselElement[]>([]);
   const [isSavingSlide, setIsSavingSlide] = useState(false);
+
+  // Site-wide media center
+  const [mediaFolder, setMediaFolder] = useState<'site' | 'articles' | 'carousel' | 'videos' | 'attachments'>('site');
+  const [recentMedia, setRecentMedia] = useState<Array<{url:string;kind:'image'|'video'|'file';size:number;objectKey:string;uploadedAt:number}>>([]);
 
   // Deletion & Message States (No window.alert or window.confirm which fail in iframes)
   const [deletingSlideId, setDeletingSlideId] = useState<string | null>(null);
@@ -1238,6 +1243,16 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                 <span className="hidden sm:inline">CAROUSEL</span>
               </button>}
 
+              {!isModerator && <button
+                onClick={() => setActiveTab('media')}
+                className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
+                  activeTab === 'media' ? 'bg-[var(--color-primary)] text-black' : 'hover:bg-neutral-100'
+                }`}
+              >
+                <UploadCloud className="w-4 h-4" />
+                <span className="hidden sm:inline">MEDIA</span>
+              </button>}
+
               <button
                 onClick={() => setActiveTab('social')}
                 className={`py-3 px-2 flex flex-col items-center justify-center space-y-1 sm:flex-row sm:space-y-0 sm:space-x-1.5 transition-colors ${
@@ -1281,15 +1296,13 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                   {/* BRANDING SECTION */}
                   <div className="space-y-4">
                     <h4 className="font-display font-black text-lg uppercase border-b-2 border-black pb-1">Branding</h4>
-                    <div className="space-y-1">
-                      <label className="font-mono text-xs font-bold uppercase text-black">Logo Image URL (Optional)</label>
-                      <input 
-                        type="text" 
-                        value={logoImageUrl} 
-                        onChange={(e) => setLogoImageUrl(e.target.value)} 
-                        className="w-full px-3 py-2 border-2 border-black font-mono text-xs focus:outline-none" 
-                        placeholder="https://..." 
-                      />
+                    <div className="space-y-2">
+                      <label className="font-mono text-xs font-bold uppercase text-black">Logo Image (Optional)</label>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input type="text" value={logoImageUrl} onChange={(e) => setLogoImageUrl(e.target.value)} className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs focus:outline-none" placeholder="https://... or upload" />
+                        <MediaUploadButton folder="profile" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD LOGO" compact onUploaded={(url) => setLogoImageUrl(url)} />
+                      </div>
+                      {logoImageUrl && /^https?:\/\//i.test(logoImageUrl) && <img src={logoImageUrl} alt="Logo preview" className="h-16 max-w-[280px] object-contain border-2 border-black bg-white p-2" />}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-1">
@@ -2210,6 +2223,45 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
             )}
 
             {/* TAB: SOCIAL MODERATION */}
+            {activeTab === 'media' && !isModerator && (
+              <div className={`p-6 ${panelScrollClass} space-y-5`}>
+                <div className="border-4 border-black bg-black text-white p-5">
+                  <div className="font-display font-black text-2xl uppercase">OFFSCRPT MEDIA CENTER</div>
+                  <p className="font-mono text-[10px] text-neutral-300 mt-1">Upload site-wide images, videos and PDFs directly to Cloudflare R2. Only the final public URL is stored with your Firestore content.</p>
+                </div>
+                <div className="border-2 border-black p-4 space-y-4 bg-white">
+                  <div className="grid md:grid-cols-[1fr_auto] gap-3 items-end">
+                    <label className="font-mono text-[10px] font-black uppercase">Upload destination
+                      <select value={mediaFolder} onChange={e=>setMediaFolder(e.target.value as typeof mediaFolder)} className="w-full mt-1 border-2 border-black p-3 bg-white font-mono text-xs">
+                        <option value="site">SITE ASSETS</option>
+                        <option value="articles">ARTICLE MEDIA</option>
+                        <option value="carousel">CAROUSEL MEDIA</option>
+                        <option value="videos">VIDEOS</option>
+                        <option value="attachments">PDF ATTACHMENTS</option>
+                      </select>
+                    </label>
+                    <div className="font-mono text-[9px] text-neutral-500 uppercase">Production R2 storage · authenticated upload</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <MediaUploadButton folder={mediaFolder} accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGES" multiple onUploaded={(url,meta)=>setRecentMedia(items=>[{url,kind:meta.kind,size:meta.size,objectKey:meta.objectKey,uploadedAt:Date.now()},...items].slice(0,50))} />
+                    <MediaUploadButton folder={mediaFolder} accept="video/mp4,video/webm,video/quicktime" label="UPLOAD VIDEOS" multiple onUploaded={(url,meta)=>setRecentMedia(items=>[{url,kind:meta.kind,size:meta.size,objectKey:meta.objectKey,uploadedAt:Date.now()},...items].slice(0,50))} />
+                    <MediaUploadButton folder="attachments" accept="application/pdf" label="UPLOAD PDF" multiple onUploaded={(url,meta)=>setRecentMedia(items=>[{url,kind:meta.kind,size:meta.size,objectKey:meta.objectKey,uploadedAt:Date.now()},...items].slice(0,50))} />
+                  </div>
+                  <div className="border-t-2 border-black pt-3">
+                    <div className="font-mono text-[9px] font-black uppercase mb-2">Recent uploads · this session</div>
+                    <div className="space-y-2">
+                      {recentMedia.map((item,i)=><div key={`${item.objectKey}-${i}`} className="border-2 border-black p-2 flex flex-col sm:flex-row gap-2 sm:items-center">
+                        <div className="w-24 h-16 border border-black bg-neutral-100 shrink-0 overflow-hidden">{item.kind==='video'?<video src={item.url} className="w-full h-full object-cover" muted preload="metadata"/>:item.kind==='image'?<img src={item.url} alt="Uploaded media" className="w-full h-full object-cover" loading="lazy"/>:<div className="w-full h-full grid place-items-center font-mono text-[10px]">PDF</div>}</div>
+                        <div className="flex-1 min-w-0"><div className="font-mono text-[9px] uppercase">{item.kind} · {(item.size/1024/1024).toFixed(2)} MB</div><div className="font-mono text-[9px] break-all mt-1">{item.url}</div></div>
+                        <button type="button" onClick={()=>void navigator.clipboard?.writeText(item.url)} className="border-2 border-black bg-white px-3 py-2 font-mono text-[9px] font-black">COPY URL</button>
+                      </div>)}
+                      {!recentMedia.length && <div className="border-2 border-dashed border-black p-8 text-center font-mono text-xs">NO UPLOADS IN THIS SESSION.</div>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'social' && (isModerator ? <div className="p-6"><div className="border-4 border-black bg-black text-white p-5 font-mono text-xs">SITE MODERATOR MODE — USE MASTER CONTROL FOR MODERATION. MASTER-ONLY SETTINGS ARE HIDDEN.</div><AdminControlPanel isModerator /></div> : <SocialAdminPanel />)}
 
             {/* TAB: MASTER CONTROL */}
@@ -2223,7 +2275,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                   <h3 className="font-display font-black uppercase">CREATE SERIES</h3>
                   <div className="grid md:grid-cols-2 gap-2"><input required value={seriesTitleInput} onChange={e=>setSeriesTitleInput(e.target.value)} placeholder="Series title" className="border-2 border-black p-3"/><input value={seriesSlugInput} onChange={e=>setSeriesSlugInput(e.target.value)} placeholder="Slug (optional)" className="border-2 border-black p-3 font-mono text-xs"/></div>
                   <textarea value={seriesDescInput} onChange={e=>setSeriesDescInput(e.target.value)} placeholder="What is this series about?" rows={3} className="w-full border-2 border-black p-3"/>
-                  <input value={seriesCoverInput} onChange={e=>setSeriesCoverInput(e.target.value)} placeholder="Cover image URL (optional)" className="w-full border-2 border-black p-3 font-mono text-xs"/>
+                  <div className="flex flex-col sm:flex-row gap-2"><input value={seriesCoverInput} onChange={e=>setSeriesCoverInput(e.target.value)} placeholder="Cover image URL or upload" className="flex-1 border-2 border-black p-3 font-mono text-xs"/><MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact onUploaded={(url)=>setSeriesCoverInput(url)} /></div>
                   <button disabled={seriesBusy} className="border-2 border-black bg-black text-white px-4 py-2 font-mono text-xs font-black uppercase">{seriesBusy?'CREATING…':'CREATE SERIES'}</button>
                 </form>
                 <div className="space-y-3">{seriesList.map(item=><div key={item.id} className="border-4 border-black bg-white p-4 flex flex-wrap items-center gap-3"><div className="flex-1 min-w-[220px]"><div className="font-mono text-[10px]">{articles.filter(a=>a.seriesId===item.id || a.seriesId===item.slug).length || item.articleCount || 0} PARTS · /series/{item.id}</div><h3 className="font-display font-black text-xl uppercase">{item.title}</h3><p className="text-sm">{item.description}</p></div><button onClick={async()=>{try{await deleteSeries(item.id);setSeriesList(x=>x.filter(y=>y.id!==item.id))}catch(e:any){notifyToast(e?.message||'Could not delete series.')}}} className="border-2 border-black bg-red-100 px-3 py-2 font-mono text-[10px]">DELETE</button></div>)}</div>
@@ -2310,7 +2362,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         {newSlideMode === 'image' && <div>
                           <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Image URL</label>
                           <div className="flex flex-col sm:flex-row gap-2">
-                            <input type="url" value={newSlideImageUrl} onChange={(e) => setNewSlideImageUrl(e.target.value)} placeholder="https://..." className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm" />
+                            <input type="url" value={newSlideImageUrl} onChange={(e) => setNewSlideImageUrl(e.target.value)} placeholder="https://... or upload" className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm" /><MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url)=>setNewSlideImageUrl(url)} />
                             <MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url) => setNewSlideImageUrl(url)} />
                           </div>
                         </div>}
@@ -2451,7 +2503,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                     {editSlideMode === 'image' && <div>
                                       <label className="font-mono text-xs font-bold uppercase block mb-1">Image URL</label>
                                       <div className="flex gap-2">
-                                        <input type="url" value={editSlideImageUrl} onChange={(e) => setEditSlideImageUrl(e.target.value)} placeholder="https://..." className="flex-1 px-3 py-2 border-2 border-black font-sans text-sm" />
+                                        <input type="url" value={editSlideImageUrl} onChange={(e) => setEditSlideImageUrl(e.target.value)} placeholder="https://... or upload" className="flex-1 px-3 py-2 border-2 border-black font-sans text-sm" /><MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url)=>setEditSlideImageUrl(url)} />
                                       </div>
                                     </div>}
                                     <div>

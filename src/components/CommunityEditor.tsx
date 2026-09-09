@@ -4,6 +4,7 @@ import { createPost, getCommunityDraft, saveCommunityDraft, clearCommunityDraft 
 import { X, Send, Loader2, BookOpen, MessageSquare, AtSign, Info, WifiOff } from 'lucide-react';
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { MentionTextarea } from './MentionAutocomplete';
+import { MediaUploadButton } from './MediaUploadButton';
 
 interface CommunityEditorProps {
   profile: CommunityUser;
@@ -202,19 +203,24 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
           )}
 
           {/* Media URLs */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="font-mono text-xs font-bold uppercase">Media / Image URLs</label>
-              <span className="font-mono text-[11px] text-neutral-500">Up to 6 · one URL per line</span>
+          <div className="space-y-2 border-2 border-black bg-neutral-50 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <label className="font-mono text-xs font-bold uppercase">Media attachments</label>
+              <span className="font-mono text-[11px] text-neutral-500">Up to 6 URLs · one per line</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <MediaUploadButton folder="posts" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact multiple onUploaded={(url) => setMediaInput(v => v ? `${v}\n${url}` : url)} />
+              <MediaUploadButton folder="videos" accept="video/mp4,video/webm,video/quicktime" label="UPLOAD VIDEO" compact multiple onUploaded={(url) => setMediaInput(v => v ? `${v}\n${url}` : url)} />
+              <MediaUploadButton folder="attachments" accept="application/pdf" label="UPLOAD PDF" compact multiple onUploaded={(url) => setMediaInput(v => v ? `${v}\n${url}` : url)} />
             </div>
             <textarea
               value={mediaInput}
               onChange={(e) => setMediaInput(e.target.value)}
-              placeholder="https://example.com/image.jpg
-https://example.com/diagram.png"
+              placeholder="Paste URLs or upload files. One media URL per line."
               className="w-full px-4 py-3 border-2 border-black font-mono text-xs min-h-[100px] focus:outline-none focus:bg-neutral-50"
             />
-            <p className="font-mono text-[10px] text-neutral-500">External image URLs only. OFFSCRPT does not upload files to Firebase Storage.</p>
+            <div className="grid sm:grid-cols-2 gap-2">{mediaInput.split('\n').map(v=>v.trim()).filter(Boolean).map((url,i)=>{const isVideo=/\.(mp4|webm|mov)(\?|$)/i.test(url);return /^https?:\/\//i.test(url)?(isVideo?<video key={i} src={url} controls preload="metadata" className="w-full h-40 object-contain border-2 border-black bg-black"/>:<img key={i} src={url} alt="Media preview" className="w-full h-40 object-contain border-2 border-black bg-white" loading="lazy"/>):null;})}</div>
+            <p className="font-mono text-[10px] text-neutral-500">Uploads go directly to OFFSCRPT media storage through the authenticated R2 upload flow. Firestore stores only the resulting URLs with the post.</p>
           </div>
 
           {/* Action Buttons */}

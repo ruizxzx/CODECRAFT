@@ -5,6 +5,7 @@ import { createPost, updatePost, getPost, saveCommunityDraft, clearCommunityDraf
 import { createCommunityPost, updateCommunityPost, SocialCommunity } from '../lib/social';
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { Plus, Trash2, ArrowUp, ArrowDown, BookOpen, Image as ImageIcon, Video, Code2, Quote, Lightbulb, List, CheckCircle2, Eye, Save, Link2, MousePointer2 } from 'lucide-react';
+import { MediaUploadButton } from './MediaUploadButton';
 
 type Props = {
   userProfile: CommunityUser;
@@ -287,14 +288,22 @@ export const PublicBlogComposer: React.FC<Props> = ({
 
       {block.type === 'image' ? (
         <>
-          <input value={block.imageUrl || ''} onChange={(e) => updateBlock(index, { imageUrl: e.target.value })} placeholder="Image URL" className="w-full border-2 border-black p-2 font-mono text-xs" />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input value={block.imageUrl || ''} onChange={(e) => updateBlock(index, { imageUrl: e.target.value })} placeholder="Image URL or upload" className="flex-1 border-2 border-black p-2 font-mono text-xs" />
+            <MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url) => updateBlock(index, { imageUrl: url })} />
+          </div>
+          {block.imageUrl && /^https?:\/\//i.test(block.imageUrl) && <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-56 object-contain border-2 border-black bg-white" loading="lazy" />}
           <input value={block.imageAlt || ''} onChange={(e) => updateBlock(index, { imageAlt: e.target.value })} placeholder="Alt text" className="w-full border-2 border-black p-2 font-mono text-xs" />
           <input value={block.imageCaption || ''} onChange={(e) => updateBlock(index, { imageCaption: e.target.value })} placeholder="Caption" className="w-full border-2 border-black p-2 font-mono text-xs" />
           <input value={block.imageHref || ''} onChange={(e) => updateBlock(index, { imageHref: e.target.value })} placeholder="Optional image click-through URL" className="w-full border-2 border-black p-2 font-mono text-xs" />
         </>
       ) : block.type === 'video' ? (
         <>
-          <input type="url" value={block.videoUrl || ''} onChange={(e) => updateBlock(index, { videoUrl: e.target.value })} placeholder="YouTube / Vimeo / direct .mp4 / .webm URL" className="w-full border-2 border-black p-2 font-mono text-xs" />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input type="url" value={block.videoUrl || ''} onChange={(e) => updateBlock(index, { videoUrl: e.target.value })} placeholder="YouTube / Vimeo / direct .mp4 / .webm URL" className="flex-1 border-2 border-black p-2 font-mono text-xs" />
+            <MediaUploadButton folder="videos" accept="video/mp4,video/webm,video/quicktime" label="UPLOAD VIDEO" compact onUploaded={(url) => updateBlock(index, { videoUrl: url })} />
+          </div>
+          {block.videoUrl && /^https?:\/\//i.test(block.videoUrl) && <video src={block.videoUrl} controls preload="metadata" className="w-full max-h-56 border-2 border-black bg-black" />}
           <input value={block.videoTitle || ''} onChange={(e) => updateBlock(index, { videoTitle: e.target.value })} placeholder="Accessible video title" className="w-full border-2 border-black p-2 font-mono text-xs" />
           <input value={block.videoCaption || ''} onChange={(e) => updateBlock(index, { videoCaption: e.target.value })} placeholder="Caption (optional)" className="w-full border-2 border-black p-2 font-mono text-xs" />
         </>
@@ -364,7 +373,13 @@ export const PublicBlogComposer: React.FC<Props> = ({
           </div>
 
           <div className="grid lg:grid-cols-2 gap-3">
-            <input value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="Cover image URL" className="border-2 border-black p-3" />
+            <div className="lg:col-span-1 space-y-2">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input value={coverImage} onChange={(e) => setCoverImage(e.target.value)} placeholder="Cover image URL" className="flex-1 border-2 border-black p-3" />
+                <MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact onUploaded={(url) => setCoverImage(url)} />
+              </div>
+              {coverImage && /^https?:\/\//i.test(coverImage) && <img src={coverImage} alt={coverImageAlt || 'Cover preview'} className="w-full h-40 object-cover border-2 border-black" loading="lazy" />}
+            </div>
             <input value={coverImageAlt} onChange={(e) => setCoverImageAlt(e.target.value)} placeholder="Cover image alt" className="border-2 border-black p-3" />
             <input value={coverImageCaption} onChange={(e) => setCoverImageCaption(e.target.value)} placeholder="Cover caption" className="border-2 border-black p-3 lg:col-span-2" />
           </div>

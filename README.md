@@ -256,3 +256,10 @@ Allow your production site origin and `PUT`, `GET`, `HEAD` methods with the `Con
 
 ### Limits
 Images 10 MB, videos 250 MB, PDFs 25 MB by default. These are server-side limits and can be changed with environment variables.
+
+
+## V75.7 — Site-wide media uploads
+
+The shared `MediaUploadButton` now supports single or multiple files and is wired through the main media-bearing surfaces: public blogs, community posting, profile/cover editors, creator pages, series covers, carousel slides, Master User Control, global branding and the Master Admin Media Center.
+
+The Media Center supports site assets, article media, carousel media, videos and PDF attachments. Uploads still use authenticated Firebase ID tokens to create short-lived Cloudflare R2 presigned PUT URLs; the browser uploads directly to R2. `site` is a Master-only destination and is stored under `site/assets`.

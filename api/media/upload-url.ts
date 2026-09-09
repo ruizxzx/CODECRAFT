@@ -105,6 +105,7 @@ export default async function handler(req: any, res: any) {
     const contentType = String(body.contentType || '').toLowerCase();
     const size = Number(body.size || 0);
     const requestedFolder = String(body.folder || 'users').toLowerCase();
+    const targetUid = String(body.targetUid || '').trim();
 
     if (!contentType || !Number.isFinite(size) || size <= 0) return res.status(400).json({ error: 'A valid file type and size are required.' });
     const kind = contentType.startsWith('image/') ? 'image' : contentType.startsWith('video/') ? 'video' : 'file';
@@ -125,12 +126,13 @@ export default async function handler(req: any, res: any) {
     }
 
     const isAdmin = ADMIN_EMAILS.has(user.email);
-    const folder = ['profile', 'articles', 'posts', 'videos', 'attachments', 'carousel'].includes(requestedFolder) ? requestedFolder : 'users';
-    if ((folder === 'articles' || folder === 'carousel') && !isAdmin) return res.status(403).json({ error: 'Only authorized administrators can upload site-wide media.' });
+    const folder = ['profile', 'articles', 'posts', 'videos', 'attachments', 'carousel', 'site'].includes(requestedFolder) ? requestedFolder : 'users';
+    if ((folder === 'articles' || folder === 'carousel' || folder === 'site') && !isAdmin) return res.status(403).json({ error: 'Only authorized administrators can upload site-wide media.' });
 
     const ext = fileName.includes('.') ? fileName.split('.').pop() : (contentType.split('/')[1] || 'bin');
     const random = cryptoRandom(18);
-    const prefix = isAdmin && (folder === 'articles' || folder === 'carousel') ? `site/${folder}` : `users/${user.uid}/${folder}`;
+    const targetPathUid = isAdmin && targetUid && /^[A-Za-z0-9_-]{1,180}$/.test(targetUid) && folder === 'profile' ? targetUid : user.uid;
+    const prefix = isAdmin && (folder === 'articles' || folder === 'carousel' || folder === 'site') ? `site/${folder === 'site' ? 'assets' : folder}` : `users/${targetPathUid}/${folder}`;
     const key = `${prefix}/${Date.now()}-${random}-${fileName.replace(/\.[^.]+$/, '')}.${ext}`;
     const uploadUrl = signPresignedPut({ endpoint, accessKey, secretKey, bucket, key, expiresIn: 900, region: 'auto' });
     const publicUrl = `${publicBaseUrl}/${key.split('/').map(encodeURIComponent).join('/')}`;

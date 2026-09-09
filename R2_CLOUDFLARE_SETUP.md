@@ -58,3 +58,7 @@ This release does not remove Firebase Storage rules or migrate existing Firebase
 ## V75.6.1 authentication fix
 
 The upload API verifies Firebase ID tokens with Firebase Authentication's `accounts:lookup` endpoint. It does not use Google's generic OAuth `tokeninfo` endpoint, because Firebase ID tokens are a distinct token type.
+
+## V75.7 site-wide media center
+
+Master Control now includes a MEDIA tab with site-wide multi-file upload. Master-only folders include `site`, `articles`, and `carousel`; user-scoped upload folders include `profile`, `posts`, `videos`, and `attachments`. The `site` destination is written to `site/assets/...` in the R2 bucket.

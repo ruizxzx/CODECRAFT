@@ -22,7 +22,7 @@ const allowedTypes = new Set([
   'application/pdf',
 ]);
 
-export async function uploadMedia(file: File, folder: 'profile' | 'articles' | 'posts' | 'videos' | 'attachments' | 'carousel' | 'users', onProgress?: (progress: number) => void): Promise<MediaUploadResult> {
+export async function uploadMedia(file: File, folder: 'profile' | 'articles' | 'posts' | 'videos' | 'attachments' | 'carousel' | 'users' | 'site', onProgress?: (progress: number) => void, options?: { targetUid?: string }): Promise<MediaUploadResult> {
   const user = auth.currentUser;
   if (!user) throw new Error('Sign in before uploading media.');
   if (!allowedTypes.has(file.type)) throw new Error('Unsupported media format.');
@@ -34,7 +34,7 @@ export async function uploadMedia(file: File, folder: 'profile' | 'articles' | '
   const response = await fetch('/api/media/upload-url', {
     method: 'POST',
     headers: { Authorization: `Bearer ${idToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileName: file.name, contentType: file.type, size: file.size, folder }),
+    body: JSON.stringify({ fileName: file.name, contentType: file.type, size: file.size, folder, targetUid: options?.targetUid }),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data?.error || 'Could not prepare media upload.');

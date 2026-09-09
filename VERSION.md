@@ -1,7 +1,11 @@
-# OFFSCRPT V75.6.1
+# OFFSCRPT V75.7
 
-R2 media upload authentication hotfix.
+Site-wide Cloudflare R2 media upload expansion.
 
-- Correctly validates Firebase ID tokens with Firebase Auth `accounts:lookup` instead of Google OAuth `tokeninfo`.
-- Accepts both the canonical R2 environment names and the earlier Vercel aliases for a smoother upgrade.
-- Keeps R2 credentials server-side and uses short-lived presigned uploads.
+- Added a Master Admin Media Center with destination folders and multi-file uploads.
+- Added upload support across creator publishing, community posting, series editing, creator pages, carousel management, site branding and Master User Control.
+- Added image previews and video previews after selection in major media fields.
+- Added multiple-file upload support to the shared media uploader.
+- Added `site` media storage for Master Admin site assets.
+- Added admin-targeted profile uploads so Master Control stores another user's avatar/cover under the target user's media path.
+- Kept Firestore as the application database; media binaries remain in Cloudflare R2 and URLs are stored with content.
