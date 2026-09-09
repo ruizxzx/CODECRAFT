@@ -29,9 +29,16 @@ export function subscribeSeriesList(callback: (series: Series[]) => void): () =>
 export async function toggleSeriesFollow(seriesId: string, userId: string): Promise<boolean> {
   if (!auth.currentUser || auth.currentUser.uid !== userId) throw new Error('Sign in required.');
   const ref = doc(db, 'series', seriesId, 'followers', userId);
+  const userRef = doc(db, 'users', userId, 'followedSeries', seriesId);
   const existing = await getDoc(ref);
-  if (existing.exists()) { await deleteDoc(ref); return false; }
-  await setDoc(ref, { userId, createdAt: serverTimestamp() });
+  if (existing.exists()) {
+    await Promise.all([deleteDoc(ref), deleteDoc(userRef)]);
+    return false;
+  }
+  await Promise.all([
+    setDoc(ref, { userId, createdAt: serverTimestamp() }),
+    setDoc(userRef, { seriesId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }),
+  ]);
   return true;
 }
 

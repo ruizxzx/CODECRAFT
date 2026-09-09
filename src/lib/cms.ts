@@ -682,10 +682,19 @@ export async function getArticleViewCount(slug:string):Promise<number>{
 export const ARTICLE_REACTIONS = ['like','useful','insightful','interesting'] as const;
 export type ArticleReaction = typeof ARTICLE_REACTIONS[number];
 export async function setArticleReaction(slug:string,userId:string,reaction:ArticleReaction|null):Promise<void>{
-  if(!userId) throw new Error('Sign in required.');
+  if(!userId || !slug) throw new Error('Sign in required.');
   const ref=doc(db,'articles',slug,'reactions',userId);
-  if(reaction) await setDoc(ref,{userId,reaction,updatedAt:serverTimestamp()},{merge:true});
-  else { const old=await getDoc(ref); if(old.exists()) await deleteDoc(ref); }
+  const indexRef=doc(db,'users',userId,'reactionIndex',encodeURIComponent(slug).slice(0, 1500));
+  if(reaction){
+    await Promise.all([
+      setDoc(ref,{userId,reaction,updatedAt:serverTimestamp()},{merge:true}),
+      setDoc(indexRef,{itemId:slug,slug,articleSlug:slug,reaction,updatedAt:serverTimestamp()},{merge:true}),
+    ]);
+  } else {
+    const old=await getDoc(ref);
+    if(old.exists()) await deleteDoc(ref);
+    try { await deleteDoc(indexRef); } catch { /* best-effort cleanup for legacy accounts */ }
+  }
 }
 export async function getArticleReaction(slug:string,userId:string):Promise<ArticleReaction|null>{
   if(!userId) return null; const s=await getDoc(doc(db,'articles',slug,'reactions',userId)); return s.exists()?(s.data()?.reaction||null):null;

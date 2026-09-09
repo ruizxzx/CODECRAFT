@@ -196,6 +196,31 @@ service cloud.firestore {
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
 
+      match /followedSeries/{seriesId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn() && request.auth.uid == userId
+          && incoming().seriesId is string && incoming().seriesId.size() >= 1 && incoming().seriesId.size() <= 200
+          && incoming().createdAt is timestamp;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /searches/{searchId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId
+          && incoming().query is string && incoming().query.size() >= 2 && incoming().query.size() <= 120
+          && incoming().createdAt is timestamp;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
+      match /reactionIndex/{reactionId} {
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn() && request.auth.uid == userId
+          && incoming().itemId is string && incoming().itemId.size() >= 1 && incoming().itemId.size() <= 512
+          && incoming().reaction in ['like','useful','insightful','interesting']
+          && incoming().updatedAt is timestamp;
+        allow delete: if isSignedIn() && request.auth.uid == userId;
+      }
+
       match /saves/{saveId} {
         allow read: if isSignedIn() && request.auth.uid == userId;
         allow create, update: if isSignedIn()
