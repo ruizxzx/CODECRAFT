@@ -237,3 +237,20 @@ going forward.
 - Signed-in dismissal state is stored per account under `users/{uid}/announcementState/{announcementId}`; guests use browser-local state.
 - Published changelog entries are stored in `changelogEntries` and rendered publicly in realtime.
 - Master Admin can create, edit, delete and publish changelog entries from Master Control.
+
+
+## V75.6 — Cloudflare R2 media uploads
+
+OFFSCRPT now uses Cloudflare R2 for image/video/PDF binary uploads while Firestore remains the application database. Uploads are authorized through `/api/media/upload-url` using the signed-in Firebase user token; browsers receive a short-lived R2 presigned PUT URL and upload directly to R2. Firestore stores only public media URLs/object metadata.
+
+### Vercel environment variables
+Set these server-side variables in Vercel: `R2_ACCOUNT_ID`, `R2_BUCKET_NAME`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_S3_ENDPOINT`, `R2_PUBLIC_BASE_URL`, `OFFSCRPT_ADMIN_EMAILS`. Do not expose the R2 access key or secret with `VITE_`.
+
+### R2 CORS
+Allow your production site origin and `PUT`, `GET`, `HEAD` methods with the `Content-Type` request header. Configure a public custom domain such as `media.offscrpt.app` for `R2_PUBLIC_BASE_URL` when ready.
+
+### Upload locations
+`users/{uid}/profile` for profile media, `users/{uid}/posts` for user post media, `users/{uid}/videos` for user videos, `users/{uid}/attachments` for PDFs, and `site/articles` / `site/carousel` for admin site media.
+
+### Limits
+Images 10 MB, videos 250 MB, PDFs 25 MB by default. These are server-side limits and can be changed with environment variables.

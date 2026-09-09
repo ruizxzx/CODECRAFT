@@ -1,4 +1,5 @@
 import { notifyToast } from '../lib/toast';
+import { MediaUploadButton } from './MediaUploadButton';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { calculateArticleReadingTime } from '../lib/reading';
@@ -354,9 +355,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     }
   };
 
-  const handleEditSlideUpload = async (_e: React.ChangeEvent<HTMLInputElement>) => {
-    notifyToast('Firebase Storage is disabled. Paste a public image URL instead.');
-  };
 
   const executeDeleteSlide = async (id: string) => {
     setIsDeletingSlide(true);
@@ -1048,20 +1046,6 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     setPublishError(null);
   };
 
-  // Images are URL-only in this no-Storage build.
-  const handleAvatarUpload = (_e: React.ChangeEvent<HTMLInputElement>) => {
-    setPublishError('Firebase Storage is disabled. Paste a public image URL in the Author Picture field.');
-  };
-  const handleCoverUpload = (_e: React.ChangeEvent<HTMLInputElement>) => {
-    setPublishError('Firebase Storage is disabled. Paste a public image URL in the Cover Image field.');
-  };
-  const handleSlideUpload = (_e: React.ChangeEvent<HTMLInputElement>) => {
-    setCarouselErrorMessage('Firebase Storage is disabled. Paste a public image URL for the carousel image.');
-  };
-  const handleInlineImageUpload = (_e: React.ChangeEvent<HTMLInputElement>, _blockIndex: number) => {
-    setPublishError('Firebase Storage is disabled. Paste a public image URL in the image block.');
-  };
-
   const addContentBlock = (type: Article['content'][number]['type']) => {
     const block: Article['content'][number] = type === 'code'
       ? { type, codeBlock: { language: 'typescript', code: '' } }
@@ -1404,13 +1388,13 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                           className="w-16 h-16 border-2 border-black object-cover bg-white shrink-0 neo-shadow-sm"
                         />
                         <div className="flex-1 w-full space-y-1.5">
-                          <input 
+                          <div className="flex flex-col sm:flex-row gap-2"><input 
                             type="text" 
                             value={authorAvatarUrl} 
                             onChange={(e) => setAuthorAvatarUrl(e.target.value)} 
-                            className="w-full px-3 py-2 border-2 border-black font-mono text-xs focus:outline-none bg-white" 
+                            className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs focus:outline-none bg-white" 
                             placeholder="https://images.unsplash.com/..."
-                          />
+                          /><MediaUploadButton folder="profile" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD AVATAR" compact onUploaded={(url) => setAuthorAvatarUrl(url)} /></div>
                         </div>
                       </div>
                     </div>
@@ -1874,15 +1858,15 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       <div className="flex items-center justify-between gap-3">
                         <label className="font-mono text-xs font-bold uppercase text-black block">Cover Image</label>
                       </div>
-                      <input
+                      <div className="flex flex-col sm:flex-row gap-2"><input
                         type="url"
                         value={newCoverImage}
                         onChange={(e) => setNewCoverImage(e.target.value)}
                         placeholder="Or paste a public image URL..."
-                        className="w-full px-3 py-2 border-2 border-black font-mono text-xs bg-white"
-                      />
+                        className="flex-1 px-3 py-2 border-2 border-black font-mono text-xs bg-white"
+                      /><MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact onUploaded={(url) => setNewCoverImage(url)} /></div>
                       {newCoverImage && <img src={newCoverImage} alt="Cover preview" className="w-full h-40 object-cover border-2 border-black" />}
-                      <p className="font-mono text-[10px] text-neutral-500 uppercase">Paste a public image URL. Firebase Storage is disabled.</p>
+                      <p className="font-mono text-[10px] text-neutral-500 uppercase">Upload to OFFSCRPT media storage or paste a public image URL.</p>
                     </div>
 
                     {/* Advanced Block Editor */}
@@ -1890,7 +1874,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-black pb-3">
                         <div>
                           <h4 className="font-display font-black text-lg uppercase">Article Block Editor</h4>
-                          <p className="font-mono text-[10px] uppercase text-neutral-500">Drag blocks to reorder. Images are stored as public URLs in Firestore.</p>
+                          <p className="font-mono text-[10px] uppercase text-neutral-500">Drag blocks to reorder. Uploaded media is stored in OFFSCRPT media storage; Firestore stores the media URL and metadata.</p>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {([
@@ -1923,8 +1907,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                             {block.type === 'image' ? (
                               <div className="space-y-2">
                                 {block.imageUrl ? <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-64 object-cover border-2 border-black" /> : <div className="h-32 border-2 border-dashed border-black flex items-center justify-center font-mono text-xs">NO IMAGE SELECTED</div>}
-                                <div className="flex flex-wrap gap-2">
+                                <div className="flex flex-col sm:flex-row flex-wrap gap-2">
                                   <input type="url" value={block.imageUrl || ''} onChange={(e) => updateContentBlock(index,{imageUrl:e.target.value})} placeholder="Or paste image URL" className="flex-1 min-w-[220px] px-3 py-2 border-2 border-black font-mono text-xs" />
+                                  <MediaUploadButton folder="articles" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url) => updateContentBlock(index,{imageUrl:url})} />
                                 </div>
                                 <input value={block.imageAlt || ''} onChange={(e)=>updateContentBlock(index,{imageAlt:e.target.value})} placeholder="Alt text" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
                                 <input value={block.imageCaption || ''} onChange={(e)=>updateContentBlock(index,{imageCaption:e.target.value})} placeholder="Caption (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
@@ -1932,7 +1917,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                               </div>
                             ) : block.type === 'video' ? (
                               <div className="space-y-2">
-                                <input type="url" value={block.videoUrl || ''} onChange={(e)=>updateContentBlock(index,{videoUrl:e.target.value})} placeholder="YouTube / Vimeo / direct .mp4 / .webm URL" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
+                                <div className="flex flex-col gap-2"><input type="url" value={block.videoUrl || ''} onChange={(e)=>updateContentBlock(index,{videoUrl:e.target.value})} placeholder="YouTube / Vimeo / direct .mp4 / .webm URL" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><MediaUploadButton folder="videos" accept="video/mp4,video/webm,video/quicktime" label="UPLOAD VIDEO" compact onUploaded={(url) => updateContentBlock(index,{videoUrl:url})} /></div>
                                 <input value={block.videoTitle || ''} onChange={(e)=>updateContentBlock(index,{videoTitle:e.target.value})} placeholder="Accessible video title" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
                                 <input value={block.videoCaption || ''} onChange={(e)=>updateContentBlock(index,{videoCaption:e.target.value})} placeholder="Caption (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" />
                               </div>
@@ -2324,8 +2309,9 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
                         {newSlideMode === 'image' && <div>
                           <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Image URL</label>
-                          <div className="flex gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2">
                             <input type="url" value={newSlideImageUrl} onChange={(e) => setNewSlideImageUrl(e.target.value)} placeholder="https://..." className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm" />
+                            <MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url) => setNewSlideImageUrl(url)} />
                           </div>
                         </div>}
 
