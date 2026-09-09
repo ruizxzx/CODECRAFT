@@ -6,6 +6,7 @@ import {
   limit,
   onSnapshot,
   query,
+  where,
   setDoc,
   serverTimestamp,
   Timestamp,
@@ -267,7 +268,9 @@ export async function getArticleAnalyticsAggregate(
 ): Promise<ArticleAnalyticsAggregate> {
   if (!slug) return empty();
   // Read the authoritative Firestore analytics collection. No synthetic rows are generated.
-  const snap = await getDocs(query(collection(db, 'articles', slug, 'analytics')));
+  const analyticsRef = collection(db, 'articles', slug, 'analytics');
+  const analyticsQuery = days === 'all' ? query(analyticsRef) : query(analyticsRef, where('createdAt', '>=', Timestamp.fromMillis(Date.now() - days * 86_400_000)));
+  const snap = await getDocs(analyticsQuery);
   const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
   return aggregateAnalyticsRows(rows, fallbackViews, days);
 }
@@ -283,7 +286,9 @@ export function subscribeArticleAnalytics(
   }
 
   const unsubscribe = onSnapshot(
-    query(collection(db, 'articles', slug, 'analytics')),
+    days === 'all'
+      ? query(collection(db, 'articles', slug, 'analytics'))
+      : query(collection(db, 'articles', slug, 'analytics'), where('createdAt', '>=', Timestamp.fromMillis(Date.now() - days * 86_400_000))),
     (snap) => {
       const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
       cb(aggregateAnalyticsRows(rows, 0, days));

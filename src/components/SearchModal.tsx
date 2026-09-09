@@ -5,6 +5,8 @@ import { getSeriesList } from '../lib/series';
 import { getTopics, SocialTopic } from '../lib/social';
 import { Search, X, ArrowUpRight, User, Hash, MessageSquare, FileText, Loader2, Layers } from 'lucide-react';
 import { VerifiedBadge } from './VerifiedBadge';
+import { auth, db } from '../lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -40,6 +42,15 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, artic
     }).finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [isOpen]);
+
+  useEffect(() => {
+    const value = query.trim();
+    if (!auth.currentUser || value.length < 2) return;
+    const timer = window.setTimeout(() => {
+      void addDoc(collection(db, 'users', auth.currentUser!.uid, 'searches'), { query: value.slice(0, 120), createdAt: serverTimestamp() }).catch((error) => console.warn('Search behavior sync failed:', error));
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
