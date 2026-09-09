@@ -21,6 +21,7 @@ import {
 import { db, auth, checkIsAdmin } from './firebase';
 import { writeAdminAudit } from './audit';
 import { deletePost, getCommunityProfile, getPost } from './community';
+import { getModeratorPermissions } from './social';
 import { Article, SiteConfig, BentoLink, ArticleComment, CommunityPost, NavigationItemConfig } from '../types';
 import { INITIAL_ARTICLES } from '../data/articles';
 
@@ -232,7 +233,7 @@ export async function saveSiteConfig(config: SiteConfig): Promise<void> {
     ...config,
     updatedAt: serverTimestamp()
   }, { merge: true });
-  if (checkIsAdmin(auth.currentUser?.email)) { try { await writeAdminAudit('changed site config','siteConfig/global',beforeSnap?.exists?beforeSnap.data():null,config); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }
+  if (checkIsAdmin(auth.currentUser?.email)) { try { await writeAdminAudit('changed site config','siteConfig/global',beforeSnap?.exists?beforeSnap.data():null,config); } catch {} }
 }
 
 
@@ -378,7 +379,7 @@ async function getDeletedSlugs(): Promise<Set<string>> {
     const snap = await getDocs(collection(db, 'deleted_articles'));
     snap.docs.forEach(d => deletedSet.add(d.id));
   } catch (e) {
-    console.warn('Deleted article index could not be loaded; continuing with cloud articles:', e);
+    // ignore if rules or network issues
   }
   return deletedSet;
 }
@@ -465,7 +466,7 @@ async function hydrateArticleOriginalAuthor(article: Article): Promise<Article> 
     }
     if (!post?.authorId) return article;
     let profile:any = null;
-    try { profile = await getCommunityProfile(post.authorId); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    try { profile = await getCommunityProfile(post.authorId); } catch {}
     const originalAuthor = {
       ...fallback,
       uid: post.authorId,
@@ -633,7 +634,7 @@ export async function recordArticleView(slug:string, viewerId?:string):Promise<v
   // protected by the cloud receipt transaction below.
   const localKey = `offscrpt:view:${slug}:${day}`;
   if (!authenticated) {
-    try { if (localStorage.getItem(localKey) === '1') return; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    try { if (localStorage.getItem(localKey) === '1') return; } catch {}
     try {
       await setDoc(receiptRef, { slug, visitorId: identity, day, createdAt: serverTimestamp() }, { merge: false });
       await runTransaction(db, async (tx) => {
@@ -642,7 +643,7 @@ export async function recordArticleView(slug:string, viewerId?:string):Promise<v
         const current = Number(articleSnap.data()?.viewsCount || 0);
         tx.update(articleRef, { viewsCount: current + 1, updatedAt: serverTimestamp() });
       });
-      try { localStorage.setItem(localKey, '1'); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+      try { localStorage.setItem(localKey, '1'); } catch {}
     } catch(e){ console.warn('Anonymous article view tracking failed:', e); }
     return;
   }
@@ -761,7 +762,7 @@ export async function saveArticle(article: Article, options:{createRevision?:boo
   });
   await setDoc(articleDocRef, dataToSave, { merge: true });
   if (checkIsAdmin(auth.currentUser?.email)) {
-    try { await writeAdminAudit(isNewArticle?'created article':'updated article',`articles/${article.slug}`,existingSnap.exists()?existingSnap.data():null,article); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    try { await writeAdminAudit(isNewArticle?'created article':'updated article',`articles/${article.slug}`,existingSnap.exists()?existingSnap.data():null,article); } catch {}
     if (isNewArticle) { try { await createArticleRevision({...article, ...dataToSave} as Article, 'initial'); } catch(e){ console.warn('Initial revision snapshot failed:', e); } }
   }
 
@@ -801,7 +802,7 @@ export async function saveArticle(article: Article, options:{createRevision?:boo
 
 async function resolveOriginalCreatorForPromotion(post: CommunityPost) {
   let profile:any = null;
-  try { profile = post.authorId ? await getCommunityProfile(post.authorId) : null; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+  try { profile = post.authorId ? await getCommunityProfile(post.authorId) : null; } catch {}
   const username = profile?.username || post.authorUsername || 'creator';
   const name = profile?.displayName || post.authorName || username;
   const avatar = profile?.photoUrl || post.authorAvatar || '';
@@ -834,7 +835,7 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
     const existingArticle = existingSource.data() as any;
     const restored = { ...existingArticle, id: existingSource.id, slug: existingSource.id, title: post.title, excerpt: post.excerpt || post.content.slice(0,240), coverImage: post.coverImage || '', coverImageAlt: post.coverImageAlt || post.title, category: post.category || 'Community', tags: Array.isArray(post.tags) ? post.tags : [], content: blocks, author: originalAuthor, originalAuthor, sourcePostId: post.id, sourceCommunityId: (post as any).communityId || undefined, isPublished: true, mainPublicationStatus: 'published', updatedAt: serverTimestamp() };
     await setDoc(existingSource.ref, stripUndefinedDeep(restored), { merge: true });
-    try { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: slug, mainPublicationStatus: 'published', updatedAt: serverTimestamp() }); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    try { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: slug, mainPublicationStatus: 'published', updatedAt: serverTimestamp() }); } catch {}
     return { ...existingArticle, id: slug, slug, isPublished: true, mainPublicationStatus: 'published' } as Article;
   }
   while ((await getDoc(doc(db,'articles',slug))).exists()) slug = `community-${baseSlug}-${n++}`;
@@ -894,7 +895,7 @@ export async function approvePublicBlogEdit(sourcePostId:string, sourceCommunity
     if(source.authorId && source.authorId!==auth.currentUser?.uid) {
       await setDoc(doc(db,'users',source.authorId,'notifications',`edit-approval-${slug}-${Date.now()}`),{type:'blog_edit_approved',actorId:auth.currentUser?.uid||'',actorUsername:'krishsarkar',actorName:'Krish',message:`approved your edited blog: ${source.title||article.title}`.slice(0,200),targetType:'article',targetId:slug,read:false,createdAt:serverTimestamp()});
     }
-  } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+  } catch {}
 }
 
 export async function unpublishMainArticle(article: Article): Promise<void> {
@@ -917,7 +918,7 @@ export async function unpublishMainArticle(article: Article): Promise<void> {
         ? doc(db, 'communities', data.sourceCommunityId, 'posts', data.sourcePostId)
         : doc(db, 'posts', data.sourcePostId);
       await updateDoc(sourceRef, { mainPublicationStatus: 'unpublished', updatedAt: serverTimestamp() });
-    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    } catch {}
   }
 }
 
@@ -998,7 +999,7 @@ export async function deleteArticle(slug: string): Promise<void> {
   if (!slug) return;
   const before=await getDoc(doc(db,'articles',slug)).catch(()=>null);
   await deleteDoc(doc(db, 'articles', slug));
-  if(checkIsAdmin(auth.currentUser?.email)){ try { await writeAdminAudit('deleted article',`articles/${slug}`,before?.exists?before.data():null,null); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }
+  if(checkIsAdmin(auth.currentUser?.email)){ try { await writeAdminAudit('deleted article',`articles/${slug}`,before?.exists?before.data():null,null); } catch {} }
   await setDoc(doc(db, 'deleted_articles', slug), {
     slug,
     deletedAt: serverTimestamp()
@@ -1009,79 +1010,17 @@ export async function deleteArticle(slug: string): Promise<void> {
 // 4. ARTICLE COMMENTS (REAL FIRESTORE)
 // ==========================================
 
-export function subscribeArticleComments(
-  articleSlug: string, 
-  callback: (comments: ArticleComment[]) => void
-): () => void {
-  const commentsRef = collection(db, 'articles', articleSlug, 'comments');
-  const q = query(commentsRef, orderBy('createdAt', 'desc'));
-  return onSnapshot(q, (snap) => {
-    const comments = snap.docs.map(d => {
-      const data = d.data();
-      let createdStr = new Date().toISOString();
-      if (data.createdAt instanceof Timestamp) {
-        createdStr = data.createdAt.toDate().toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric'
-        });
-      } else if (typeof data.createdAt === 'string') {
-        createdStr = data.createdAt;
-      }
-      return {
-        id: d.id,
-        articleSlug,
-        authorId: data.authorId || '',
-        authorName: data.authorName || 'Architect',
-        authorAvatar: data.authorAvatar || '',
-        authorUsername: data.authorUsername || '',
-        content: data.content || '',
-        createdAt: createdStr
-      } as ArticleComment;
-    });
-    callback(comments);
-  }, (error) => {
-    console.warn(`Real-time comments subscription failed for article ${articleSlug}:`, error);
-    callback([]);
-  });
-}
-
-export async function addArticleComment(
-  articleSlug: string,
-  commentData: {
-    authorId: string;
-    authorName: string;
-    authorAvatar?: string;
-    authorUsername?: string;
-    isVerified?: boolean;
-    verificationColor?: string;
-    content: string;
-  }
-): Promise<ArticleComment> {
-  const commentId = `comment-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const commentDocRef = doc(db, 'articles', articleSlug, 'comments', commentId);
-  
-  await setDoc(commentDocRef, {
-    ...commentData,
-    articleSlug,
-    createdAt: serverTimestamp()
-  });
-
-  return {
-    id: commentId,
-    articleSlug,
-    ...commentData,
-    createdAt: new Date().toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    })
-  };
-}
-
-export async function deleteArticleComment(articleSlug: string, commentId: string): Promise<void> {
-  await deleteDoc(doc(db, 'articles', articleSlug, 'comments', commentId));
-}
+export interface ArticleCommentExtended extends ArticleComment { parentId?:string; mentionedUsernames?:string[]; editedAt?:string; isHidden?:boolean; isDeleted?:boolean; moderationReason?:string; likeCount?:number; authorIsArticleAuthor?:boolean; }
+export function subscribeArticleComments(articleSlug:string,callback:(comments:ArticleCommentExtended[])=>void):()=>void{
+ const ref=collection(db,'articles',articleSlug,'comments'); const q=query(ref,orderBy('createdAt','desc')); return onSnapshot(q,snap=>callback(snap.docs.map(d=>{const x:any=d.data();return{id:d.id,articleSlug,authorId:x.authorId||'',authorName:x.authorName||'Architect',authorAvatar:x.authorAvatar||'',authorUsername:x.authorUsername||'',isVerified:!!x.isVerified,verificationColor:x.verificationColor||'#2196F3',content:x.isDeleted?'[deleted]':x.content||'',createdAt:x.createdAt instanceof Timestamp?x.createdAt.toDate().toISOString():String(x.createdAt||new Date().toISOString()),parentId:x.parentId||'',mentionedUsernames:Array.isArray(x.mentionedUsernames)?x.mentionedUsernames:[],editedAt:x.editedAt instanceof Timestamp?x.editedAt.toDate().toISOString():x.editedAt||'',isHidden:!!x.isHidden,isDeleted:!!x.isDeleted,likeCount:Number(x.likeCount||0)} as ArticleCommentExtended})),e=>{console.error('Article comments subscription failed:',e);callback([])});}
+export async function addArticleComment(articleSlug:string,commentData:{authorId:string;authorName:string;authorAvatar?:string;authorUsername?:string;isVerified?:boolean;verificationColor?:string;content:string;parentId?:string}):Promise<ArticleCommentExtended>{
+ if(!auth.currentUser||auth.currentUser.uid!==commentData.authorId)throw new Error('Authentication required.'); const content=commentData.content.trim(); if(!content)throw new Error('Comment cannot be empty.'); if(content.length>2000)throw new Error('Comment is too long.'); const commentId=`comment-${crypto.randomUUID()}`; const ref=doc(db,'articles',articleSlug,'comments',commentId); const mentionedUsernames=Array.from(content.matchAll(/@([a-zA-Z0-9_]{2,32})/g)).map(m=>m[1].toLowerCase()).slice(0,20); const data={...commentData,content,articleSlug,parentId:commentData.parentId||'',mentionedUsernames,isHidden:false,isDeleted:false,likeCount:0,createdAt:serverTimestamp(),updatedAt:serverTimestamp()}; await setDoc(ref,data);return{id:commentId,articleSlug,...commentData,content,createdAt:new Date().toISOString(),parentId:commentData.parentId||'',mentionedUsernames,isHidden:false,isDeleted:false,likeCount:0};}
+export async function updateArticleComment(articleSlug:string,commentId:string,content:string){const u=auth.currentUser;if(!u)throw new Error('Authentication required.');const ref=doc(db,'articles',articleSlug,'comments',commentId);const snap=await getDoc(ref);if(!snap.exists())throw new Error('Comment not found.');if(snap.data().authorId!==u.uid)throw new Error('You can only edit your own comment.');const clean=content.trim();if(!clean||clean.length>2000)throw new Error('Comment must contain 1–2000 characters.');await updateDoc(ref,{content:clean,mentionedUsernames:Array.from(clean.matchAll(/@([a-zA-Z0-9_]{2,32})/g)).map(m=>m[1].toLowerCase()).slice(0,20),editedAt:serverTimestamp(),updatedAt:serverTimestamp()});}
+export async function deleteArticleComment(articleSlug:string,commentId:string){const u=auth.currentUser;if(!u)throw new Error('Authentication required.');const ref=doc(db,'articles',articleSlug,'comments',commentId);const snap=await getDoc(ref);if(!snap.exists())return;if(snap.data().authorId!==u.uid&&!checkIsAdmin(u.email))throw new Error('You can only delete your own comment.');if(checkIsAdmin(u.email))await updateDoc(ref,{isDeleted:true,content:'',updatedAt:serverTimestamp()});else await deleteDoc(ref);}
+export async function moderateArticleComment(articleSlug:string,commentId:string,hidden:boolean,reason=''){const u=auth.currentUser;if(!u)throw new Error('Authentication required.');const perms=await getModeratorPermissions(u.uid);if(!checkIsAdmin(u.email)&&!perms.moderateComments)throw new Error('Moderator permission required.');await updateDoc(doc(db,'articles',articleSlug,'comments',commentId),{isHidden:hidden,moderationReason:reason.slice(0,300),updatedAt:serverTimestamp()});}
+export async function reactToArticleComment(articleSlug:string,commentId:string,active:boolean){const u=auth.currentUser;if(!u)throw new Error('Authentication required.');const reaction=doc(db,'articles',articleSlug,'comments',commentId,'reactions',u.uid);const parent=doc(db,'articles',articleSlug,'comments',commentId);await runTransaction(db,async tx=>{const cur=await tx.get(parent);const n=Math.max(0,Number(cur.data()?.likeCount||0)+(active?1:-1));if(active)tx.set(reaction,{userId:u.uid,createdAt:serverTimestamp()});else tx.delete(reaction);tx.update(parent,{likeCount:n,updatedAt:serverTimestamp()})});}
+export async function toggleArticleCommentReaction(articleSlug:string,commentId:string){const u=auth.currentUser;if(!u)throw new Error('Authentication required.');const reaction=doc(db,'articles',articleSlug,'comments',commentId,'reactions',u.uid);const parent=doc(db,'articles',articleSlug,'comments',commentId);return runTransaction(db,async tx=>{const cur=await tx.get(parent);const own=await tx.get(reaction);const active=!own.exists();const n=Math.max(0,Number(cur.data()?.likeCount||0)+(active?1:-1));if(active)tx.set(reaction,{userId:u.uid,createdAt:serverTimestamp()});else tx.delete(reaction);tx.update(parent,{likeCount:n,updatedAt:serverTimestamp()});return active})}
+export async function reportArticleComment(articleSlug:string,commentId:string,reason:string){const u=auth.currentUser;if(!u)throw new Error('Authentication required.');await setDoc(doc(db,'reports',`comment-${crypto.randomUUID()}`),{reporterId:u.uid,targetType:'comment',targetId:`articles/${articleSlug}/comments/${commentId}`,reason:reason.slice(0,500),status:'open',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});}
 
 // ==========================================
 // 5. NEWSLETTER SUBSCRIBERS (CLOUD PERSISTENCE)

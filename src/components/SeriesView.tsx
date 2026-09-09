@@ -1,3 +1,4 @@
+import { ShareMenu } from './ShareMenu';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Article, Series } from '../types';
 import { deleteSeries, getSeriesList, reorderSeriesArticles, setArticleSeriesMembership, updateSeries, toggleSeriesFollow, getSeriesFollowStatus, subscribeSeriesList, subscribeSeriesFollowerCount } from '../lib/series';
@@ -95,7 +96,7 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
   const refreshProgress = async () => { if (active) setProgress(await getSeriesReadingProgress(active.items)); };
   const showNotice = (message:string) => { setNotice(message); window.setTimeout(()=>setNotice(null),2200); };
   const copyUrl = async () => { if (!active) return; const url=`${window.location.origin}${window.location.pathname}#series/${active.id}`; try { await navigator.clipboard.writeText(url); showNotice('SERIES LINK COPIED'); } catch { showNotice(url); } };
-  const copyOutline = async () => { if (!active) return; const text=[active.title,'',active.description,'',...active.items.map((a,i)=>`${String(i+1).padStart(2,'0')}. ${a.title} — ${safeMinutes(a)} min`)].join('\n'); try { await navigator.clipboard.writeText(text); showNotice('SERIES OUTLINE COPIED'); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } };
+  const copyOutline = async () => { if (!active) return; const text=[active.title,'',active.description,'',...active.items.map((a,i)=>`${String(i+1).padStart(2,'0')}. ${a.title} — ${safeMinutes(a)} min`)].join('\n'); try { await navigator.clipboard.writeText(text); showNotice('SERIES OUTLINE COPIED'); } catch {} };
   const printSeries = () => window.print();
   const downloadOutline = () => { if(!active) return; const text=[active.title,active.description,'',...active.items.map((a,i)=>`${i+1}. ${a.title}\n${a.excerpt}`)].join('\n\n'); const blob=new Blob([text],{type:'text/plain'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`${slugify(active.title)}-outline.txt`; a.click(); URL.revokeObjectURL(url); };
   const toggleFollow = async () => { if (!user || !active) return; setBusy(true); try { const next=await toggleSeriesFollow(active.id,user.uid); setFollowed(next); setFollowers(v=>Math.max(0,v+(next?1:-1))); showNotice(next?'SERIES SAVED TO YOUR LIBRARY':'SERIES REMOVED FROM YOUR LIBRARY'); } catch(e:any){setError(e?.message||'Could not update series follow.');} finally{setBusy(false);} };
@@ -129,7 +130,8 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
         <div className="flex flex-wrap gap-2">
           <button onClick={startOrResume} className="border-2 border-black px-3 py-2 font-mono text-[10px] font-black bg-black text-white inline-flex items-center gap-2"><Play className="w-3 h-3"/> {completedCount?'RESUME':'START'} SERIES</button>
           <button disabled={!user||busy} onClick={()=>void toggleFollow()} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black inline-flex items-center gap-2 ${followed?'bg-[var(--color-primary)]':'bg-white hover:bg-[var(--color-primary)]'}`}><Bookmark className={`w-3 h-3 ${followed?'fill-current':''}`}/>{followed?'SAVED':'SAVE SERIES'}</button>
-          <button onClick={copyUrl} className="border-2 border-black px-3 py-2 font-mono text-[10px] font-black bg-white inline-flex items-center gap-2"><Share2 className="w-3 h-3"/> SHARE</button>
+          <ShareMenu target={{type:'series',slug:active.slug}} title={active.title} />
+
           <button onClick={copyOutline} className="border-2 border-black px-3 py-2 font-mono text-[10px] font-black bg-white hidden sm:inline-flex items-center gap-2"><Download className="w-3 h-3"/> OUTLINE</button>
           <button onClick={printSeries} className="border-2 border-black px-3 py-2 font-mono text-[10px] font-black bg-white hidden sm:inline-flex items-center gap-2"><Printer className="w-3 h-3"/> PRINT</button>
           {canEditSeries&&<button onClick={()=>setEditing(v=>!v)} className="border-2 border-black px-3 py-2 font-mono text-[10px] font-black bg-white hover:bg-[var(--color-primary)] inline-flex items-center gap-2"><Edit3 className="w-3 h-3"/> EDIT</button>}

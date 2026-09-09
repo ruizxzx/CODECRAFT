@@ -39,7 +39,6 @@ import { CreatorView } from './components/CreatorView';
 import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
 import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
-import { SystemHealthView } from './components/SystemHealthView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
@@ -49,7 +48,6 @@ import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } f
 import { Loader2 } from 'lucide-react';
 import { notifyToast } from './lib/toast';
 import { recordArticleAnalyticsEvent } from './lib/analytics';
-import { flushQueuedRuntimeErrors, reportRuntimeError } from './lib/runtime';
 
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
 const SAVED_COMMUNITY_KEY = 'krishficient_saved_community_v1';
@@ -60,7 +58,7 @@ class PageErrorBoundary extends React.Component<{children: React.ReactNode}, {ha
   static getDerivedStateFromError(error: unknown) {
     return { hasError: true, message: error instanceof Error ? error.message : String(error || 'Unexpected error') };
   }
-  componentDidCatch(error: unknown) { console.error('OFFSCRPT page runtime error:', error); void reportRuntimeError(error, 'react.page-boundary'); }
+  componentDidCatch(error: unknown) { console.error('OFFSCRPT page runtime error:', error); }
   componentDidUpdate(prevProps: {children: React.ReactNode}) {
     if (prevProps.children !== this.props.children && this.state.hasError) this.setState({hasError:false, message:''});
   }
@@ -184,7 +182,6 @@ export default function App() {
     const unsub = auth.onAuthStateChanged(async (user) => {
       setUserAuth(user);
       if (user) {
-        void flushQueuedRuntimeErrors();
         // Load or automatically create the persistent cloud profile.
         // Existing handles are restored from Firestore; first-time accounts
         // receive a generated unique handle without showing the claim modal.
@@ -237,13 +234,13 @@ export default function App() {
 
             setSavedSlugs(prev => {
               const merged = Array.from(new Set([...prev, ...cloudArticleSlugs]));
-              try { localStorage.setItem(SAVED_SLUGS_KEY, JSON.stringify(merged)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+              try { localStorage.setItem(SAVED_SLUGS_KEY, JSON.stringify(merged)); } catch {}
               return merged;
             });
 
             setSavedCommunityPostIds(prev => {
               const merged = Array.from(new Set([...prev, ...cloudCommunityIds]));
-              try { localStorage.setItem(SAVED_COMMUNITY_KEY, JSON.stringify(merged)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+              try { localStorage.setItem(SAVED_COMMUNITY_KEY, JSON.stringify(merged)); } catch {}
               return merged;
             });
           }
@@ -297,13 +294,13 @@ export default function App() {
       document.documentElement.classList.toggle('dark', theme === 'dark');
       document.documentElement.dataset.theme = theme;
       document.documentElement.style.colorScheme = theme;
-      try { localStorage.setItem('offscrpt:theme', theme); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+      try { localStorage.setItem('offscrpt:theme', theme); } catch {}
     };
     try {
       const cached = localStorage.getItem('offscrpt:theme');
       if (cached === 'dark' || cached === 'light') apply(cached as 'light'|'dark');
       else if (window.matchMedia('(prefers-color-scheme: dark)').matches) apply('dark');
-    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    } catch {}
     if (!userAuth?.uid) return;
     return subscribeThemePreference(apply);
   }, [userAuth?.uid]);
@@ -360,6 +357,17 @@ export default function App() {
   // URL Hash Sync for standard navigation & browser back button support
   useEffect(() => {
     const handleHashChange = () => {
+      const pathname = window.location.pathname.replace(/\/$/, '') || '/';
+      const pathMatch = pathname.match(/^\/article\/([^/]+)$/);
+      const seriesMatch = pathname.match(/^\/series\/([^/]+)(?:\/part-(\d+))?$/);
+      const profileMatch = pathname.match(/^\/@([^/]+)$/);
+      const postMatch = pathname.match(/^\/post\/([^/]+)$/);
+      const topicMatch = pathname.match(/^\/topic\/([^/]+)$/);
+      if(pathMatch){setActiveArticleSlug(decodeURIComponent(pathMatch[1]));setCurrentPage('article');return;}
+      if(seriesMatch){setActiveArticleSlug(decodeURIComponent(seriesMatch[1]));setCurrentPage('series');return;}
+      if(profileMatch){setActiveArticleSlug(decodeURIComponent(profileMatch[1]));setCurrentPage('community_profile');return;}
+      if(postMatch){setActiveArticleSlug(decodeURIComponent(postMatch[1]));setCurrentPage('community_post');return;}
+      if(topicMatch){setActiveArticleSlug(decodeURIComponent(topicMatch[1]));setCurrentPage('topic');return;}
       const hash = window.location.hash.replace('#', '');
       if (!hash || hash === 'home') {
         setCurrentPage('home');
@@ -427,10 +435,6 @@ export default function App() {
         const username = hash.replace('@', '');
         setActiveArticleSlug(username);
         setCurrentPage('community_profile');
-      } else if (hash === 'health') {
-        if (checkIsAdmin(auth.currentUser?.email)) setCurrentPage('health');
-        else { setCurrentPage('home'); window.history.replaceState(null, '', window.location.pathname + window.location.search); }
-        setActiveArticleSlug(null);
       } else if (hash === 'cms' || hash === 'admin') {
         if (canAccessCms) setCurrentPage('cms');
         else { setCurrentPage('home'); window.history.replaceState(null, '', window.location.pathname + window.location.search); }
@@ -548,7 +552,7 @@ export default function App() {
 
   const handleToggleQueue = async (slug: string) => {
     if (!userAuth) {
-      try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+      try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch {}
       return;
     }
     const queued = readingQueueIds.includes(slug);
@@ -669,8 +673,6 @@ export default function App() {
               SYNCHRONIZING {siteConfig.logoPart1}{siteConfig.logoPart2} REPOSITORY
             </div>
           </div>
-        ) : currentPage === 'health' ? (
-          <SystemHealthView />
         ) : currentPage === 'cms' ? (
           <AdminStudioModal
             isOpen={true}

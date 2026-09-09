@@ -1,0 +1,10 @@
+import React,{useState} from 'react';
+import {Share2,Link,Check,ExternalLink} from 'lucide-react';
+import {ShareTarget,canonicalUrl,copyCanonicalLink,nativeShare,shareTargets} from '../lib/share';
+import {notifyToast} from '../lib/toast';
+export const ShareMenu:React.FC<{target:ShareTarget;title:string;compact?:boolean}>=({target,title,compact})=>{
+ const [open,setOpen]=useState(false); const [copied,setCopied]=useState(false); const links=shareTargets(target,title);
+ const copy=async()=>{try{await copyCanonicalLink(target);setCopied(true);notifyToast('Canonical link copied.','success');setTimeout(()=>setCopied(false),1600)}catch(e:any){notifyToast(e?.message||'Could not copy link.','error')}};
+ const native=async()=>{try{await nativeShare(target,title);setOpen(false)}catch{notifyToast('Native sharing is unavailable. Use a network option below.','info')}};
+ return <div className="relative inline-block"><button onClick={()=>setOpen(v=>!v)} className="border-2 border-black bg-white px-3 py-2 font-mono text-[10px] font-black uppercase inline-flex items-center gap-2"><Share2 className="w-4 h-4"/>{compact?'SHARE':'SHARE'}</button>{open&&<div className="absolute right-0 mt-2 z-40 w-64 border-4 border-black bg-white neo-shadow p-2 space-y-1"><div className="font-mono text-[9px] font-black uppercase px-2 py-1">CANONICAL LINK</div><button onClick={copy} className="w-full text-left border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase flex items-center gap-2"><Link className="w-4 h-4"/>{copied?'COPIED':'COPY LINK'}</button><button onClick={native} className="w-full text-left border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase">NATIVE SHARE</button>{Object.entries(links).map(([k,v])=><a key={k} href={v} target="_blank" rel="noreferrer" className="w-full border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase flex justify-between">{k}<ExternalLink className="w-3 h-3"/></a>)}<div className="px-2 pt-1 font-mono text-[8px] text-neutral-500 break-all">{canonicalUrl(target)}</div></div>}</div>;
+};

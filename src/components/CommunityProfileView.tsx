@@ -238,7 +238,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       console.error('Profile update failed:', e);
       const raw = String(e?.message || '');
       let detail = raw;
-      try { detail = JSON.parse(raw)?.error || raw; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+      try { detail = JSON.parse(raw)?.error || raw; } catch {}
       notifyToast('Failed to update profile: ' + (detail || 'Permission denied.'));
     } finally { setIsSavingProfile(false); }
   };

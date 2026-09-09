@@ -1,3 +1,5 @@
+import { ReportButton } from './ReportButton';
+import { ShareMenu } from './ShareMenu';
 import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { Article, SiteConfig } from '../types';
@@ -64,7 +66,7 @@ function getVideoEmbedUrl(url: string): string | null {
       const id = parsed.pathname.split('/').filter(Boolean)[0];
       return id ? `https://player.vimeo.com/video/${encodeURIComponent(id)}` : null;
     }
-  } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+  } catch {}
   return null;
 }
 
@@ -165,12 +167,12 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               const snap = await getDocs(query(collectionGroup(db, 'posts'), limit(500)));
               const match = snap.docs.find((d:any) => d.id === article.sourcePostId);
               if (match) post = { ...match.data(), id: match.id };
-            } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+            } catch {}
           }
         }
         if (!post?.authorId) { if (active) setResolvedOriginalAuthor(fallback); return; }
         let profile:any = null;
-        try { profile = await getCommunityProfile(post.authorId); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+        try { profile = await getCommunityProfile(post.authorId); } catch {}
         if (active) setResolvedOriginalAuthor({
           ...fallback,
           uid: post.authorId,
@@ -459,7 +461,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       await navigator.clipboard.writeText(url);
       setCopiedTocId(id);
       window.setTimeout(() => setCopiedTocId(null), 1600);
-    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    } catch {}
   };
 
   return (
@@ -545,14 +547,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             </button>
           )}
 
-          {/* Copy Link Share */}
-          <button
-            onClick={handleShareLink}
-            className="p-1.5 px-3 neo-border-2 bg-white hover:bg-[var(--color-secondary)] font-display font-bold text-xs flex items-center space-x-1.5 transition-all text-black active:translate-x-0.5 active:translate-y-0.5"
-          >
-            {copiedLink ? <Check className="w-4 h-4 text-green-700 stroke-[3]" /> : <Share2 className="w-4 h-4 stroke-[2.5]" />}
-            <span>{copiedLink ? 'COPIED!' : 'SHARE'}</span>
-          </button>
+          <ShareMenu target={{type:'article',slug:article.slug}} title={article.title} />
+          <ReportButton targetType="article" targetId={article.slug} />
         </div>
       </div>
 
@@ -1011,7 +1007,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         </div>
 
         {/* Comments Section */}
-        <CommentsSection articleSlug={article.slug} />
+        <CommentsSection articleSlug={article.slug} authorId={article.author?.uid} />
 
         {/* Related Posts Section */}
         {relatedArticles.length > 0 && (

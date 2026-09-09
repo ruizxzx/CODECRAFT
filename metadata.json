@@ -1,7 +1,7 @@
 {
   "name": "OFFSCRPT",
-  "version": "v71.5",
-  "description": "OFFSCRPT V71.5 stability and infrastructure release.",
+  "version": "71.5",
+  "description": "OFFSCRPT V71.5 \u2014 Batch 2 cumulative production release with V71 article history, creator analytics, behavior-driven recommendations, upgraded comments, universal sharing/deep links, granular moderator permissions, reporting, presence, and system health.",
   "majorCapabilities": [
     "Unified Social / Community",
     "Cloud-synced moderation",
@@ -15,5 +15,6 @@
     "Real article engagement metrics",
     "Universal creator identity surfaces",
     "Automatic structured-content reading-time calculation"
-  ]
+  ],
+  "release": "OFFSCRPT V71.5 \u2014 Batch 2"
 }

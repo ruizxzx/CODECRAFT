@@ -20,6 +20,7 @@ service cloud.firestore {
       ); 
     }
     function isPlatformModerator() { return isSignedIn() && exists(/databases/$(database)/documents/siteModerators/$(request.auth.uid)); }
+    function hasModeratorPermission(permission) { return isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/siteModerators/$(request.auth.uid)) && get(/databases/$(database)/documents/siteModerators/$(request.auth.uid)).data.get('permissions', {}).get(permission, false) == true)); }
     function isStaff() { return isAdmin() || isPlatformModerator(); }
     function siteConfigExists() { return exists(/databases/$(database)/documents/siteConfig/global); }
     function publicBlogsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowPublicBlogs', true) == true; }
@@ -30,25 +31,6 @@ service cloud.firestore {
     function questionsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowQuestions', true) == true; }
     function topicsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowTopics', true) == true; }
     function directMessagesEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowDirectMessages', true) == true; }
-
-    // Runtime diagnostics: authenticated clients may report only their own
-    // bounded error records; staff can review diagnostics. This is not a
-    // general-purpose writable collection.
-    match /runtimeErrors/{errorId} {
-      allow create: if isSignedIn()
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.message is string
-        && request.resource.data.message.size() <= 2000
-        && request.resource.data.path is string
-        && request.resource.data.path.size() <= 2000
-        && request.resource.data.version is string
-        && request.resource.data.version.size() <= 32
-        && request.resource.data.source is string
-        && request.resource.data.source.size() <= 200
-        && request.resource.data.createdAt is timestamp;
-      allow read: if isAdmin() || isPlatformModerator();
-      allow update, delete: if isAdmin();
-    }
 
     // USER VALIDATION
     function isValidUser(data) {
@@ -82,6 +64,15 @@ service cloud.firestore {
       // Nobody else gets to enumerate the moderator registry.
       allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       allow create, update, delete: if isAdmin();
+    }
+
+    match /presence/{scopeId}/members/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == userId
+        && incoming().uid == request.auth.uid
+        && incoming().lastSeenAt is timestamp
+        && incoming().expiresAt is timestamp;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
     }
 
     match /users/{userId} {
@@ -267,7 +258,7 @@ service cloud.firestore {
 
       match /posts/{postId} {
         allow read: if true;
-        allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || communityPostsEnabled())
+        allow create: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || communityPostsEnabled())
           && incoming().authorId == request.auth.uid
           && exists(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid))
           && validText(incoming().title, 256)
@@ -278,7 +269,7 @@ service cloud.firestore {
           && (incoming().get('postType', 'discussion') == 'blog' ? communityBlogsEnabled() : communityDiscussionsEnabled());
         allow update: if isSignedIn() && (
           isAdmin() ||
-          isPlatformModerator() ||
+          hasModeratorPermission('moderatePosts') ||
           isCommunityModerator(communityId) ||
           (request.auth.uid == existing().authorId && (
             existing().get('postType', 'discussion') != 'blog' ||
@@ -290,7 +281,7 @@ service cloud.firestore {
           && incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
           && incoming().get('viewsCount', 0) == existing().get('viewsCount', 0) + 1
           && incoming().updatedAt is timestamp;
-        allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || isCommunityModerator(communityId) || request.auth.uid == existing().authorId);
+        allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || isCommunityModerator(communityId) || request.auth.uid == existing().authorId);
         match /views/{viewId} {
           allow read: if isAdmin();
           allow create: if incoming().postId == postId
@@ -314,14 +305,14 @@ service cloud.firestore {
 
     match /questions/{questionId} {
       allow read: if true;
-      allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || questionsEnabled()) && incoming().authorId == request.auth.uid && validText(incoming().title,256) && validText(incoming().details,100000) && incoming().answersCount == 0;
-      allow update: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().authorId);
-      allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().authorId);
+      allow create: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || questionsEnabled()) && incoming().authorId == request.auth.uid && validText(incoming().title,256) && validText(incoming().details,100000) && incoming().answersCount == 0;
+      allow update: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId);
+      allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId);
       match /answers/{answerId} {
         allow read: if true;
         allow create: if isSignedIn() && incoming().authorId == request.auth.uid && validText(incoming().content,100000);
-        allow update: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().authorId || request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId);
-        allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().authorId || request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId);
+        allow update: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId || request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId);
+        allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId || request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId);
       }
       match /votes/{userId} {
         allow read: if true;
@@ -337,9 +328,9 @@ service cloud.firestore {
 
     match /topics/{topicId} {
       allow read: if true;
-      allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || topicsEnabled()) && incoming().createdBy == request.auth.uid && validText(incoming().name,80) && validText(incoming().slug,80);
-      allow update: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().createdBy || incoming().diff(existing()).affectedKeys().hasOnly(['followersCount','updatedAt']));
-      allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || request.auth.uid == existing().createdBy);
+      allow create: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || topicsEnabled()) && incoming().createdBy == request.auth.uid && validText(incoming().name,80) && validText(incoming().slug,80);
+      allow update: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().createdBy || incoming().diff(existing()).affectedKeys().hasOnly(['followersCount','updatedAt']));
+      allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().createdBy);
       match /followers/{userId} {
         allow read: if true;
         allow create: if isSignedIn() && request.auth.uid == userId;
@@ -349,15 +340,15 @@ service cloud.firestore {
 
     match /messages/{messageId} {
       allow read: if isAdmin() || (isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.recipientId || request.auth.uid in resource.data.get('participants', [])));
-      allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || directMessagesEnabled()) && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participants && incoming().recipientId in incoming().participants && validText(incoming().content,5000);
+      allow create: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || directMessagesEnabled()) && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participants && incoming().recipientId in incoming().participants && validText(incoming().content,5000);
       allow update: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId) && incoming().diff(existing()).affectedKeys().hasOnly(['content','read']));
       allow delete: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId));
     }
 
     match /reports/{reportId} {
-      allow read: if isStaff();
-      allow create: if isSignedIn() && incoming().reporterId == request.auth.uid && validText(incoming().reason,500) && incoming().status == 'open';
-      allow update, delete: if isStaff();
+      allow read: if hasModeratorPermission('manageReports') || (isSignedIn() && resource.data.reporterId == request.auth.uid);
+      allow create: if isSignedIn() && incoming().reporterId == request.auth.uid && validText(incoming().reason,500) && incoming().status == 'open' && validText(incoming().targetType,40) && validText(incoming().targetId,256);
+      allow update, delete: if hasModeratorPermission('manageReports');
     }
 
     match /admin_notifications/{notificationId} {
@@ -367,7 +358,7 @@ service cloud.firestore {
         && incoming().message is string && incoming().message.size() <= 500
         && incoming().read is bool
         && incoming().createdAt is timestamp;
-      allow update, delete: if isAdmin() || isPlatformModerator();
+      allow update, delete: if isAdmin() || hasModeratorPermission('moderatePosts');
     }
 
     match /users/{userId}/mutes/{targetUid} {
@@ -507,7 +498,7 @@ service cloud.firestore {
         && incoming().updatedAt == request.time
         && (
           isAdmin()
-          || isPlatformModerator()
+          || hasModeratorPermission('moderatePosts')
           || (request.auth.uid == existing().authorId
               && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'content', 'hashtags', 'mentionedUsernames', 'mediaUrls', 'excerpt', 'coverImage', 'coverImageAlt', 'coverImageCaption', 'category', 'tags', 'readingTimeMinutes', 'contentBlocks', 'seriesId', 'seriesName', 'seriesOrder', 'editedAt', 'updatedAt'])
               && existing().get('promotedToArticleSlug', '') == ''
@@ -530,7 +521,7 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
         && incoming().get('viewsCount', 0) == existing().get('viewsCount', 0) + 1
         && incoming().updatedAt is timestamp;
-      allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin() || isPlatformModerator());
+      allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin() || hasModeratorPermission('moderatePosts'));
       
       match /comments/{commentId} {
         function isValidComment(data) {
@@ -563,7 +554,7 @@ service cloud.firestore {
           && incoming().createdAt == existing().createdAt
           && incoming().updatedAt == request.time
           && (incoming().diff(existing()).affectedKeys().hasOnly(['content', 'updatedAt']) || incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'isVerified', 'verificationColor', 'updatedAt']) || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])));
-        allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin() || isPlatformModerator());
+        allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin() || hasModeratorPermission('moderatePosts'));
       }
 
       match /votes/{userId} {
@@ -650,8 +641,9 @@ service cloud.firestore {
 
     match /articles/{slug} {
       allow read: if true;
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount','updatedAt'])
+      allow create: if isAdmin() || hasModeratorPermission('editArticles');
+      allow delete: if isAdmin() || hasModeratorPermission('deleteArticles');
+      allow update: if isAdmin() || hasModeratorPermission('editArticles') || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['viewsCount','updatedAt'])
         && request.resource.data.get('viewsCount', 0) == resource.data.get('viewsCount', 0) + 1
         && request.resource.data.updatedAt is timestamp);
 
@@ -661,19 +653,46 @@ service cloud.firestore {
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
       match /comments/{commentId} {
+        function validArticleComment(data) {
+          return data.authorId is string && data.authorId.size() <= 128
+            && data.content is string && data.content.size() <= 2000
+            && data.createdAt is timestamp
+            && data.updatedAt is timestamp
+            && data.get('parentId','') is string && data.get('parentId','').size() <= 128
+            && data.get('mentionedUsernames',[]) is list
+            && data.get('isHidden',false) is bool
+            && data.get('isDeleted',false) is bool;
+        }
         allow read: if true;
-        allow create: if isSignedIn()
+        allow create: if isSignedIn() && validArticleComment(incoming())
           && incoming().authorId == request.auth.uid
-          && incoming().content is string
-          && incoming().content.size() <= 2000;
-        allow update: if isSignedIn()
-          && (request.auth.uid == existing().authorId || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])))
+          && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+        allow update: if isSignedIn() && validArticleComment(incoming())
           && incoming().authorId == existing().authorId
-          && (incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'updatedAt', 'content']) || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])));
-        allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin());
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && ((request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt','mentionedUsernames','editedAt']))
+            || (hasModeratorPermission('moderateComments') && incoming().diff(existing()).affectedKeys().hasOnly(['isHidden','moderationReason','updatedAt']))
+            || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['authorName','authorAvatar','authorUsername','isVerified','verificationColor','updatedAt']))
+            || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['likeCount','updatedAt']) && (incoming().likeCount == existing().get('likeCount',0) + 1 || incoming().likeCount == existing().get('likeCount',0) - 1)));
+        allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || hasModeratorPermission('moderateComments'));
+        match /reactions/{userId} {
+          allow read: if true;
+          allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().userId == request.auth.uid;
+          allow delete: if isSignedIn() && request.auth.uid == userId;
+        }
       }
     }
 
+    }
+
+
+    match /articles/{slug}/analytics/{eventId} {
+      allow read: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/articles/$(slug)).data.get('author', {}).get('uid','') == request.auth.uid) || hasModeratorPermission('viewAnalytics');
+      allow create: if request.resource.data.slug == slug && request.resource.data.createdAt == request.time && (request.resource.data.get('userId','') == '' || (isSignedIn() && request.resource.data.get('userId','') == request.auth.uid));
+      allow update: if isSignedIn() && request.resource.data.get('userId','') == request.auth.uid;
+      allow delete: if isAdmin();
+    }
 
     match /articleViews/{viewId} {
       allow read: if isAdmin();

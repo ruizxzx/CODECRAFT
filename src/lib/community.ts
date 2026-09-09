@@ -29,6 +29,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     path
   };
   console.error('Firestore Error: ', JSON.stringify(errInfo));
+  try { const k='offscrpt:health:failed-writes:v1'; localStorage.setItem(k,String(Number(localStorage.getItem(k)||0)+1)); window.dispatchEvent(new CustomEvent('offscrpt:health-failed-write',{detail:errInfo})); } catch {}
   throw new Error(JSON.stringify(errInfo));
 }
 
@@ -52,7 +53,7 @@ async function createNotification(userId: string, data: Omit<Notification, 'id' 
       : ['upvote', 'verification', 'repost'].includes(data.type) ? prefs.reactions
       : true;
     if (!allowed) return;
-  } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+  } catch {}
   const id = generateId();
   await setDoc(doc(db, 'users', userId, 'notifications', id), { ...data, read: false, createdAt: serverTimestamp() });
 }
@@ -156,7 +157,7 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
     try {
       const adminSnap = await getDocs(query(collection(db, 'admin_notifications'), where('read', '==', false), limit(100)));
       adminSnap.docs.forEach(d => batch.update(d.ref, { read: true }));
-    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    } catch {}
   }
   if (!batch) return;
   await batch.commit();
@@ -289,7 +290,7 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
   const existing = await getCommunityProfile(user.uid);
   if (existing) {
     if (checkIsAdmin(user.email) && existing.platformRole !== 'master_admin') {
-      try { await updateDoc(doc(db,'users',user.uid), { platformRole:'master_admin', role:'Master Admin', email:user.email || '', updatedAt:serverTimestamp() }); existing.platformRole='master_admin'; existing.role='Master Admin'; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+      try { await updateDoc(doc(db,'users',user.uid), { platformRole:'master_admin', role:'Master Admin', email:user.email || '', updatedAt:serverTimestamp() }); existing.platformRole='master_admin'; existing.role='Master Admin'; } catch {}
     }
     return existing;
   }
@@ -858,7 +859,7 @@ export async function addComment(postId: string, currentCommentsCount: number | 
         const target = await getPost(postId);
         if (target?.authorId) await createNotification(target.authorId, { type: commentData.parentId ? 'reply' : 'comment', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: commentData.parentId ? 'replied to your comment' : 'commented on your post', targetType: 'post', targetId: postId });
         if (commentData.parentId) {
-          try { const parent = await getDoc(doc(postRef, 'comments', commentData.parentId)); if (parent.exists()) await createNotification(parent.data().authorId, { type:'reply', actorId:actor.uid, actorUsername:actor.username, actorName:actor.displayName, actorAvatar:actor.photoURL || '', message:'replied to your comment', targetType:'comment', targetId:commentData.parentId }); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+          try { const parent = await getDoc(doc(postRef, 'comments', commentData.parentId)); if (parent.exists()) await createNotification(parent.data().authorId, { type:'reply', actorId:actor.uid, actorUsername:actor.username, actorName:actor.displayName, actorAvatar:actor.photoURL || '', message:'replied to your comment', targetType:'comment', targetId:commentData.parentId }); } catch {}
         }
         await notifyMentions(commentData.content, actor, 'comment', commentId);
       } catch (e) { console.warn('Comment notifications failed:', e); }
@@ -1159,7 +1160,7 @@ export async function syncUserIdentityAcrossContent(userId: string, profile: Pic
       const a = article.author || {};
       if (a.uid === userId || a.username?.toLowerCase() === 'krishsarkar') {
         writes.push({ ref: d.ref, data: {
-          author: { ...a, uid: userId, username: 'krishsarkar', name: profile.displayName, avatar: profile.photoURL || '', bio: profile.bio || a.bio || '', isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3' },
+          author: { ...a, uid: userId, username: 'krishsarkar', name: profile.displayName, avatar: profile.photoURL || '', bio: a.bio || '', isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3' },
           updatedAt: serverTimestamp()
         }});
       }
@@ -1417,14 +1418,14 @@ export async function recordCommunityPostView(postId:string, viewerId?:string):P
     }
     const receiptRef=doc(targetRef,'views',receiptId);
     if(!authenticated){
-      try { if(localStorage.getItem(localKey)==='1') return; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+      try { if(localStorage.getItem(localKey)==='1') return; } catch {}
       await setDoc(receiptRef,{postId,visitorId:identity,day,createdAt:serverTimestamp()},{merge:false});
       await runTransaction(db,async tx=>{
         const postSnap=await tx.get(targetRef);
         if(!postSnap.exists()) return;
         tx.update(targetRef,{viewsCount:Number(postSnap.data()?.viewsCount||0)+1,updatedAt:serverTimestamp()});
       });
-      try { localStorage.setItem(localKey,'1'); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+      try { localStorage.setItem(localKey,'1'); } catch {}
       return;
     }
     await runTransaction(db,async tx=>{

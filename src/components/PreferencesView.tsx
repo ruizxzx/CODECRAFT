@@ -17,7 +17,7 @@ export const PreferencesView: React.FC<Props> = ({ onNavigate }) => {
 
   useEffect(() => {
     if (!user) { setLoading(false); return; }
-    Promise.all([getNotificationPreferences(), getThemePreference()]).then(([nextPrefs, nextTheme]) => { setPrefs(nextPrefs); setTheme(nextTheme); document.documentElement.classList.toggle('dark', nextTheme === 'dark'); try { localStorage.setItem('offscrpt:theme', nextTheme); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }).finally(() => setLoading(false));
+    Promise.all([getNotificationPreferences(), getThemePreference()]).then(([nextPrefs, nextTheme]) => { setPrefs(nextPrefs); setTheme(nextTheme); document.documentElement.classList.toggle('dark', nextTheme === 'dark'); try { localStorage.setItem('offscrpt:theme', nextTheme); } catch {} }).finally(() => setLoading(false));
   }, [user?.uid]);
 
 
@@ -25,8 +25,8 @@ export const PreferencesView: React.FC<Props> = ({ onNavigate }) => {
     const next: ThemePreference = theme === 'dark' ? 'light' : 'dark';
     const previous = theme; setTheme(next); setThemeSaving(true);
     document.documentElement.classList.toggle('dark', next === 'dark');
-    try { localStorage.setItem('offscrpt:theme', next); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
-    try { await saveThemePreference(next); } catch { setTheme(previous); document.documentElement.classList.toggle('dark', previous === 'dark'); try { localStorage.setItem('offscrpt:theme', previous); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }
+    try { localStorage.setItem('offscrpt:theme', next); } catch {}
+    try { await saveThemePreference(next); } catch { setTheme(previous); document.documentElement.classList.toggle('dark', previous === 'dark'); try { localStorage.setItem('offscrpt:theme', previous); } catch {} }
     finally { setThemeSaving(false); }
   };
 

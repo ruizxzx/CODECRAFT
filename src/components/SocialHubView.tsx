@@ -1,3 +1,4 @@
+import { PresenceBadge } from './PresenceBadge';
 import React, { useEffect, useMemo, useState } from 'react';
 import { CommunityPost, CommunityUser, PageView, SiteConfig, ArticleContentBlock } from '../types';
 import {
@@ -111,6 +112,7 @@ export const SocialHubView:React.FC<Props>=({userProfile,onNavigate,siteConfig})
  );
 
  return <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-5">
+  <div className="flex justify-end"><PresenceBadge scopeId="community" /></div>
   <header className="border-4 border-black bg-black text-white p-6 sm:p-8 flex flex-wrap justify-between gap-4"><div><div className="font-mono text-[10px] text-[var(--color-primary)] font-black">OFFSCRPT SOCIAL / COMMUNITY</div><h1 className="font-display font-black text-4xl sm:text-6xl uppercase">ONE NETWORK.</h1><p className="font-mono text-xs sm:text-sm text-neutral-300 max-w-3xl mt-2">Blogs, communities and knowledge discussions in one cloud-synced public network.</p></div><div className="flex gap-2 h-fit">{!!userProfile&&<button onClick={()=>{if(siteConfig.allowPublicBlogs!==false)setBlogForm(true);else setError('Public blogging is currently disabled by the site admin.')}} className="border-2 border-white bg-[var(--color-primary)] text-black px-4 py-3 font-mono text-xs font-black">+ BLOG</button>}{!!userProfile&&<button onClick={()=>setCommunityForm(true)} className="border-2 border-white bg-white text-black px-4 py-3 font-mono text-xs font-black">+ COMMUNITY</button>}</div></header>
   {siteConfig.showSocialAnnouncement&&siteConfig.socialAnnouncement&&<div className="border-2 border-black bg-[var(--color-primary)] p-3 font-mono text-xs font-black flex justify-between gap-3"><span>{siteConfig.socialAnnouncement}</span>{siteConfig.socialAnnouncementLink&&<a href={siteConfig.socialAnnouncementLink} target="_blank" rel="noreferrer" className="underline">OPEN →</a>}</div>}
   <div className="flex flex-wrap gap-2 border-b-4 border-black">{([['feed','FEED',TrendingUp],['blogs','BLOGS',BookOpen],['communities','COMMUNITIES',Users],['discuss','DISCUSS / Q&A',HelpCircle],['messages','MESSAGES',Mail]] as any[]).map(([id,label,Icon])=><button key={id} onClick={()=>setTab(id)} className={`px-4 py-3 border-2 border-black border-b-0 font-display font-black text-xs flex items-center gap-2 ${tab===id?'bg-[var(--color-primary)]':''}`}><Icon className="w-4 h-4"/>{label}</button>)}</div>

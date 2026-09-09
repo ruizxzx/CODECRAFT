@@ -44,7 +44,7 @@ export async function getPersonalizedHomeData(articles: Article[], series: Serie
 
   const followedCreators = new Set<string>(following.map(x => String(x.username || '').toLowerCase()).filter(Boolean));
   const followedCreatorIds = new Set<string>(following.map(x => String(x.uid || x.id || '')).filter(Boolean));
-  const followedTopics = Array.from(new Set(topics.map(x => norm(x.topic || x.slug || x.id)).filter(Boolean)));
+  const followedTopics: string[] = Array.from(new Set(topics.map((x:any) => norm(x.topic || x.slug || x.id)).filter(Boolean))) as string[];
   const followedTopicSet = new Set(followedTopics);
   const historyRows = history.map(x => ({ slug: String(x.slug || ''), progress: Number(x.progress || 0), viewedAt: x.viewedAt?.toDate?.()?.toISOString?.() || x.viewedAt })).filter(x => x.slug);
   const historyBySlug = new Map(historyRows.map(x => [x.slug, x]));
