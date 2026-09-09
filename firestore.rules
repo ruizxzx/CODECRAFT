@@ -684,8 +684,6 @@ service cloud.firestore {
       }
     }
 
-    }
-
 
     match /articles/{slug}/analytics/{eventId} {
       allow read: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/articles/$(slug)).data.get('author', {}).get('uid','') == request.auth.uid) || hasModeratorPermission('viewAnalytics');
