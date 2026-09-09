@@ -1,10 +1,10 @@
-# OFFSCRPT V74.1
+# OFFSCRPT V74.2
 
-Master Control cloud-integrity and diagnostics patch.
+Master Control Reports runtime fix.
 
-- Fixes Master Control presence diagnostics by avoiding broad collection-group member scans.
-- Fixes admin community-post inventory by querying each community posts collection directly instead of a broad collection-group scan.
-- Fixes platform analytics collection access by reading article analytics through their authorized article subcollections.
-- Removes the initial Master Control presence count from the core load failure path; presence is checked independently in System Health.
-- Preserves real Firestore-backed analytics and synchronization; no synthetic fallback data added.
-- Keeps V74 legacy Master Control parity: Dashboard, Access, Users, Posts, Communities, Questions, Topics, Reports, Messages, Moderators, Comments, Content, Site Control, Navigation, Backups, Analytics, Recommendations, System, Audit.
+- Fixes the `reportResponse is not defined` crash in the Master Control Reports tab.
+- Adds the missing React state declaration used by the report-resolution textarea and report status workflow.
+- Synchronizes the root and `src/` AdminControlPanel copies.
+- Adds a regression validation note for the report-response state.
+- No synthetic report data or local-only fallback was introduced.
+- V74 Master Control parity and V74.1 cloud-query hardening are preserved.

@@ -51,6 +51,7 @@ export const AdminControlPanel: React.FC<Props> = ({ onSiteConfigRestored, isMod
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState('');
   const [cloudErrors, setCloudErrors] = useState<string[]>([]);
+  const [reportResponse, setReportResponse] = useState('');
   const [site, setSite] = useState<SiteConfig | null>(null);
   const [controls, setControls] = useState<EmergencyControls>(DEFAULT_EMERGENCY_CONTROLS);
   const [users, setUsers] = useState<CommunityUser[]>([]);
