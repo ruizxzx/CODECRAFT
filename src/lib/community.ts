@@ -524,15 +524,23 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
   try {
     if (typeof uid !== 'string' || !uid.trim() || uid.length > 128 || uid.includes('/')) throw new Error('Invalid profile ID.');
     const current = auth.currentUser;
-    const existingProfile = await getCommunityProfile(uid);
-    const adminMayManageCanonicalAuthor = !!current && checkIsAdmin(current.email) && existingProfile?.username?.toLowerCase() === 'krishsarkar';
-    if (!current || (current.uid !== uid && !adminMayManageCanonicalAuthor)) {
-      throw new Error('You can only edit your own profile.');
+    if (!current) throw new Error('You must be signed in to edit your profile.');
+
+    // Most profile edits are self-edits and do not require a read before the write.
+    // Avoiding the pre-read/second read materially reduces Firestore quota pressure.
+    const isSelfEdit = current.uid === uid;
+    let existingProfile: CommunityUser | null = null;
+    if (!isSelfEdit) {
+      existingProfile = await getCommunityProfile(uid);
+      const adminMayManageCanonicalAuthor = checkIsAdmin(current.email) && existingProfile?.username?.toLowerCase() === 'krishsarkar';
+      if (!adminMayManageCanonicalAuthor) throw new Error('You can only edit your own profile.');
     }
 
     const clean: any = { ...data };
     const hasUsernameChange = Object.prototype.hasOwnProperty.call(clean, 'username');
-    const requestedUsername = hasUsernameChange ? validateUsername(String(clean.username || '')) : existingProfile?.username || '';
+    const requestedUsername = hasUsernameChange
+      ? validateUsername(String(clean.username || ''))
+      : (existingProfile?.username || '');
     delete clean.uid;
     delete clean.username;
     delete clean.createdAt;
@@ -548,14 +556,56 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
     clean.updatedAt = serverTimestamp();
 
     const userRef = doc(db, 'users', uid);
-    const oldUsername = existingProfile?.username || '';
+    const currentUsername = existingProfile?.username || '';
 
+    // Fast path for a normal self-edit without a handle change: update the canonical
+    // profile and its public projection in one batch, with no preliminary Firestore read.
+    if (isSelfEdit && !hasUsernameChange) {
+      const batch = writeBatch(db);
+      batch.update(userRef, { ...clean });
+      const publicUsername = String(data.username || '').trim().toLowerCase();
+      if (publicUsername) {
+        const publicBase: any = {
+          username: publicUsername,
+          ...(Object.prototype.hasOwnProperty.call(clean, 'displayName') ? { displayName: clean.displayName } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'photoURL') ? { photoURL: clean.photoURL } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'coverImageUrl') ? { coverImageUrl: clean.coverImageUrl } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'websiteUrl') ? { websiteUrl: clean.websiteUrl } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'location') ? { location: clean.location } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'socialX') ? { socialX: clean.socialX } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'socialGithub') ? { socialGithub: clean.socialGithub } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'socialTelegram') ? { socialTelegram: clean.socialTelegram } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'socialInstagram') ? { socialInstagram: clean.socialInstagram } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'bio') ? { bio: clean.bio } : {}),
+          ...(Object.prototype.hasOwnProperty.call(clean, 'themeColor') ? { themeColor: clean.themeColor } : {}),
+          updatedAt: serverTimestamp(),
+        };
+        batch.set(doc(db, 'publicProfiles', publicUsername), publicBase, { merge: true });
+      }
+      await batch.commit();
+
+      const identityChanged = Object.prototype.hasOwnProperty.call(clean, 'displayName') || Object.prototype.hasOwnProperty.call(clean, 'photoURL');
+      if (identityChanged) {
+        try {
+          await syncUserIdentityAcrossContent(uid, {
+            displayName: String(clean.displayName || ''),
+            photoURL: String(clean.photoURL || ''),
+            username: publicUsername,
+          });
+        } catch (syncError) {
+          console.warn('Identity propagation incomplete; canonical profile saved:', syncError);
+        }
+      }
+      return;
+    }
+
+    // Handle changes and authorized admin edits still require the transactional path
+    // because username reservation must remain atomic and collision-safe.
     await runTransaction(db, async tx => {
       const userSnap = await tx.get(userRef);
       if (!userSnap.exists()) throw new Error('Profile not found.');
       const currentData: any = userSnap.data();
-      const currentUsername = String(currentData.username || '');
-      let currentPublic: any = { ...currentData };
+      const liveUsername = String(currentData.username || currentUsername || '');
       const nextUserData: any = { ...clean, username: requestedUsername };
       const effectiveDisplayName = nextUserData.displayName ?? currentData.displayName ?? 'User';
       const effectivePhotoURL = nextUserData.photoURL ?? currentData.photoURL ?? '';
@@ -568,9 +618,6 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
       const effectiveSocialInstagram = nextUserData.socialInstagram ?? currentData.socialInstagram ?? '';
       const effectiveBio = nextUserData.bio ?? currentData.bio ?? '';
       const effectiveTheme = nextUserData.themeColor ?? currentData.themeColor ?? '#D97706';
-      const effectiveVerified = nextUserData.isVerified ?? !!currentData.isVerified;
-      const effectiveVerificationColor = nextUserData.verificationColor ?? currentData.verificationColor ?? '#2196F3';
-      const effectiveAuthor = nextUserData.isAuthor ?? !!currentData.isAuthor;
       const effectiveFollowers = Number(currentData.followersCount || 0);
       const effectiveFollowing = Number(currentData.followingCount || 0);
       const makePublic = (handle: string) => ({
@@ -588,31 +635,24 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
         themeColor: effectiveTheme,
         followersCount: effectiveFollowers,
         followingCount: effectiveFollowing,
-        isVerified: !!effectiveVerified,
-        verificationColor: effectiveVerificationColor,
-        isAuthor: !!effectiveAuthor,
+        isVerified: !!currentData.isVerified,
+        verificationColor: currentData.verificationColor || '#2196F3',
+        isAuthor: !!currentData.isAuthor,
         creatorPage: nextUserData.creatorPage ?? currentData.creatorPage ?? null,
         updatedAt: serverTimestamp(),
       });
 
-      if (hasUsernameChange && requestedUsername !== currentUsername) {
+      if (hasUsernameChange && requestedUsername !== liveUsername) {
         const newUsernameRef = requestedUsername ? doc(db, 'usernames', requestedUsername) : null;
-        const oldUsernameRef = currentUsername ? doc(db, 'usernames', currentUsername) : null;
+        const oldUsernameRef = liveUsername ? doc(db, 'usernames', liveUsername) : null;
         const newSnap = newUsernameRef ? await tx.get(newUsernameRef) : null;
         const oldSnap = oldUsernameRef ? await tx.get(oldUsernameRef) : null;
-        if (newSnap?.exists() && newSnap.data()?.uid !== uid) {
-          throw new Error('Username is already taken. Please choose another.');
-        }
-        if (currentUsername && (!oldSnap?.exists() || oldSnap.data()?.uid !== uid)) {
-          throw new Error('Current handle reservation is missing. Contact an administrator.');
-        }
+        if (newSnap?.exists() && newSnap.data()?.uid !== uid) throw new Error('Username is already taken. Please choose another.');
+        if (liveUsername && (!oldSnap?.exists() || oldSnap.data()?.uid !== uid)) throw new Error('Current handle reservation is missing. Contact an administrator.');
         if (requestedUsername) tx.set(newUsernameRef!, { uid }, { merge: false });
-        if (oldUsernameRef && currentUsername !== requestedUsername) tx.delete(oldUsernameRef);
-        if (oldUsernameRef && currentUsername !== requestedUsername) tx.delete(doc(db, 'publicProfiles', currentUsername));
-        if (oldUsernameRef && currentUsername !== requestedUsername) {
-          tx.set(doc(db, 'handleAliases', currentUsername), { newUsername: requestedUsername, updatedAt: serverTimestamp() }, { merge: true });
-        }
-        if (newUsernameRef) tx.set(newUsernameRef, { uid }, { merge: false });
+        if (oldUsernameRef && liveUsername !== requestedUsername) tx.delete(oldUsernameRef);
+        if (oldUsernameRef && liveUsername !== requestedUsername) tx.delete(doc(db, 'publicProfiles', liveUsername));
+        if (oldUsernameRef && liveUsername !== requestedUsername) tx.set(doc(db, 'handleAliases', liveUsername), { newUsername: requestedUsername, updatedAt: serverTimestamp() }, { merge: true });
         if (requestedUsername) tx.set(doc(db, 'publicProfiles', requestedUsername), makePublic(requestedUsername), { merge: true });
       } else if (requestedUsername) {
         tx.set(doc(db, 'publicProfiles', requestedUsername), makePublic(requestedUsername), { merge: true });
@@ -621,24 +661,20 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
       tx.update(userRef, nextUserData);
     });
 
-    // Identity propagation is deliberately separate from the canonical transaction.
-    // The profile/handle is already committed; if a secondary snapshot cannot be
-    // refreshed, the user still has a valid public profile and stable UID identity.
+    // Propagate from the values already submitted instead of re-reading the user doc.
+    // This avoids an extra billed Firestore read after every identity edit.
     const identityChanged = hasUsernameChange || Object.prototype.hasOwnProperty.call(clean, 'displayName') || Object.prototype.hasOwnProperty.call(clean, 'photoURL');
     if (identityChanged) {
-      const latest = await getCommunityProfile(uid);
-      if (latest) {
-        try {
-          await syncUserIdentityAcrossContent(uid, {
-            displayName: latest.displayName || '',
-            photoURL: latest.photoURL || '',
-            username: latest.username || '',
-            isVerified: !!latest.isVerified,
-            verificationColor: latest.verificationColor || '#2196F3'
-          });
-        } catch (syncError) {
-          console.warn('Identity propagation incomplete; canonical profile saved:', syncError);
-        }
+      try {
+        await syncUserIdentityAcrossContent(uid, {
+          displayName: String(clean.displayName || existingProfile?.displayName || ''),
+          photoURL: String(clean.photoURL || existingProfile?.photoURL || ''),
+          username: requestedUsername,
+          isVerified: !!existingProfile?.isVerified,
+          verificationColor: existingProfile?.verificationColor || '#2196F3'
+        });
+      } catch (syncError) {
+        console.warn('Identity propagation incomplete; canonical profile saved:', syncError);
       }
     }
   } catch (error) {

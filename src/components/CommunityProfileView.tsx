@@ -244,7 +244,12 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       const raw = String(e?.message || '');
       let detail = raw;
       try { detail = JSON.parse(raw)?.error || raw; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
-      notifyToast('Failed to update profile: ' + (detail || 'Permission denied.'));
+      const quotaHit = /quota exceeded|resource-exhausted/i.test(raw) || /quota exceeded|resource-exhausted/i.test(detail);
+      if (quotaHit) {
+        notifyToast('Profile media upload succeeded, but the profile could not be saved because Firestore quota is exhausted. The uploaded image is already in R2; try saving the profile again after the Firestore quota resets.');
+      } else {
+        notifyToast('Failed to update profile: ' + (detail || 'Permission denied.'));
+      }
     } finally { setIsSavingProfile(false); }
   };
 
