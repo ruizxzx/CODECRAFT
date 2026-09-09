@@ -76,17 +76,9 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         setSocialInstagramInput(next.socialInstagram || '');
       }
     };
-
-    // NEVER subscribe a non-owner to users/{uid}. That document is intentionally
-    // private in Firestore. Public visitors and signed-in visitors viewing someone
-    // else must remain on the public projection so the profile works identically
-    // before and after login.
-    const isOwnerOfLoadedProfile = !!userAuth && !!profile?.uid && userAuth.uid === profile.uid;
-    if (isOwnerOfLoadedProfile) {
-      return subscribeCommunityProfile(profile!.uid, apply);
-    }
+    if (profile?.uid) return subscribeCommunityProfile(profile.uid, apply);
     return subscribePublicProfileByUsername(username, apply);
-  }, [profile?.uid, username, isEditing, userAuth?.uid]);
+  }, [profile?.uid, username, isEditing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,7 +152,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
           getUserPosts(p.uid || '', p.username),
           p.uid ? getUserUpvotedPosts(p.uid) : Promise.resolve([]),
           p.uid ? getUserRepostedPosts(p.uid) : Promise.resolve([]),
-          p.uid ? getUserComments(p.uid) : Promise.resolve([]),
+          getUserComments(p.uid || '', p.username),
           getSeriesList().catch(() => [])
         ]);
         if (cancelled) return;

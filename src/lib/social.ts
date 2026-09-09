@@ -312,10 +312,49 @@ export async function getMessages(uid:string,otherUid:string){
   [...sentSnap.docs,...receivedSnap.docs].forEach(d=>byId.set(d.id,map(d) as SocialMessage));
   return Array.from(byId.values()).sort((a,b)=>new Date(a.createdAt||0).getTime()-new Date(b.createdAt||0).getTime());
 }
+export async function getMessagePeople(uid: string): Promise<CommunityUser[]> {
+  if (!uid) return [];
+  try {
+    const [sentSnap, receivedSnap] = await Promise.all([
+      getDocs(query(collection(db, 'messages'), where('senderId', '==', uid), limit(300))),
+      getDocs(query(collection(db, 'messages'), where('recipientId', '==', uid), limit(300)))
+    ]);
+    const byUid = new Map<string, CommunityUser>();
+    [...sentSnap.docs, ...receivedSnap.docs].forEach(d => {
+      const m: any = d.data();
+      const peerId = m.senderId === uid ? String(m.recipientId || '') : String(m.senderId || '');
+      if (!peerId) return;
+      const isPeerSender = m.senderId === peerId;
+      const username = String(isPeerSender ? (m.senderUsername || '') : (m.recipientUsername || ''));
+      const displayName = String(isPeerSender ? (m.senderName || '') : (m.recipientName || username || 'User'));
+      const photoURL = String(isPeerSender ? (m.senderAvatar || '') : (m.recipientAvatar || ''));
+      if (byUid.has(peerId)) return;
+      byUid.set(peerId, {
+        uid: peerId,
+        username,
+        displayName,
+        photoURL,
+        bio: '',
+        themeColor: '#D97706',
+        followersCount: 0,
+        followingCount: 0,
+        role: '',
+        isAuthor: false,
+        isVerified: false,
+        verificationColor: '#2196F3'
+      } as CommunityUser);
+    });
+    return Array.from(byUid.values()).filter(p => !!p.displayName || !!p.username);
+  } catch (error) {
+    console.warn('Message people fallback failed:', error);
+    return [];
+  }
+}
+
 export async function sendMessage(user:CommunityUser,recipient:CommunityUser,content:string){
   const text=content.trim().slice(0,5000); if(!text) return;
   const mid=id();
-  await setDoc(doc(db,'messages',mid),{senderId:user.uid,senderUsername:user.username,senderName:user.displayName,senderAvatar:user.photoURL||'',recipientId:recipient.uid,content:text,read:false,participants:[user.uid,recipient.uid],createdAt:serverTimestamp()});
+  await setDoc(doc(db,'messages',mid),{senderId:user.uid,senderUsername:user.username,senderName:user.displayName,senderAvatar:user.photoURL||'',recipientId:recipient.uid,recipientUsername:recipient.username||'',recipientName:recipient.displayName||'',recipientAvatar:recipient.photoURL||'',content:text,read:false,participants:[user.uid,recipient.uid],createdAt:serverTimestamp()});
   await notify(recipient.uid,{type:'message',actorId:user.uid,actorUsername:user.username,actorName:user.displayName,actorAvatar:user.photoURL||'',message:'sent you a message',targetType:'profile',targetId:user.username});
   return mid;
 }

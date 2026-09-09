@@ -236,12 +236,15 @@ export async function getProfileByUsername(username: string): Promise<CommunityU
     const publicSnap = await getDoc(doc(db, 'publicProfiles', clean));
     if (publicSnap.exists()) {
       const publicProfile = mapDocDates(publicSnap.data()) as CommunityUser;
-      // A signed-in viewer may resolve the internal UID only when the identity
-      // registry is available. The UID is never rendered in the public profile.
-      if (auth.currentUser) {
-        const reservation = await getDoc(doc(db, 'usernames', clean));
-        const uid = reservation.exists() ? String(reservation.data()?.uid || '') : '';
-        if (uid) (publicProfile as any).uid = uid;
+      // Public viewers receive only public presentation data. The private
+      // Firebase UID is never read from the public profile directory.
+      if (currentUid && publicProfile.username && normalizeUsername(publicProfile.username) === clean) {
+        const own = await getCommunityProfile(currentUid);
+        if (own?.uid === currentUid && normalizeUsername(own.username || '') === clean) {
+          return { ...publicProfile, ...own } as CommunityUser;
+        }
+        const targetUid = await resolvePublicHandleUid(clean);
+        if (targetUid) (publicProfile as any).uid = targetUid;
       }
       return publicProfile;
     }
@@ -318,28 +321,28 @@ async function chooseAvailableUsername(base: string): Promise<string> {
  * temporary random display name; the @handle remains explicitly unclaimed until
  * the user chooses one.
  */
+async function resolvePublicHandleUid(username: string): Promise<string> {
+  if (!auth.currentUser) return '';
+  try {
+    const reservation = await getDoc(doc(db, 'usernames', normalizeUsername(username)));
+    return reservation.exists() ? String(reservation.data()?.uid || '') : '';
+  } catch (error) {
+    console.warn('Public handle UID resolution skipped:', error);
+    return '';
+  }
+}
+
 export async function getAllCommunityUsers(): Promise<CommunityUser[]> {
   try {
-    // The public directory is the only collection used for discovery.
-    // usernames/{handle} is intentionally public and supplies the internal UID
-    // needed by follow/message actions without exposing private users/{uid} data.
-    const [profileSnap, usernameSnap] = await Promise.all([
-      getDocs(collection(db, 'publicProfiles')),
-      getDocs(collection(db, 'usernames'))
-    ]);
-    const uidByUsername = new Map<string, string>();
-    usernameSnap.docs.forEach(d => {
-      const uid = String(d.data()?.uid || '');
-      if (uid) uidByUsername.set(normalizeUsername(d.id), uid);
-    });
-    return profileSnap.docs.map(d => {
-      const mapped = mapDocDates(d.data()) as CommunityUser;
-      const clean = normalizeUsername(mapped.username || d.id);
-      const uid = uidByUsername.get(clean);
-      return uid ? ({ ...mapped, uid } as CommunityUser) : mapped;
-    })
-      .filter(u => !!u?.username && !!(u as any).uid)
-      .sort((a, b) => a.username.localeCompare(b.username));
+    const snap = await getDocs(collection(db, 'publicProfiles'));
+    const base = snap.docs.map(d => mapDocDates(d.data()) as CommunityUser)
+      .filter(u => !!u?.username);
+    if (!auth.currentUser) return base.sort((a, b) => a.username.localeCompare(b.username));
+    const enriched = await Promise.all(base.map(async u => {
+      const uid = await resolvePublicHandleUid(u.username);
+      return uid ? ({ ...u, uid } as CommunityUser) : u;
+    }));
+    return enriched.sort((a, b) => a.username.localeCompare(b.username));
   } catch (error) {
     console.warn('Failed to load public community users:', error);
     return [];
@@ -665,11 +668,8 @@ export function subscribePublicProfileByUsername(username: string, callback: (pr
       if (snap.exists()) {
         const publicProfile = mapDocDates(snap.data()) as CommunityUser;
         if (auth.currentUser) {
-          try {
-            const reservation = await getDoc(doc(db, 'usernames', clean));
-            const uid = reservation.exists() ? String(reservation.data()?.uid || '') : '';
-            if (uid) (publicProfile as any).uid = uid;
-          } catch (e) { console.warn('Public handle UID resolution skipped:', e); }
+          const uid = await resolvePublicHandleUid(clean);
+          if (uid) (publicProfile as any).uid = uid;
         }
         callback(publicProfile);
         return;
@@ -1592,16 +1592,26 @@ export async function syncUserIdentityAcrossContent(
   return counters;
 }
 
-export async function getUserComments(userId: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {
-  let snap;
-  try {
-    snap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
-  } catch (indexError) {
-    console.warn('Comments author index unavailable for profile; using fallback scan:', indexError);
-    const allComments = await getDocs(collectionGroup(db, 'comments'));
-    snap = { docs: allComments.docs.filter(d => d.data()?.authorId === userId) } as any;
+export async function getUserComments(userId: string, username?: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {
+  const comments = new Map<string, any>();
+  if (userId) {
+    try {
+      const snap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
+      snap.docs.forEach(d => comments.set(d.id, d));
+    } catch (indexError) {
+      console.warn('Comments author index unavailable for profile:', indexError);
+    }
   }
-  return snap.docs.map(d => {
+  const cleanUsername = username?.trim().toLowerCase();
+  if (cleanUsername) {
+    try {
+      const snap = await getDocs(query(collectionGroup(db, 'comments'), where('authorUsername', '==', cleanUsername), limit(500)));
+      snap.docs.forEach(d => comments.set(d.id, d));
+    } catch (usernameError) {
+      console.warn('Comments username query failed for profile:', usernameError);
+    }
+  }
+  return Array.from(comments.values()).map(d => {
     const data = d.data();
     const path = d.ref.path.split('/');
     const postId = path[0] === 'posts' ? path[1] : undefined;
