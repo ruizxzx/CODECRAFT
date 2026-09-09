@@ -17,3 +17,21 @@ This build addresses production route failures observed on article and community
 ## Validation
 - Modified TS/TSX files transpile successfully with TypeScript's JSX transpiler.
 - Root and src copies of modified files are synchronized.
+
+
+# OFFSCRPT V68 Mention Autocomplete Runtime Fix
+
+## Root cause
+- `components/MentionAutocomplete.tsx` and `src/components/MentionAutocomplete.tsx` accepted an optional `textareaRef` prop but referenced `inputRef` without declaring it.
+- Opening/using the mention autocomplete path could therefore throw `ReferenceError: inputRef is not defined` and trigger the page runtime error boundary.
+
+## Fix
+- Added an unconditional internal `useRef<HTMLTextAreaElement>(null)` hook.
+- The component now uses the supplied `textareaRef` when present, otherwise the internal ref.
+- The textarea, cursor calculation, mention insertion, focus, and selection restoration all use the same resolved ref.
+- Root and `src/` copies are synchronized.
+
+## Validation
+- Confirmed the production error's undefined `inputRef` reference is removed from both application trees.
+- The source patch is localized to the mention autocomplete ref handling; no Firestore data or application data files were changed.
+- A full Vite build could not be executed in this environment because dependency installation timed out and removed `node_modules`; the supplied project retains its original lockfiles for a normal clean install/build.
