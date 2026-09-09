@@ -384,9 +384,6 @@ service cloud.firestore {
 
     match /users/{userId}/drafts/{draftId} {
       allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
-      match /versions/{versionId} {
-        allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
-      }
     }
 
     match /usernames/{username} {
@@ -516,12 +513,6 @@ service cloud.firestore {
         && incoming().updatedAt is timestamp;
       allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin() || isPlatformModerator());
       
-      match /analytics/{eventId} {
-        allow read: if isAdmin() || (isSignedIn() && (get(/databases/$(database)/documents/articles/$(slug)).data.get('author', {}).get('uid','') == request.auth.uid || get(/databases/$(database)/documents/articles/$(slug)).data.get('originalAuthor', {}).get('uid','') == request.auth.uid));
-        allow create: if incoming().slug == slug && incoming().type in ['session','share','bookmark','reaction','complete'];
-        allow update: if existing().get('userId','') == request.auth.uid || (existing().get('visitorId','') != '' && incoming().get('visitorId','') == existing().get('visitorId',''));
-        allow delete: if isAdmin();
-      }
       match /comments/{commentId} {
         function isValidComment(data) {
           return data.keys().hasAll(["postId", "authorId", "authorUsername", "content", "createdAt", "updatedAt"])
@@ -672,7 +663,7 @@ service cloud.firestore {
     }
 
     match /articleRevisions/{revisionId} {
-      allow read, create: if isAdmin() || (isSignedIn() && resource.data.get('createdBy','') == request.auth.uid);
+      allow read, create: if isAdmin();
       allow update, delete: if isAdmin();
     }
 
@@ -681,11 +672,6 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-
-    match /adminAuditLog/{eventId} {
-      allow read, create: if isAdmin();
-      allow update, delete: if isAdmin();
-    }
     match /admins/{userId} {
       allow read: if true;
     }

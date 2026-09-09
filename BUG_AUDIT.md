@@ -1,19 +1,26 @@
-# OFFSCRPT V68 Bug Audit
+# OFFSCRPT V69 BUG AUDIT
 
-## Root causes found in V67
-1. `components/MentionAutocomplete.tsx` and `src/components/MentionAutocomplete.tsx` referenced `inputRef` without declaring it. This caused `ReferenceError: inputRef is not defined` when article comments/community editor rendered the shared mention textarea.
-2. `components/CommunityEditor.tsx` referenced `syncState`/`setSyncState` without declaring the state pair. This would fail when the community composer mounted.
-3. `components/CommunityProfileView.tsx` referenced `isAdmin` without defining it. This would fail when rendering profile post actions.
-4. `components/ExploreView.tsx` fetched community users but destructured only six Promise results, then used the missing seventh result `u`.
-5. `lib/cms.ts` called `writeAdminAudit` without importing it. This would fail when an admin changed CMS state.
-6. `components/SearchModal.tsx` exposed a `topics` tab while `SearchTab` omitted the `topics` member.
-7. `components/ArticleCard.tsx` assumed `article.author` existed; a legacy article without author data could crash rendering.
+## Production console issue
+Reported production runtime error:
+`ReferenceError: inputRef is not defined`
 
-## Checks performed
-- Searched all TSX files for `.current` references and verified they are backed by declared refs after the fix.
-- Performed a static TypeScript diagnostic pass with external-module stubs; no remaining `TS2304`, `TS2552`, `TS2454`, `TS2448`, `TS2459`, or `TS2345` diagnostics remained from the audited code paths.
-- Confirmed root and `src/` copies of shared files are synchronized.
-- Confirmed the final archive is structurally valid.
+Cause:
+`MentionTextarea` declared a `textareaRef` prop but dereferenced an undeclared `inputRef`.
 
-## Deployment note
-A full Vite build was not available in this container because the extracted dependency tree is incomplete. The Vercel build environment should run the normal `npm ci` followed by `npm run build`.
+Fix:
+`MentionTextarea` now creates `internalRef` and selects:
+`const inputRef = textareaRef ?? internalRef`
+
+## Other undefined-name issues found by static semantic scan
+- CommunityEditor: missing syncState/setSyncState
+- CommunityProfileView: missing isAdmin
+- ExploreView: creator Promise result u was not destructured
+- lib/cms.ts: writeAdminAudit was used without import
+
+All four were repaired.
+
+## Authentication-specific behavior
+The mention component is exercised on authenticated interactive surfaces. This explains why unauthenticated browsing could appear healthy while authenticated article/comment rendering failed.
+
+## Validation limits
+The source was parsed/transpiled with TypeScript facilities available in the environment. Full npm dependency installation was not completed because it timed out.

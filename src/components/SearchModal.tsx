@@ -15,7 +15,7 @@ interface SearchModalProps {
   siteConfig: SiteConfig;
 }
 
-type SearchTab = 'all' | 'articles' | 'posts' | 'series' | 'people' | 'topics' | 'hashtags' | 'comments';
+type SearchTab = 'all' | 'articles' | 'posts' | 'series' | 'people' | 'hashtags' | 'comments';
 
 export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, articles, onSelectArticle, onNavigate, siteConfig }) => {
   const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';

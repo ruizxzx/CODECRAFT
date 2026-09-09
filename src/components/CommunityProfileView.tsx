@@ -54,7 +54,6 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   const [relationSearch, setRelationSearch] = useState('');
 
   useEffect(() => auth.onAuthStateChanged(setUserAuth), []);
-  const isAdmin = checkIsAdmin(userAuth?.email);
 
   // Keep the public profile live for every viewer. Do not overwrite form inputs while the owner is editing.
   useEffect(() => {
@@ -112,6 +111,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   // are managed separately in Admin Studio and must never overwrite a user's
   // personal account display name.
   const isOwner = !!activeUser && !!profile && activeUser.uid === profile.uid;
+  const isAdmin = checkIsAdmin(activeUser?.email);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,7 +124,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         if (!p) return;
         setDisplayNameInput(p.displayName || '');
         setBioInput(p.bio || '');
-        setThemeInput(p.themeColor || '#000000');
+        setThemeInput(p.themeColor || '#D97706');
         setPhotoUrlInput(p.photoURL || '');
         setCoverUrlInput(p.coverImageUrl || '');
         setWebsiteInput(p.websiteUrl || '');

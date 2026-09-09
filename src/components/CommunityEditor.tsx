@@ -25,8 +25,8 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
   const [isPublishing, setIsPublishing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [draftLoaded, setDraftLoaded] = useState(false);
-  const [syncState, setSyncState] = useState<'synced' | 'saving' | 'offline' | 'failed'>('synced');
   const localDraftKey = `offscrpt:draft:community:${profile.uid}`;
+  const [syncState, setSyncState] = useState<'synced' | 'saving' | 'offline' | 'failed'>('synced');
 
   useEffect(() => {
     let cancelled = false;

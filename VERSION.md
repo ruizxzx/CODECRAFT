@@ -1,18 +1,18 @@
-# OFFSCRPT V68
+# OFFSCRPT V69
 
-Runtime and cloud-sync audit release.
+Authenticated-runtime hardening release.
 
-## Fixed
-- Fixed the article-page runtime crash caused by `MentionTextarea` referencing an undeclared `inputRef`.
-- Added safe internal textarea ref fallback while preserving optional caller refs.
-- Fixed missing community editor `syncState` state.
-- Fixed missing `isAdmin` derivation on creator profiles.
-- Fixed Explore creator hydration using the missing `u` result from the Firestore/community query.
-- Restored the missing `writeAdminAudit` import in CMS cloud operations.
-- Fixed global search `topics` tab type mismatch.
-- Hardened article cards against missing author objects.
-- Kept root and `src/` source copies synchronized, including Firestore rules.
+## Critical fix
+- Fixed `ReferenceError: inputRef is not defined` in MentionTextarea.
+- MentionTextarea now owns a safe internal textarea ref when a parent ref is not supplied.
+- Preserves the existing parent textarea ref when supplied.
 
-## Cloud integrity
-- Existing Firebase/Firestore-backed article, profile, community, reading, notification, analytics and audit paths are preserved.
-- No client-side replacement of Firestore data with fake counters or static state was introduced in this hotfix.
+## Additional latent runtime fixes
+- Added missing CommunityEditor autosave sync state.
+- Added missing admin-role derivation in CommunityProfileView.
+- Fixed Explore creator Promise destructuring.
+- Restored the missing `writeAdminAudit` import used by CMS operations.
+- Restored orange creator theme fallback for uncustomized profiles.
+
+## Source integrity
+- Synchronized modified application files between the root and `src/` trees.
