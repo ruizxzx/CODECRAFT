@@ -320,9 +320,25 @@ async function chooseAvailableUsername(base: string): Promise<string> {
  */
 export async function getAllCommunityUsers(): Promise<CommunityUser[]> {
   try {
-    const snap = await getDocs(collection(db, 'publicProfiles'));
-    return snap.docs.map(d => mapDocDates(d.data()) as CommunityUser)
-      .filter(u => !!u?.username)
+    // The public directory is the only collection used for discovery.
+    // usernames/{handle} is intentionally public and supplies the internal UID
+    // needed by follow/message actions without exposing private users/{uid} data.
+    const [profileSnap, usernameSnap] = await Promise.all([
+      getDocs(collection(db, 'publicProfiles')),
+      getDocs(collection(db, 'usernames'))
+    ]);
+    const uidByUsername = new Map<string, string>();
+    usernameSnap.docs.forEach(d => {
+      const uid = String(d.data()?.uid || '');
+      if (uid) uidByUsername.set(normalizeUsername(d.id), uid);
+    });
+    return profileSnap.docs.map(d => {
+      const mapped = mapDocDates(d.data()) as CommunityUser;
+      const clean = normalizeUsername(mapped.username || d.id);
+      const uid = uidByUsername.get(clean);
+      return uid ? ({ ...mapped, uid } as CommunityUser) : mapped;
+    })
+      .filter(u => !!u?.username && !!(u as any).uid)
       .sort((a, b) => a.username.localeCompare(b.username));
   } catch (error) {
     console.warn('Failed to load public community users:', error);

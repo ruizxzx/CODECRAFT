@@ -175,3 +175,31 @@ describe('CMS authorization', () => {
     await assertSucceeds(admin().collection('deleted_articles').doc('article-1').set({ slug: 'article-1' }));
   });
 });
+
+
+describe('Public identity access', () => {
+  const publicProfile = {
+    username: 'devrajsaha', displayName: 'Devraj Saha', photoURL: '', coverImageUrl: '',
+    websiteUrl: '', location: '', socialX: '', socialGithub: '', socialTelegram: '',
+    socialInstagram: '', bio: 'Builder', themeColor: '#D97706', followersCount: 0,
+    followingCount: 0, isVerified: false, verificationColor: '#2196F3', isAuthor: false,
+    creatorPage: null, updatedAt: new Date()
+  };
+
+  it('allows logged-out and logged-in users to read public profile projections', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().collection('publicProfiles').doc('devrajsaha').set(publicProfile);
+    });
+    await assertSucceeds(testEnv.unauthenticatedContext().firestore().collection('publicProfiles').doc('devrajsaha').get());
+    await assertSucceeds(testEnv.authenticatedContext('viewer').firestore().collection('publicProfiles').doc('devrajsaha').get());
+  });
+
+  it('keeps private users/{uid} readable only by its owner or admin', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await ctx.firestore().collection('users').doc('devrajsaha-uid').set({ uid: 'devrajsaha-uid', username: 'devrajsaha', displayName: 'Devraj Saha' });
+    });
+    await assertFails(testEnv.unauthenticatedContext().firestore().collection('users').doc('devrajsaha-uid').get());
+    await assertFails(testEnv.authenticatedContext('viewer').firestore().collection('users').doc('devrajsaha-uid').get());
+    await assertSucceeds(testEnv.authenticatedContext('devrajsaha-uid').firestore().collection('users').doc('devrajsaha-uid').get());
+  });
+});
