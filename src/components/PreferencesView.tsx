@@ -52,6 +52,7 @@ export const PreferencesView: React.FC<Props> = ({ onNavigate }) => {
       await updateCommunityProfile(user.uid, { username: cleanHandle, displayName: cleanName });
       const next = await getCommunityProfile(user.uid);
       setProfile(next); setHandle(next?.username || ''); setDisplayName(next?.displayName || cleanName);
+      if (next) window.dispatchEvent(new CustomEvent('offscrpt:profile-updated', { detail: next }));
     } catch (error) {
       console.error('Profile identity update failed:', error);
     } finally { setProfileSaving(false); }

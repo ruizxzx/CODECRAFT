@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Article, PageView, SiteConfig, BentoLink, CommunityUser } from './types';
 import { 
   subscribeArticles, 
@@ -188,6 +188,19 @@ export default function App() {
   const [continueReadingSlug, setContinueReadingSlug] = useState<string | null>(null);
   const [readingQueueIds, setReadingQueueIds] = useState<string[]>([]);
   const [isHandleModalOpen, setIsHandleModalOpen] = useState(false);
+  const handlePromptedUidRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const onProfileUpdated = (event: Event) => {
+      const profile = (event as CustomEvent).detail as CommunityUser | undefined;
+      if (profile?.uid === auth.currentUser?.uid) {
+        setUserProfile(profile);
+        if (profile.username) setIsHandleModalOpen(false);
+      }
+    };
+    window.addEventListener('offscrpt:profile-updated', onProfileUpdated);
+    return () => window.removeEventListener('offscrpt:profile-updated', onProfileUpdated);
+  }, []);
 
   // Sync auth state & cloud saved items
   useEffect(() => {
@@ -234,11 +247,15 @@ export default function App() {
           }
           if (generation !== authGenerationRef.current) return;
           setUserProfile(prof);
+          // Prompt only once per auth session for an actually unclaimed account.
+          // A successful handle claim must not reopen the modal on an auth refresh.
+          const shouldPromptHandle = !prof.username && handlePromptedUidRef.current !== user.uid;
+          if (shouldPromptHandle) handlePromptedUidRef.current = user.uid;
+          setIsHandleModalOpen(shouldPromptHandle);
           // Newly-created accounts have no reserved @handle. Prompt once so the
           // user can explicitly claim a globally unique handle instead of silently
           // reserving their Google display name. Cancel remains supported; the same
           // identity editor is available from Settings.
-          setIsHandleModalOpen(!prof.username);
         } catch (e) {
           console.error('Error loading/creating user profile:', e);
           // Do not repeatedly force users into the manual claim modal. It is
@@ -879,6 +896,7 @@ export default function App() {
                 username={activeArticleSlug} 
                 onNavigate={navigateTo} 
                 currentUserProfile={userProfile} 
+                onProfileUpdated={(p) => { setUserProfile(p); setIsHandleModalOpen(false); }}
               />
             )}
 

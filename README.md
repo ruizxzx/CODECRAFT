@@ -193,6 +193,3 @@ been consolidated away since they were single-use scratch notes that didn't stay
 after the next release. `VERSION.md` holds the current release's changelog. For anything
 older, check git history / prior zip exports rather than expecting a markdown file per version
 going forward.
-
-## V74.9
-Identity controls now support safe self-service and Master Admin handle changes with UID-preserving propagation.

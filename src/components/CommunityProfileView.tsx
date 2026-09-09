@@ -2,7 +2,7 @@ import { notifyToast } from '../lib/toast';
 import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
-import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments, getUserFollowers, getUserFollowing, ProfileListEntry, subscribeCommunityProfile } from '../lib/community';
+import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments, getUserFollowers, getUserFollowing, ProfileListEntry, subscribeCommunityProfile, subscribePublicProfileByUsername } from '../lib/community';
 import { auth, checkIsAdmin } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
@@ -16,11 +16,12 @@ interface CommunityProfileViewProps {
   username: string;
   onNavigate: (page: PageView, param?: string) => void;
   currentUserProfile?: CommunityUser | null;
+  onProfileUpdated?: (profile: CommunityUser) => void;
 }
 
 type ProfileTab = 'articles' | 'posts' | 'upvotes' | 'reposts' | 'comments' | 'series';
 
-export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ username, onNavigate, currentUserProfile }) => {
+export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ username, onNavigate, currentUserProfile, onProfileUpdated }) => {
   const [profile, setProfile] = useState<CommunityUser | null>(null);
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [articles, setArticles] = useState<any[]>([]);
@@ -57,8 +58,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
 
   // Keep the public profile live for every viewer. Do not overwrite form inputs while the owner is editing.
   useEffect(() => {
-    if (!profile?.uid) return;
-    return subscribeCommunityProfile(profile.uid, next => {
+    const apply = (next: CommunityUser | null) => {
       if (!next) return;
       setProfile(next);
       if (!isEditing) {
@@ -75,8 +75,10 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         setSocialTelegramInput(next.socialTelegram || '');
         setSocialInstagramInput(next.socialInstagram || '');
       }
-    });
-  }, [profile?.uid, isEditing]);
+    };
+    if (profile?.uid) return subscribeCommunityProfile(profile.uid, apply);
+    return subscribePublicProfileByUsername(username, apply);
+  }, [profile?.uid, username, isEditing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,15 +114,18 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   // Profile Settings is strictly account-scoped. Publication author settings
   // are managed separately in Admin Studio and must never overwrite a user's
   // personal account display name.
-  const isOwner = !!activeUser && !!profile && activeUser.uid === profile.uid;
+  const isOwner = !!activeUser && !!profile && !!profile.uid && activeUser.uid === profile.uid;
 
   useEffect(() => {
     let cancelled = false;
     const fetchData = async () => {
       setLoading(true);
       try {
-        const p = await getProfileByUsername(username);
+        const fetched = await getProfileByUsername(username);
         if (cancelled) return;
+        const p = (currentUserProfile && fetched && currentUserProfile.uid && currentUserProfile.username.toLowerCase() === fetched.username.toLowerCase())
+          ? { ...fetched, ...currentUserProfile } as CommunityUser
+          : fetched;
         setProfile(p);
         if (!p) return;
         setDisplayNameInput(p.displayName || '');
@@ -139,9 +144,9 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         const results = await Promise.allSettled([
           fetchArticles(),
           getUserPosts(p.uid, p.username),
-          getUserUpvotedPosts(p.uid),
-          getUserRepostedPosts(p.uid),
-          getUserComments(p.uid),
+          p.uid ? getUserUpvotedPosts(p.uid) : Promise.resolve([]),
+          p.uid ? getUserRepostedPosts(p.uid) : Promise.resolve([]),
+          p.uid ? getUserComments(p.uid) : Promise.resolve([]),
           getSeriesList().catch(() => [])
         ]);
         if (cancelled) return;
@@ -170,7 +175,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         else { console.warn('Profile comments failed to load:', commentsResult.reason); setComments([]); }
         if (seriesResult.status === 'fulfilled') setSeries((seriesResult.value as any[]).filter((x:any)=>x.ownerId===p.uid || x.ownerUsername===p.username));
         else setSeries([]);
-        if (auth.currentUser && auth.currentUser.uid !== p.uid) {
+        if (auth.currentUser && p.uid && auth.currentUser.uid !== p.uid) {
           setIsFollowing(await checkIsFollowing(auth.currentUser.uid, p.uid));
         } else setIsFollowing(false);
       } catch (error) {
@@ -222,7 +227,10 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         photoURL: nextPhotoURL, coverImageUrl: nextCoverURL, websiteUrl: nextWebsite, location: locationInput.trim().slice(0, 100),
         socialX: nextX, socialGithub: nextGithub, socialTelegram: nextTelegram, socialInstagram: nextInstagram, updatedAt: new Date().toISOString() };
       setProfile(nextProfile);
+      onProfileUpdated?.(nextProfile as CommunityUser);
       setIsEditing(false);
+      if (nextHandle && nextHandle !== username.toLowerCase()) onNavigate('community_profile', nextHandle);
+      else if (!nextHandle) onNavigate('preferences');
       notifyToast('Profile saved and synchronized across your account.');
     } catch (e: any) {
       console.error('Profile update failed:', e);
@@ -234,7 +242,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   };
 
   const handleToggleFollow = async () => {
-    if (!profile || profile.uid === activeUser?.uid) return;
+    if (!profile || !profile.uid || profile.uid === activeUser?.uid) return;
     if (!activeUser) {
       notifyToast('Sign in with Google to follow this profile.');
       return;
@@ -327,7 +335,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
               {!isOwner && <button onClick={handleToggleFollow} disabled={isFollowLoading} className={`px-6 py-2 border-2 border-black font-mono text-xs font-bold uppercase flex items-center gap-2 ${isFollowing ? 'bg-neutral-200' : 'bg-[var(--color-primary)]'}`}>{isFollowLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : isFollowing ? <><UserMinus className="w-4 h-4" />Unfollow</> : <><UserPlus className="w-4 h-4" />Follow</>}</button>}
             </div>
           </div>
-          {isEditing ? <form onSubmit={handleSaveProfile} className="space-y-4 max-w-xl"><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Unique @Handle</label><input value={handleInput} onChange={e => setHandleInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30))} maxLength={30} placeholder="your_handle (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-sm" /><p className="font-mono text-[9px] text-neutral-500">Leave blank to stay unclaimed. Handles are global and unique.</p></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Display Name</label><input value={displayNameInput} onChange={e => setDisplayNameInput(e.target.value)} maxLength={64} className="w-full px-3 py-2 border-2 border-black font-display font-bold text-sm" /></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Picture URL</label><input type="url" value={photoUrlInput} onChange={e => setPhotoUrlInput(e.target.value)} placeholder="https://example.com/your-profile-picture.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Paste a public image URL. No Firebase Storage is used.</p></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Cover Image URL</label><input type="url" value={coverUrlInput} onChange={e => setCoverUrlInput(e.target.value)} placeholder="https://example.com/cover.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Optional public image URL. Your theme color remains the fallback.</p></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {isEditing ? <form onSubmit={handleSaveProfile} className="space-y-4 max-w-xl"><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Unique @Handle</label><input value={handleInput} onChange={e => setHandleInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30))} maxLength={30} placeholder="your_handle (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-sm" /><p className="font-mono text-[9px] text-neutral-500">Leave blank to stay unclaimed. Handles are global and unique.</p></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Unique @Handle</label><input value={handleInput} onChange={e => setHandleInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30))} maxLength={30} placeholder="your_handle (optional)" className="w-full px-3 py-2 border-2 border-black font-mono text-sm" /><p className="font-mono text-[9px] text-neutral-500">Leave blank to stay unclaimed. Handles are globally unique.</p></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Display Name</label><input value={displayNameInput} onChange={e => setDisplayNameInput(e.target.value)} maxLength={64} className="w-full px-3 py-2 border-2 border-black font-display font-bold text-sm" /></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Picture URL</label><input type="url" value={photoUrlInput} onChange={e => setPhotoUrlInput(e.target.value)} placeholder="https://example.com/your-profile-picture.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Paste a public image URL. No Firebase Storage is used.</p></div><div className="space-y-1"><label className="font-mono text-[10px] font-bold uppercase">Profile Cover Image URL</label><input type="url" value={coverUrlInput} onChange={e => setCoverUrlInput(e.target.value)} placeholder="https://example.com/cover.jpg" className="w-full px-3 py-2 border-2 border-black font-mono text-xs" /><p className="font-mono text-[9px] text-neutral-500 uppercase">Optional public image URL. Your theme color remains the fallback.</p></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input type="url" value={websiteInput} onChange={e => setWebsiteInput(e.target.value)} placeholder="Website URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />
             <input value={locationInput} onChange={e => setLocationInput(e.target.value)} maxLength={100} placeholder="Location" className="px-3 py-2 border-2 border-black font-mono text-xs" />
             <input type="url" value={socialXInput} onChange={e => setSocialXInput(e.target.value)} placeholder="X profile URL" className="px-3 py-2 border-2 border-black font-mono text-xs" />

@@ -216,16 +216,35 @@ export async function getCommunityProfile(uid: string): Promise<CommunityUser | 
 }
 
 export async function getProfileByUsername(username: string): Promise<CommunityUser | null> {
-  const p = `users`;
+  const clean = normalizeUsername(username);
+  if (!clean) return null;
   try {
-    const q = query(collection(db, 'users'), where('username', '==', username), limit(1));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      return mapDocDates(snap.docs[0].data()) as CommunityUser;
+    // Public profile lookup must not depend on an authenticated read of the
+    // private users collection. The publicProfiles document is safe to expose
+    // publicly and is keyed by the globally unique handle.
+    const publicSnap = await getDoc(doc(db, 'publicProfiles', clean));
+    if (publicSnap.exists()) {
+      const publicProfile = mapDocDates(publicSnap.data()) as CommunityUser;
+      // Keep the stable UID out of the public projection. Authenticated viewers
+      // may resolve it internally when needed for follows/activity actions.
+      if (auth.currentUser) {
+        const reservation = await getDoc(doc(db, 'usernames', clean));
+        const uid = reservation.exists() ? String(reservation.data()?.uid || '') : '';
+        if (uid) (publicProfile as any).uid = uid;
+      }
+      return publicProfile;
+    }
+
+    // Backward-compatible migration fallback for legacy profiles. Public users
+    // with no mirrored projection do not receive a private profile document.
+    const handleSnap = await getDoc(doc(db, 'usernames', clean));
+    if (handleSnap.exists() && typeof handleSnap.data()?.uid === 'string') {
+      const legacy = await getCommunityProfile(String(handleSnap.data().uid));
+      if (legacy?.username) return legacy;
     }
     return null;
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, p);
+    console.warn('Public profile lookup failed:', error);
     return null;
   }
 }
@@ -261,13 +280,12 @@ async function chooseAvailableUsername(base: string): Promise<string> {
  */
 export async function getAllCommunityUsers(): Promise<CommunityUser[]> {
   try {
-    const [snap, modSnap] = await Promise.all([getDocs(collection(db, 'users')), getDocs(collection(db, 'siteModerators')).catch(() => ({docs:[]} as any))]);
-    const moderators = new Set((modSnap.docs || []).map((d:any)=>d.id));
-    return snap.docs.map(d => { const u:any = mapDocDates(d.data()) as CommunityUser; if (moderators.has(u.uid)) { u.platformRole='moderator'; u.role='Moderator'; } return u; })
+    const snap = await getDocs(collection(db, 'publicProfiles'));
+    return snap.docs.map(d => mapDocDates(d.data()) as CommunityUser)
       .filter(u => !!u?.username)
       .sort((a, b) => a.username.localeCompare(b.username));
   } catch (error) {
-    console.warn('Failed to load community users:', error);
+    console.warn('Failed to load public community users:', error);
     return [];
   }
 }
@@ -298,6 +316,7 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
 
   const existing = await getCommunityProfile(user.uid);
   if (existing) {
+    if (existing.username) { try { await upsertPublicProfile(existing); } catch (error) { console.warn('Public profile projection refresh failed:', error); } }
     if (checkIsAdmin(user.email) && existing.platformRole !== 'master_admin') {
       try {
         await updateDoc(doc(db, 'users', user.uid), {
@@ -341,9 +360,30 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
   const resolved = await getCommunityProfile(user.uid);
   if (!resolved) throw new Error('Unable to create your community profile.');
   if (resolved.username) {
+    await upsertPublicProfile(resolved);
     try { await ensureFollowingAuthor(user.uid, resolved.username); } catch (err) { console.warn('Auto-follow author failed:', err); }
   }
   return resolved;
+}
+
+export async function upsertPublicProfile(profile: CommunityUser): Promise<void> {
+  const username = normalizeUsername(profile.username || '');
+  if (!username) return;
+  // Public profile intentionally excludes email, roles, UID, moderation state,
+  // and other private/admin-only fields. The canonical private user document
+  // remains the authority for identity and authorization.
+  await setDoc(doc(db, 'publicProfiles', username), {
+    username, displayName: profile.displayName || 'User', photoURL: profile.photoURL || '',
+    coverImageUrl: profile.coverImageUrl || '', websiteUrl: profile.websiteUrl || '',
+    location: profile.location || '', socialX: profile.socialX || '',
+    socialGithub: profile.socialGithub || '', socialTelegram: profile.socialTelegram || '',
+    socialInstagram: profile.socialInstagram || '', bio: profile.bio || '',
+    themeColor: profile.themeColor || '#D97706', followersCount: Number(profile.followersCount || 0),
+    followingCount: Number(profile.followingCount || 0), isVerified: !!profile.isVerified,
+    verificationColor: profile.verificationColor || '#2196F3', isAuthor: !!profile.isAuthor,
+    creatorPage: profile.creatorPage || null,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
 }
 
 export async function createCommunityProfile(data: Omit<CommunityUser, 'createdAt' | 'updatedAt' | 'followersCount' | 'followingCount'>) {
@@ -375,6 +415,7 @@ export async function createCommunityProfile(data: Omit<CommunityUser, 'createdA
       });
       const resolved = await getCommunityProfile(uid);
       if (!resolved) throw new Error('Unable to claim your handle.');
+      await upsertPublicProfile(resolved);
       try { await ensureFollowingAuthor(uid, resolved.username); } catch (err) { console.warn('Failed to auto-follow @krishsarkar:', err); }
       return resolved;
     }
@@ -393,6 +434,7 @@ export async function createCommunityProfile(data: Omit<CommunityUser, 'createdA
       return userData as CommunityUser;
     });
     const resolved = await getCommunityProfile(uid) || profile;
+    await upsertPublicProfile(resolved as CommunityUser);
     if (username !== 'krishsarkar') {
       try { await ensureFollowingAuthor(uid, username); } catch (err) { console.warn('Failed to auto-follow @krishsarkar:', err); }
     }
@@ -439,6 +481,46 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
       if (!userSnap.exists()) throw new Error('Profile not found.');
       const currentData: any = userSnap.data();
       const currentUsername = String(currentData.username || '');
+      let currentPublic: any = { ...currentData };
+      const nextUserData: any = { ...clean, username: requestedUsername };
+      const effectiveDisplayName = nextUserData.displayName ?? currentData.displayName ?? 'User';
+      const effectivePhotoURL = nextUserData.photoURL ?? currentData.photoURL ?? '';
+      const effectiveCover = nextUserData.coverImageUrl ?? currentData.coverImageUrl ?? '';
+      const effectiveWebsite = nextUserData.websiteUrl ?? currentData.websiteUrl ?? '';
+      const effectiveLocation = nextUserData.location ?? currentData.location ?? '';
+      const effectiveSocialX = nextUserData.socialX ?? currentData.socialX ?? '';
+      const effectiveSocialGithub = nextUserData.socialGithub ?? currentData.socialGithub ?? '';
+      const effectiveSocialTelegram = nextUserData.socialTelegram ?? currentData.socialTelegram ?? '';
+      const effectiveSocialInstagram = nextUserData.socialInstagram ?? currentData.socialInstagram ?? '';
+      const effectiveBio = nextUserData.bio ?? currentData.bio ?? '';
+      const effectiveTheme = nextUserData.themeColor ?? currentData.themeColor ?? '#D97706';
+      const effectiveVerified = nextUserData.isVerified ?? !!currentData.isVerified;
+      const effectiveVerificationColor = nextUserData.verificationColor ?? currentData.verificationColor ?? '#2196F3';
+      const effectiveAuthor = nextUserData.isAuthor ?? !!currentData.isAuthor;
+      const effectiveFollowers = Number(currentData.followersCount || 0);
+      const effectiveFollowing = Number(currentData.followingCount || 0);
+      const makePublic = (handle: string) => ({
+        username: handle,
+        displayName: effectiveDisplayName,
+        photoURL: effectivePhotoURL,
+        coverImageUrl: effectiveCover,
+        websiteUrl: effectiveWebsite,
+        location: effectiveLocation,
+        socialX: effectiveSocialX,
+        socialGithub: effectiveSocialGithub,
+        socialTelegram: effectiveSocialTelegram,
+        socialInstagram: effectiveSocialInstagram,
+        bio: effectiveBio,
+        themeColor: effectiveTheme,
+        followersCount: effectiveFollowers,
+        followingCount: effectiveFollowing,
+        isVerified: !!effectiveVerified,
+        verificationColor: effectiveVerificationColor,
+        isAuthor: !!effectiveAuthor,
+        creatorPage: nextUserData.creatorPage ?? currentData.creatorPage ?? null,
+        updatedAt: serverTimestamp(),
+      });
+
       if (hasUsernameChange && requestedUsername !== currentUsername) {
         const newUsernameRef = requestedUsername ? doc(db, 'usernames', requestedUsername) : null;
         const oldUsernameRef = currentUsername ? doc(db, 'usernames', currentUsername) : null;
@@ -452,15 +534,19 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
         }
         if (requestedUsername) tx.set(newUsernameRef!, { uid }, { merge: false });
         if (oldUsernameRef && currentUsername !== requestedUsername) tx.delete(oldUsernameRef);
+        if (oldUsernameRef && currentUsername !== requestedUsername) tx.delete(doc(db, 'publicProfiles', currentUsername));
+        if (newUsernameRef) tx.set(newUsernameRef, { uid }, { merge: false });
+        tx.set(doc(db, 'publicProfiles', requestedUsername), makePublic(requestedUsername), { merge: true });
+      } else if (requestedUsername) {
+        tx.set(doc(db, 'publicProfiles', requestedUsername), makePublic(requestedUsername), { merge: true });
       }
 
-      const nextUserData = { ...clean, username: requestedUsername };
       tx.update(userRef, nextUserData);
     });
 
-    // A profile identity change must propagate to every denormalized identity
-    // snapshot that the platform uses for display. Do this after the canonical
-    // user transaction so the UID remains the stable foreign key everywhere.
+    // Identity propagation is deliberately separate from the canonical transaction.
+    // The profile/handle is already committed; if a secondary snapshot cannot be
+    // refreshed, the user still has a valid public profile and stable UID identity.
     const identityChanged = hasUsernameChange || Object.prototype.hasOwnProperty.call(clean, 'displayName') || Object.prototype.hasOwnProperty.call(clean, 'photoURL');
     if (identityChanged) {
       const latest = await getCommunityProfile(uid);
@@ -474,8 +560,6 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
             verificationColor: latest.verificationColor || '#2196F3'
           });
         } catch (syncError) {
-          // Canonical profile/handle change is already committed. Identity propagation
-          // is best-effort and must never make the profile save appear to fail.
           console.warn('Identity propagation incomplete; canonical profile saved:', syncError);
         }
       }
@@ -493,6 +577,19 @@ export function subscribeCommunityProfile(uid: string, callback: (profile: Commu
     snap => callback(snap.exists() ? (mapDocDates(snap.data()) as CommunityUser) : null),
     error => {
       console.warn(`Realtime profile subscription failed for ${uid}:`, error);
+      onError?.(error);
+    }
+  );
+}
+
+export function subscribePublicProfileByUsername(username: string, callback: (profile: CommunityUser | null) => void, onError?: (error: unknown) => void): () => void {
+  const clean = normalizeUsername(username);
+  if (!clean) { callback(null); return () => {}; }
+  return onSnapshot(
+    doc(db, 'publicProfiles', clean),
+    snap => callback(snap.exists() ? (mapDocDates(snap.data()) as CommunityUser) : null),
+    error => {
+      console.warn(`Realtime public profile subscription failed for @${clean}:`, error);
       onError?.(error);
     }
   );
