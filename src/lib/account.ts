@@ -16,6 +16,7 @@ import {
 import { auth, db } from './firebase';
 import type { Notification, UserSavedItem } from '../types';
 import { subscribeArticleHistory, type ArticleHistoryItem } from './reading';
+import { optimizedGetDoc } from './firestoreOptimization';
 
 export type ReadingQueueItem = {
   id: string;
@@ -88,7 +89,7 @@ export async function getNotificationPreferences(): Promise<NotificationPreferen
   const uid = auth.currentUser?.uid;
   if (!uid) return DEFAULT_NOTIFICATION_PREFERENCES;
   try {
-    const snap = await import('firebase/firestore').then(({ getDoc }) => getDoc(doc(db, 'users', uid, 'preferences', 'notifications')));
+    const snap = await optimizedGetDoc(doc(db, 'users', uid, 'preferences', 'notifications'), { ttlMs: 300_000, allowStaleOnQuota: true });
     return { ...DEFAULT_NOTIFICATION_PREFERENCES, ...(snap.exists() ? snap.data() : {}) } as NotificationPreferences;
   } catch {
     return DEFAULT_NOTIFICATION_PREFERENCES;
@@ -198,7 +199,7 @@ export async function getThemePreference(): Promise<ThemePreference> {
   const uid = auth.currentUser?.uid;
   if (!uid) return DEFAULT_THEME_PREFERENCE;
   try {
-    const snap = await getDoc(doc(db, 'users', uid, 'preferences', 'ui'));
+    const snap = await optimizedGetDoc(doc(db, 'users', uid, 'preferences', 'ui'), { ttlMs: 300_000, allowStaleOnQuota: true });
     return snap.exists() && snap.data()?.theme === 'dark' ? 'dark' : 'light';
   } catch {
     return DEFAULT_THEME_PREFERENCE;

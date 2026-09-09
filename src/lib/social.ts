@@ -2,12 +2,13 @@ import { db, auth, checkIsAdmin } from './firebase';
 import { collection, collectionGroup, doc, getDoc, getDocs, query, orderBy, where, limit, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, onSnapshot, increment, runTransaction } from 'firebase/firestore';
 import { CommunityUser } from '../types';
 import { resolveMasterAccess } from './masterControl';
+import { optimizedGetDoc, isFirestoreQuotaError } from './firestoreOptimization';
 
 const id = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 const date = (v:any) => v?.toDate ? v.toDate().toISOString() : (v || new Date().toISOString());
 const map = (d:any) => ({ ...d.data(), id:d.id, createdAt:date(d.data().createdAt), updatedAt:date(d.data().updatedAt) });
 
-async function profile(uid:string){ const s=await getDoc(doc(db,'users',uid)); return s.exists()?s.data() as CommunityUser:null; }
+async function profile(uid:string){ if(!uid) return null; try { const s=await optimizedGetDoc(doc(db,'users',uid), { ttlMs: 60_000, allowStaleOnQuota: true }); return s.exists()?s.data() as CommunityUser:null; } catch(error){ if(isFirestoreQuotaError(error)) return null; throw error; } }
 async function notify(uid:string, data:any){ if(!uid || uid===data.actorId) return; await setDoc(doc(db,'users',uid,'notifications',id()),{...data,read:false,createdAt:serverTimestamp()}); }
 
 export interface SocialCommunity { id:string; name:string; slug:string; description:string; iconUrl?:string; bannerUrl?:string; rules?:string[]; membersCount:number; postsCount:number; ownerId:string; ownerUsername?:string; ownerName?:string; ownerAvatar?:string; createdAt:string; updatedAt?:string; isPrivate?:boolean; isArchived?:boolean; isLocked?:boolean; allowLinks?:boolean; allowMedia?:boolean; defaultPostType?:'discussion'|'question'|'link'|'poll'; }

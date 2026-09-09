@@ -466,21 +466,24 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
   const d7 = new Date(now - 7 * 86400000);
   const d30 = new Date(now - 30 * 86400000);
   const [users, articlesSnap, posts, communities, comments, series, reportsOpenCount] = await Promise.all([
-    getCountFromServer(collection(db, 'users')),
-    getDocs(query(collection(db, 'articles'))),
-    getCountFromServer(collection(db, 'posts')),
-    getCountFromServer(collection(db, 'communities')),
-    getCountFromServer(collectionGroup(db, 'comments')),
-    getCountFromServer(collection(db, 'series')),
-    getCountFromServer(query(collection(db, 'reports'), where('status', 'in', ['open', 'under_review', 'action_taken']))),
+    optimizedGetCount('master:users', () => getCountFromServer(collection(db, 'users')), 300_000),
+    optimizedGetDocs('master:articles', () => getDocs(query(collection(db, 'articles'))), { ttlMs: 60_000, allowStaleOnQuota: true }),
+    optimizedGetCount('master:posts', () => getCountFromServer(collection(db, 'posts')), 300_000),
+    optimizedGetCount('master:communities', () => getCountFromServer(collection(db, 'communities')), 300_000),
+    optimizedGetCount('master:comments', () => getCountFromServer(collectionGroup(db, 'comments')), 300_000),
+    optimizedGetCount('master:series', () => getCountFromServer(collection(db, 'series')), 300_000),
+    optimizedGetCount('master:reports-open', () => getCountFromServer(query(collection(db, 'reports'), where('status', 'in', ['open', 'under_review', 'action_taken']))), 60_000),
   ]);
 
   // Read analytics directly from each article's authorized subcollection rather
   // than using a global collection-group query. This keeps the admin analytics
   // pipeline aligned with article-specific Firestore authorization.
   const analyticsChunks = await Promise.all(articlesSnap.docs.map(article =>
-    getDocs(query(collection(db, 'articles', article.id, 'analytics'), limit(1500)))
-      .then(snap => snap.docs.map(d => ({ id: d.id, path: d.ref.path, articleSlug: article.id, ...(d.data() as Record<string, unknown>) })))
+    optimizedGetDocs(
+      `master:analytics:${article.id}`,
+      () => getDocs(query(collection(db, 'articles', article.id, 'analytics'), limit(1500))),
+      { ttlMs: 120_000, allowStaleOnQuota: true },
+    ).then(snap => snap.docs.map(d => ({ id: d.id, path: d.ref.path, articleSlug: article.id, ...(d.data() as Record<string, unknown>) })))
   ));
   const analyticsSnapDocs = analyticsChunks.flat();
 

@@ -1,20 +1,32 @@
 import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, getCountFromServer, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
+import { optimizedGetDoc, optimizedGetDocs, optimizedGetCount } from './firestoreOptimization';
 import { Article, Series } from '../types';
 import { resolveMasterAccess } from './masterControl';
 
 export async function getSeriesById(id: string): Promise<Series | null> {
-  const snap = await getDoc(doc(db, 'series', id));
+  const snap = await optimizedGetDoc(doc(db, 'series', id), { ttlMs: 120_000, allowStaleOnQuota: true });
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Series) : null;
 }
 
 export async function getSeriesList(limitCount = 50): Promise<Series[]> {
+  const key = `series:list:${Math.min(Math.max(limitCount, 1), 100)}`;
   try {
-    const snap = await getDocs(query(collection(db, 'series'), orderBy('updatedAt', 'desc'), limit(limitCount)));
+    const snap = await optimizedGetDocs(
+      key,
+      () => getDocs(query(collection(db, 'series'), orderBy('updatedAt', 'desc'), limit(limitCount))),
+      { ttlMs: 120_000, allowStaleOnQuota: true },
+    );
     return snap.docs.map(d => ({ id: d.id, ...d.data() } as Series));
   } catch {
-    const snap = await getDocs(query(collection(db, 'series'), limit(limitCount)));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() } as Series));
+    try {
+      const snap = await optimizedGetDocs(
+        `${key}:unordered`,
+        () => getDocs(query(collection(db, 'series'), limit(limitCount))),
+        { ttlMs: 120_000, allowStaleOnQuota: true },
+      );
+      return snap.docs.map(d => ({ id: d.id, ...d.data() } as Series));
+    } catch { return []; }
   }
 }
 
@@ -55,7 +67,7 @@ export function subscribeSeriesFollowerCount(seriesId: string, callback: (count:
 }
 
 export async function getSeriesFollowerCount(seriesId: string): Promise<number> {
-  try { return (await getCountFromServer(collection(db, 'series', seriesId, 'followers'))).data().count; } catch { return 0; }
+  try { return await optimizedGetCount(`series:follower-count:${seriesId}`, () => getCountFromServer(collection(db, 'series', seriesId, 'followers')), 300_000); } catch { return 0; }
 }
 
 export async function getSeriesArticlesFromAllArticles(seriesId: string, articles: Article[]): Promise<Article[]> {

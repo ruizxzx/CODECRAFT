@@ -1,5 +1,7 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { collectionGroup } from 'firebase/firestore';
+import { optimizedGetDocs, isFirestoreQuotaError } from './firestoreOptimization';
 import type { Article, Series } from '../types';
 
 const norm = (v: string) => String(v || '').trim().toLowerCase().replace(/^#/, '');
@@ -21,7 +23,10 @@ async function readUserSubcollection(uid: string, sub: string, max = 100) {
   try {
     const snap = await getDocs(query(collection(db, 'users', uid, sub), orderBy('createdAt', 'desc'), limit(max)));
     return snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-  } catch {
+  } catch (error) {
+    // Never retry a quota failure with another billed query. Only the index/orderBy
+    // fallback is attempted for genuine query-shape errors.
+    if (isFirestoreQuotaError(error)) return [];
     try {
       const snap = await getDocs(query(collection(db, 'users', uid, sub), limit(max)));
       return snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
@@ -109,13 +114,28 @@ export async function getPersonalizedHomeData(articles: Article[], series: Serie
   // Series-follow state is read from the public follower subcollections. This is intentionally
   // best-effort and never blocks the personalized article sections.
   if (series.length) {
-    const checks = await Promise.all(series.slice(0, 100).map(async s => {
-      try { return (await getDoc(doc(db, 'series', s.id, 'followers', uid))).exists() ? s.id : null; } catch { return null; }
-    }));
-    base.followedSeriesIds = checks.filter(Boolean) as string[];
-    const followedSeriesSet = new Set(base.followedSeriesIds);
-    base.followedSeriesArticles = candidates.filter(a => a.seriesId && followedSeriesSet.has(a.seriesId))
-      .sort((a,b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime()).slice(0, 8);
+    try {
+      // One collection-group read replaces up to 100 per-series follower reads.
+      // The follower documents contain userId, so the same information can be
+      // resolved with a single bounded query.
+      const followed = await optimizedGetDocs(
+        `series-followers:${uid}`,
+        () => getDocs(query(collectionGroup(db, 'followers'), where('userId', '==', uid), limit(100))),
+        { ttlMs: 120_000, allowStaleOnQuota: true },
+      );
+      const ids = new Set(followed.docs.map(d => String(d.ref.parent.parent?.id || d.data().seriesId || '')).filter(Boolean));
+      base.followedSeriesIds = series.map(s => s.id).filter(id => ids.has(id));
+      const followedSeriesSet = new Set(base.followedSeriesIds);
+      base.followedSeriesArticles = candidates.filter(a => a.seriesId && followedSeriesSet.has(a.seriesId))
+        .sort((a,b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime()).slice(0, 8);
+    } catch {
+      // Fallback to the existing mirrored user subcollection without N per-series reads.
+      const followed = await readUserSubcollection(uid, 'followedSeries', Math.min(100, series.length));
+      base.followedSeriesIds = followed.map((x:any) => String(x.seriesId || x.id || '')).filter(Boolean);
+      const followedSeriesSet = new Set(base.followedSeriesIds);
+      base.followedSeriesArticles = candidates.filter(a => a.seriesId && followedSeriesSet.has(a.seriesId))
+        .sort((a,b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime()).slice(0, 8);
+    }
   }
   return base;
 }

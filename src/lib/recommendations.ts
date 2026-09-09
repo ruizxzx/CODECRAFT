@@ -11,6 +11,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { optimizedGetDocs, isFirestoreQuotaError } from './firestoreOptimization';
 import type { Article, Series } from '../types';
 
 export type RecommendationSection = { title: string; reason?: string; articles: Article[] };
@@ -31,12 +32,22 @@ const norm = (x: unknown) => String(x || '').toLowerCase().replace(/^[@#]/, '').
 const unique = <T,>(items: T[]) => Array.from(new Set(items));
 
 async function readSubcollection(uid: string, sub: string, max = 120): Promise<any[]> {
+  const key = `recommendation:${uid}:${sub}:${max}`;
   try {
-    const snap = await getDocs(query(collection(db, 'users', uid, sub), orderBy('createdAt', 'desc'), limit(max)));
+    const snap = await optimizedGetDocs(
+      key,
+      () => getDocs(query(collection(db, 'users', uid, sub), orderBy('createdAt', 'desc'), limit(max))),
+      { ttlMs: 60_000, allowStaleOnQuota: true },
+    );
     return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  } catch {
+  } catch (error) {
+    if (isFirestoreQuotaError(error)) return [];
     try {
-      const snap = await getDocs(query(collection(db, 'users', uid, sub), limit(max)));
+      const snap = await optimizedGetDocs(
+        `${key}:unordered`,
+        () => getDocs(query(collection(db, 'users', uid, sub), limit(max))),
+        { ttlMs: 60_000, allowStaleOnQuota: true },
+      );
       return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch {
       return [];
@@ -59,19 +70,29 @@ export async function loadRecommendationSignals(uid: string): Promise<Recommenda
 }
 
 export function subscribeRecommendationSignals(uid: string, callback: (signals: RecommendationSignals) => void, onError?: (error: unknown) => void): () => void {
-  if (!uid) { callback({ history: [], saves: [], following: [], followedTopics: [], followedSeries: [], readingProgress: [], searches: [], reactions: [] }); return () => {}; }
-  const names: Array<keyof RecommendationSignals> = ['history', 'saves', 'following', 'followedTopics', 'followedSeries', 'readingProgress', 'searches', 'reactions'];
+  if (!uid) {
+    callback({ history: [], saves: [], following: [], followedTopics: [], followedSeries: [], readingProgress: [], searches: [], reactions: [] });
+    return () => {};
+  }
+
+  const names: Array<keyof RecommendationSignals> = ['history', 'saves', 'following', 'followedTopics', 'followedSeries', 'readingProgress'];
   const values: RecommendationSignals = { history: [], saves: [], following: [], followedTopics: [], followedSeries: [], readingProgress: [], searches: [], reactions: [] };
   let stopped = false;
-  let pending = 0;
-  let fallbackTimer: number | null = null;
-  const emit = () => { if (!stopped && pending === 0) callback({ ...values }); };
+  let pending = names.length;
+  let intervalId: number | null = null;
+
+  const emit = () => {
+    if (!stopped && pending === 0) callback({ ...values });
+  };
+
+  // Keep high-value personalization signals realtime. Search/reaction indexes are
+  // intentionally loaded on a throttled cadence instead of maintaining eight
+  // permanent listeners; this materially lowers initial and ongoing Firestore reads.
   const unsubscribers = names.map((name) => {
     const coll = collection(db, 'users', uid, name);
-    const q = name === 'history' ? query(coll, orderBy('viewedAt', 'desc'), limit(150))
-      : name === 'searches' ? query(coll, orderBy('createdAt', 'desc'), limit(100))
-      : query(coll, limit(name === 'readingProgress' ? 200 : 150));
-    pending += 1;
+    const q = name === 'history'
+      ? query(coll, orderBy('viewedAt', 'desc'), limit(75))
+      : query(coll, limit(name === 'readingProgress' ? 120 : 75));
     return onSnapshot(q, snap => {
       values[name] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       pending = Math.max(0, pending - 1);
@@ -82,13 +103,33 @@ export function subscribeRecommendationSignals(uid: string, callback: (signals: 
       emit();
     });
   });
-  fallbackTimer = window.setTimeout(async () => {
-    if (stopped) return;
-    try { callback(await loadRecommendationSignals(uid)); } catch (error) { onError?.(error); }
-  }, 900);
+
+  let secondaryLoading = false;
+  const loadSecondarySignals = async () => {
+    if (stopped || secondaryLoading) return;
+    secondaryLoading = true;
+    try {
+      const [searches, reactions] = await Promise.all([
+        readSubcollection(uid, 'searches', 50),
+        readSubcollection(uid, 'reactionIndex', 75),
+      ]);
+      if (stopped) return;
+      values.searches = searches;
+      values.reactions = reactions;
+      if (pending === 0) callback({ ...values });
+    } catch (error) {
+      if (!stopped) onError?.(error);
+    } finally {
+      secondaryLoading = false;
+    }
+  };
+
+  void loadSecondarySignals();
+  intervalId = window.setInterval(() => void loadSecondarySignals(), 120_000);
+
   return () => {
     stopped = true;
-    if (fallbackTimer !== null) window.clearTimeout(fallbackTimer);
+    if (intervalId !== null) window.clearInterval(intervalId);
     unsubscribers.forEach(unsub => unsub());
   };
 }

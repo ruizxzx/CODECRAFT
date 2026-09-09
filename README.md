@@ -309,3 +309,8 @@ If the R2 upload fails, the processed crop is retained for retry and the existin
 - Avoided re-reading the profile after successful updates for identity propagation.
 - Kept Cloudflare R2 uploads independent from profile persistence.
 - Added a quota-specific message when Firestore returns `resource-exhausted` / quota errors, so successful R2 uploads are not mislabeled as media-upload failures.
+
+
+## V75.12 — Firestore Quota & Usage Optimization
+
+V75.12 hardens Firestore usage without changing Firestore into a different data store. The release adds short-lived in-memory caches, in-flight request deduplication, quota cooldowns, bounded retry behavior, fewer always-on recommendation listeners, cached platform counts, throttled admin identity synchronization, and profile cache invalidation after writes. Quota failures are not retried automatically.

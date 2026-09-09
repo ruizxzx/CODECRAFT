@@ -5,6 +5,7 @@ import {
 import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, BookmarkCollection, CarouselSlide, Notification } from '../types';
 import { isPlatformModerator } from './social';
 import { getNotificationPreferences } from './account';
+import { optimizedGetDoc, optimizedGetDocs, invalidateFirestoreDocument, isFirestoreQuotaError } from './firestoreOptimization';
 
 
 function mapDocDates(data: any) {
@@ -58,13 +59,19 @@ async function createNotification(userId: string, data: Omit<Notification, 'id' 
   await setDoc(doc(db, 'users', userId, 'notifications', id), { ...data, read: false, createdAt: serverTimestamp() });
 }
 
+const notificationPreferenceCache = new Map<string, { expiresAt: number; value: any }>();
+
 async function getNotificationPreferencesForUser(userId: string) {
+  const cached = notificationPreferenceCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const fallback = { comments: true, replies: true, mentions: true, follows: true, reactions: true, productNews: true };
   try {
-    const { getDoc } = await import('firebase/firestore');
-    const snap = await getDoc(doc(db, 'users', userId, 'preferences', 'notifications'));
-    return { comments: true, replies: true, mentions: true, follows: true, reactions: true, productNews: true, ...(snap.exists() ? snap.data() : {}) };
+    const snap = await optimizedGetDoc(doc(db, 'users', userId, 'preferences', 'notifications'), { ttlMs: 300_000, allowStaleOnQuota: true });
+    const value = { ...fallback, ...(snap.exists() ? snap.data() : {}) };
+    notificationPreferenceCache.set(userId, { value, expiresAt: Date.now() + 300_000 });
+    return value;
   } catch {
-    return { comments: true, replies: true, mentions: true, follows: true, reactions: true, productNews: true };
+    return cached?.value || fallback;
   }
 }
 
@@ -204,12 +211,17 @@ export async function clearCommunityDraft(userId: string): Promise<void> {
 export async function getCommunityProfile(uid: string): Promise<CommunityUser | null> {
   const p = `users/${uid}`;
   try {
-    const snap = await getDoc(doc(db, 'users', uid));
+    if (!uid) return null;
+    const snap = await optimizedGetDoc(doc(db, 'users', uid), { ttlMs: 60_000, allowStaleOnQuota: true });
     if (snap.exists()) {
       return mapDocDates(snap.data()) as CommunityUser;
     }
     return null;
   } catch (error) {
+    if (isFirestoreQuotaError(error)) {
+      console.warn('Profile read suppressed by Firestore quota protection:', uid);
+      return null;
+    }
     handleFirestoreError(error, OperationType.GET, p);
     return null;
   }
@@ -321,23 +333,37 @@ async function chooseAvailableUsername(base: string): Promise<string> {
  * temporary random display name; the @handle remains explicitly unclaimed until
  * the user chooses one.
  */
+const handleUidCache = new Map<string, { expiresAt: number; uid: string }>();
+
 async function resolvePublicHandleUid(username: string): Promise<string> {
   if (!auth.currentUser) return '';
+  const clean = normalizeUsername(username);
+  if (!clean) return '';
+  const cached = handleUidCache.get(clean);
+  if (cached && cached.expiresAt > Date.now()) return cached.uid;
   try {
-    const reservation = await getDoc(doc(db, 'usernames', normalizeUsername(username)));
-    return reservation.exists() ? String(reservation.data()?.uid || '') : '';
+    const reservation = await optimizedGetDoc(doc(db, 'usernames', clean), { ttlMs: 300_000, allowStaleOnQuota: true });
+    const uid = reservation.exists() ? String(reservation.data()?.uid || '') : '';
+    handleUidCache.set(clean, { uid, expiresAt: Date.now() + 300_000 });
+    return uid;
   } catch (error) {
     console.warn('Public handle UID resolution skipped:', error);
-    return '';
+    return cached?.uid || '';
   }
 }
 
 export async function getAllCommunityUsers(): Promise<CommunityUser[]> {
   try {
-    const snap = await getDocs(collection(db, 'publicProfiles'));
+    const snap = await optimizedGetDocs(
+      'publicProfiles:all',
+      () => getDocs(collection(db, 'publicProfiles')),
+      { ttlMs: 120_000, allowStaleOnQuota: true },
+    );
     const base = snap.docs.map(d => mapDocDates(d.data()) as CommunityUser)
       .filter(u => !!u?.username);
     if (!auth.currentUser) return base.sort((a, b) => a.username.localeCompare(b.username));
+    // Identity enrichment is still performed, but each username lookup is cached
+    // by getProfileByUsername/resolvePublicHandleUid callers to avoid stampeding reads.
     const enriched = await Promise.all(base.map(async u => {
       const uid = await resolvePublicHandleUid(u.username);
       return uid ? ({ ...u, uid } as CommunityUser) : u;
@@ -375,7 +401,17 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
 
   const existing = await getCommunityProfile(user.uid);
   if (existing) {
-    if (existing.username) { try { await upsertPublicProfile(existing); } catch (error) { console.warn('Public profile projection refresh failed:', error); } }
+    if (existing.username) {
+      const syncKey = `offscrpt:public-profile-sync:${user.uid}`;
+      let recentlySynced = false;
+      try { recentlySynced = Number(sessionStorage.getItem(syncKey) || 0) > Date.now() - 900_000; } catch {}
+      if (!recentlySynced) {
+        try {
+          await upsertPublicProfile(existing);
+          try { sessionStorage.setItem(syncKey, String(Date.now())); } catch {}
+        } catch (error) { console.warn('Public profile projection refresh skipped:', error); }
+      }
+    }
     if (checkIsAdmin(user.email) && existing.platformRole !== 'master_admin') {
       try {
         await updateDoc(doc(db, 'users', user.uid), {
@@ -583,6 +619,7 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
         batch.set(doc(db, 'publicProfiles', publicUsername), publicBase, { merge: true });
       }
       await batch.commit();
+      invalidateFirestoreDocument(userRef.path);
 
       const identityChanged = Object.prototype.hasOwnProperty.call(clean, 'displayName') || Object.prototype.hasOwnProperty.call(clean, 'photoURL');
       if (identityChanged) {
@@ -660,6 +697,7 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
 
       tx.update(userRef, nextUserData);
     });
+    invalidateFirestoreDocument(userRef.path);
 
     // Propagate from the values already submitted instead of re-reading the user doc.
     // This avoids an extra billed Firestore read after every identity edit.

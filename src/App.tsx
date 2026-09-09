@@ -226,20 +226,26 @@ export default function App() {
             const cloudConfig = await getSiteConfig();
             if (generation !== authGenerationRef.current) return;
             try {
-              const synced = await syncAdminAuthorProfile({
-                name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
-                role: cloudConfig.authorRole || 'Founder & Systems Architect',
-                avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
-                bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || ''
-              });
-              await syncAuthorToAllCloudArticles({
-                name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
-                role: cloudConfig.authorRole || 'Founder & Systems Architect',
-                avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
-                bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || '',
-                uid: synced.uid, username: synced.username
-              });
-              prof = await getCommunityProfile(synced.uid) || prof;
+              const syncKey = `offscrpt:admin-author-sync:${user.uid}`;
+              let recentlySynced = false;
+              try { recentlySynced = Number(sessionStorage.getItem(syncKey) || 0) > Date.now() - 1_800_000; } catch {}
+              if (!recentlySynced) {
+                const synced = await syncAdminAuthorProfile({
+                  name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
+                  role: cloudConfig.authorRole || 'Founder & Systems Architect',
+                  avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
+                  bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || ''
+                });
+                await syncAuthorToAllCloudArticles({
+                  name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
+                  role: cloudConfig.authorRole || 'Founder & Systems Architect',
+                  avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
+                  bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || '',
+                  uid: synced.uid, username: synced.username
+                });
+                try { sessionStorage.setItem(syncKey, String(Date.now())); } catch {}
+                prof = await getCommunityProfile(synced.uid) || prof;
+              }
             } catch (adminSyncError) {
               console.warn('Admin author sync skipped:', adminSyncError);
             }

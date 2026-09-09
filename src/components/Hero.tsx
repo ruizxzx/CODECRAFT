@@ -13,6 +13,7 @@ import {
 import { PageView, SiteConfig } from '../types';
 import { collection, getCountFromServer } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { optimizedGetCount } from '../lib/firestoreOptimization';
 
 interface HeroProps {
   onNavigate: (page: PageView) => void;
@@ -24,7 +25,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, postsCount, siteConfig }
   const [showTerminal, setShowTerminal] = useState(false);
   const [activeTab, setActiveTab] = useState<'stack' | 'status' | 'manifesto'>('stack');
   const [readerCount, setReaderCount] = useState<number | null>(null);
-  useEffect(() => { let active = true; getCountFromServer(collection(db, 'users')).then(s => { if (active) setReaderCount(s.data().count); }).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error)); return () => { active = false; }; }, []);
+  useEffect(() => { let active = true; optimizedGetCount('hero:users', () => getCountFromServer(collection(db, 'users')), 600_000).then(count => { if (active) setReaderCount(count); }).catch((error) => console.warn('Hero reader count unavailable:', error)); return () => { active = false; }; }, []);
 
   return (
     <section 
