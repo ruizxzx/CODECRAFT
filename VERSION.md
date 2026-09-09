@@ -1,15 +1,13 @@
-# OFFSCRPT V68
+# OFFSCRPT V71
 
-Article/community runtime hardening release.
+Article Version History / Revision System.
 
-- Fix article render crash caused by unsafe optional republisher fields.
-- Harden article related-content tag calculations.
-- Harden legacy article-card tags.
-- Harden Blog category configuration.
-- Harden SeriesStrip against malformed Firestore series records.
-- Add page-level runtime recovery so a single page cannot blank the entire shell.
-- Keep root and `src/` application trees synchronized.
-
-- Fix MentionTextarea production crash caused by referencing an undefined `inputRef`.
-- Preserve optional external textarea refs while providing a safe internal ref for mention selection/focus.
-- Keep root and `src/` copies synchronized.
+- Firestore-backed `articleRevisions/{revisionId}` snapshots.
+- Automatic snapshot before admin edits.
+- Initial snapshot for newly created articles.
+- Manual revision snapshots via HISTORY workflow.
+- Two-revision field comparison.
+- Safe restore: current article is snapshotted before restore; restore result is recorded.
+- Duplicate revision into a new unpublished article with a unique slug.
+- Admin-only revision access enforced in client and Firestore rules.
+- Base source uses the authenticated MentionTextarea fix from V68.

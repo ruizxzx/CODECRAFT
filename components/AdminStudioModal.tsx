@@ -1,5 +1,5 @@
 import { notifyToast } from '../lib/toast';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { calculateArticleReadingTime } from '../lib/reading';
 import { Article, Category, SiteConfig, BentoLink, CarouselSlide, CarouselElement, MarqueeItem, FooterLink, BlogHeaderConfig, PageView } from '../types';
@@ -34,7 +34,12 @@ import {
   BadgeCheck,
   MousePointer2,
   Layers,
-  History
+  History,
+  Copy,
+  Eye,
+  GitCompare,
+  Clock3,
+  CheckCircle2
 } from 'lucide-react';
 import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
 import { isPlatformModerator } from '../lib/social';
@@ -42,6 +47,7 @@ import {
   saveArticle, 
   getArticleRevisions,
   restoreArticleRevision,
+  duplicateArticleFromRevision,
   deleteArticle, 
   saveSiteConfig,
   getSiteConfig,
@@ -691,6 +697,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   const [revisionArticle, setRevisionArticle] = useState<Article | null>(null);
   const [revisions, setRevisions] = useState<any[]>([]);
   const [revisionBusy, setRevisionBusy] = useState(false);
+  const [selectedRevisionIds, setSelectedRevisionIds] = useState<string[]>([]);
+  const [revisionActionMessage, setRevisionActionMessage] = useState('');
   const adminDraftKey = `offscrpt:draft:admin:${auth.currentUser?.uid || 'session'}`;
   const adminDraftRestoredRef = useRef(false);
 
@@ -862,17 +870,39 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   };
 
   const openRevisionHistory = async (article: Article) => {
-    setRevisionArticle(article); setRevisionBusy(true);
-    try { setRevisions(await getArticleRevisions(article.slug)); } catch (e) { console.warn('Revision history load failed', e); setRevisions([]); }
+    setRevisionArticle(article); setRevisionBusy(true); setSelectedRevisionIds([]); setRevisionActionMessage('');
+    try { setRevisions(await getArticleRevisions(article.slug)); } catch (e:any) { console.warn('Revision history load failed', e); setRevisions([]); notifyToast(e?.message || 'Revision history could not be loaded.'); }
     finally { setRevisionBusy(false); }
+  };
+
+  const toggleRevisionSelection = (id:string) => {
+    setSelectedRevisionIds(prev => prev.includes(id) ? prev.filter(x=>x!==id) : prev.length >= 2 ? [prev[1], id] : [...prev,id]);
   };
 
   const restoreRevision = async (revisionId: string) => {
     if (!revisionId || !window.confirm('Restore this revision? The current article will be snapshotted before restore.')) return;
-    setRevisionBusy(true);
-    try { const restored = await restoreArticleRevision(revisionId); onArticlePublished(restored); setRevisionArticle(null); setRevisions([]); } catch (e:any) { notifyToast(e.message || 'Revision restore failed.'); }
+    setRevisionBusy(true); setRevisionActionMessage('');
+    try { const restored = await restoreArticleRevision(revisionId); onArticlePublished(restored); setRevisions(await getArticleRevisions(restored.slug)); setSelectedRevisionIds([]); setRevisionActionMessage('Revision restored to Firestore. Current state was preserved as a revision.'); } catch (e:any) { notifyToast(e.message || 'Revision restore failed.'); }
     finally { setRevisionBusy(false); }
   };
+
+  const duplicateRevision = async (revisionId:string) => {
+    setRevisionBusy(true); setRevisionActionMessage('');
+    try { const duplicate = await duplicateArticleFromRevision(revisionId); onArticlePublished(duplicate); setRevisionActionMessage(`Duplicated as /${duplicate.slug} and saved to Firestore as an unpublished article.`); } catch(e:any) { notifyToast(e?.message || 'Could not duplicate revision.'); }
+    finally { setRevisionBusy(false); }
+  };
+
+  const revisionTimestamp = (r:any) => r.createdAt?.toDate?.()?.toLocaleString?.([], {year:'numeric',month:'short',day:'2-digit',hour:'2-digit',minute:'2-digit'}) || 'PENDING CLOUD TIMESTAMP';
+  const revisionActionLabel = (action:string) => ({initial:'INITIAL', 'auto-save':'AUTO-SNAPSHOT', manual:'MANUAL SNAPSHOT', 'before-restore':'BEFORE RESTORE', restored:'RESTORE RESULT'} as Record<string,string>)[action] || 'REVISION';
+  const compareRevisionRows = useMemo(() => {
+    if (selectedRevisionIds.length !== 2) return [];
+    const a:any = revisions.find(r=>r.id===selectedRevisionIds[0]); const b:any = revisions.find(r=>r.id===selectedRevisionIds[1]);
+    if(!a||!b) return [];
+    const av=a.article||{}, bv=b.article||{};
+    const fields=[['TITLE','title'],['EXCERPT','excerpt'],['CATEGORY','category'],['TAGS','tags'],['SERIES','seriesId'],['SERIES PART','seriesOrder'],['READ TIME','readingTimeMinutes'],['COVER IMAGE','coverImage']];
+    return fields.map(([label,key])=>({label,a:JSON.stringify(av[key]??''),b:JSON.stringify(bv[key]??''),changed:JSON.stringify(av[key]??'')!==JSON.stringify(bv[key]??'')})).filter(x=>x.changed);
+  },[selectedRevisionIds,revisions]);
+
 
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2617,6 +2647,42 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
               </div>
             )}
 
+          </div>
+        )}
+
+        {revisionArticle && (
+          <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true">
+            <div className="w-full max-w-5xl max-h-[92vh] bg-white border-4 border-black neo-shadow-lg flex flex-col">
+              <div className="bg-[var(--color-primary)] border-b-4 border-black p-4 sm:p-5 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="font-mono text-[9px] font-black uppercase">CLOUD VERSION HISTORY</div>
+                  <h2 className="font-display font-black text-2xl sm:text-3xl uppercase truncate">{revisionArticle.title}</h2>
+                  <div className="font-mono text-[9px] uppercase mt-1">/{revisionArticle.slug} · {revisions.length} stored revisions</div>
+                </div>
+                <button onClick={()=>{setRevisionArticle(null);setRevisions([]);setSelectedRevisionIds([]);}} className="shrink-0 border-2 border-black bg-white p-2 hover:bg-black hover:text-white" aria-label="Close history"><X className="w-5 h-5"/></button>
+              </div>
+              {revisionActionMessage && <div className="mx-4 mt-4 border-2 border-black bg-[var(--color-success)] p-3 font-mono text-[9px] font-black uppercase flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{revisionActionMessage}</div>}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+                {revisionBusy ? <div className="py-20 text-center font-mono text-xs uppercase"><RefreshCw className="w-7 h-7 mx-auto animate-spin mb-3"/>Loading revisions from Firestore...</div> : !revisions.length ? <div className="border-4 border-dashed border-black p-12 text-center"><Clock3 className="w-10 h-10 mx-auto mb-3"/><div className="font-display font-black text-2xl uppercase">NO VERSION HISTORY</div><p className="font-mono text-[9px] text-neutral-500 mt-2 uppercase">Every future article edit will create a cloud snapshot automatically.</p></div> : <>
+                  <div className="border-2 border-black bg-neutral-50 p-3 font-mono text-[9px] uppercase">Select up to two revisions to compare. RESTORE creates a safety snapshot before replacing the live article.</div>
+                  <div className="space-y-2">
+                    {revisions.map((r:any)=><div key={r.id} className={`border-2 border-black p-3 ${selectedRevisionIds.includes(r.id)?'bg-[var(--color-secondary)]':''}`}>
+                      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                        <button type="button" onClick={()=>toggleRevisionSelection(r.id)} className={`w-5 h-5 border-2 border-black shrink-0 ${selectedRevisionIds.includes(r.id)?'bg-black':'bg-white'}`} aria-label="Select revision"/>
+                        <div className="flex-1 min-w-0"><div className="font-mono text-[10px] font-black uppercase flex flex-wrap items-center gap-2"><span>{revisionTimestamp(r)}</span><span className="bg-black text-white px-1.5 py-0.5">{revisionActionLabel(r.action)}</span></div><div className="font-mono text-[9px] text-neutral-500 mt-1 uppercase">{r.createdByName || r.createdByEmail || r.createdBy || 'STAFF'} · {r.id}</div><div className="font-display font-black text-sm uppercase mt-1 truncate">{r.title || r.article?.title || revisionArticle.title}</div></div>
+                        <div className="flex flex-wrap gap-2 shrink-0">
+                          <button type="button" onClick={()=>toggleRevisionSelection(r.id)} className="border-2 border-black bg-white px-2.5 py-1.5 font-mono text-[9px] font-black uppercase"><GitCompare className="w-3 h-3 inline mr-1"/>{selectedRevisionIds.includes(r.id)?'SELECTED':'COMPARE'}</button>
+                          <button type="button" disabled={revisionBusy} onClick={()=>void restoreRevision(r.id)} className="border-2 border-black bg-[var(--color-primary)] px-2.5 py-1.5 font-mono text-[9px] font-black uppercase disabled:opacity-40"><History className="w-3 h-3 inline mr-1"/>RESTORE</button>
+                          <button type="button" disabled={revisionBusy} onClick={()=>void duplicateRevision(r.id)} className="border-2 border-black bg-white px-2.5 py-1.5 font-mono text-[9px] font-black uppercase disabled:opacity-40"><Copy className="w-3 h-3 inline mr-1"/>DUPLICATE</button>
+                        </div>
+                      </div>
+                    </div>)}
+                  </div>
+                  {selectedRevisionIds.length===2 && <div className="border-4 border-black bg-white p-4 space-y-4"><div className="flex items-center justify-between gap-2"><div><div className="font-mono text-[9px] uppercase">COMPARE</div><h3 className="font-display font-black text-xl uppercase">Field Changes</h3></div><button onClick={()=>setSelectedRevisionIds([])} className="border-2 border-black bg-white px-2 py-1 font-mono text-[9px] font-black uppercase">CLEAR</button></div>{compareRevisionRows.length ? <div className="space-y-2">{compareRevisionRows.map((row:any)=><div key={row.label} className="grid lg:grid-cols-[130px_1fr_1fr] border-2 border-black"><div className="bg-black text-white p-2 font-mono text-[9px] font-black">{row.label}</div><pre className="p-2 text-[9px] whitespace-pre-wrap break-words overflow-x-auto border-t lg:border-t-0 lg:border-l-2 border-black">{row.a}</pre><pre className="p-2 text-[9px] whitespace-pre-wrap break-words overflow-x-auto border-t-2 lg:border-t-0 lg:border-l-2 border-black">{row.b}</pre></div>)}</div> : <div className="font-mono text-xs">NO FIELD CHANGES DETECTED.</div>}</div>}
+                </>}
+              </div>
+              <div className="border-t-4 border-black bg-neutral-100 p-3 flex justify-between items-center"><span className="font-mono text-[9px] uppercase">Firestore-backed • Admin-only</span><button onClick={()=>{setRevisionArticle(null);setRevisions([]);setSelectedRevisionIds([]);}} className="border-2 border-black bg-white px-3 py-2 font-mono text-[9px] font-black uppercase">CLOSE</button></div>
+            </div>
           </div>
         )}
 

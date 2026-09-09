@@ -19,6 +19,7 @@ import {
   runTransaction
 } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
+import { writeAdminAudit } from './audit';
 import { deletePost, getCommunityProfile, getPost } from './community';
 import { Article, SiteConfig, BentoLink, ArticleComment, CommunityPost, NavigationItemConfig } from '../types';
 import { INITIAL_ARTICLES } from '../data/articles';
@@ -680,16 +681,40 @@ export async function getSeriesArticles(seriesId:string):Promise<Article[]>{
   const snap=await getDocs(query(collection(db,'articles'),where('seriesId','==',seriesId),limit(100)));
   return snap.docs.map(d=>normalizeArticleRecord(d.data(), d.id)).sort((a:any,b:any)=>(a.seriesOrder||0)-(b.seriesOrder||0));
 }
-export async function createArticleRevision(article:Article):Promise<void>{
-  if(!checkIsAdmin(auth.currentUser?.email)) return;
-  const id=`${article.slug}_${Date.now()}`;
-  await setDoc(doc(db,'articleRevisions',id),{article,slug:article.slug,createdBy:auth.currentUser?.uid||'',createdAt:serverTimestamp()});
+export type ArticleRevisionAction = 'initial' | 'auto-save' | 'manual' | 'before-restore' | 'restored';
+
+export interface ArticleRevision {
+  id: string;
+  slug: string;
+  article: Article;
+  action: ArticleRevisionAction;
+  createdBy: string;
+  createdByEmail?: string;
+  createdByName?: string;
+  createdAt?: any;
 }
 
-export async function getArticleRevisions(slug:string):Promise<any[]>{
+export async function createArticleRevision(article:Article, action:ArticleRevisionAction='manual'):Promise<string|undefined>{
+  const admin=auth.currentUser;
+  if(!admin || !checkIsAdmin(admin.email) || !article?.slug) return;
+  const id=`${article.slug}_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+  await setDoc(doc(db,'articleRevisions',id),{
+    article: stripUndefinedDeep(article),
+    slug: article.slug,
+    title: article.title || '',
+    action,
+    createdBy: admin.uid,
+    createdByEmail: admin.email || '',
+    createdByName: admin.displayName || '',
+    createdAt: serverTimestamp()
+  });
+  return id;
+}
+
+export async function getArticleRevisions(slug:string):Promise<ArticleRevision[]>{
   const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
-  const snap=await getDocs(query(collection(db,'articleRevisions'), where('slug','==',slug), limit(50)));
-  return snap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>{
+  const snap=await getDocs(query(collection(db,'articleRevisions'), where('slug','==',slug), limit(100)));
+  return snap.docs.map(d=>({id:d.id,...d.data()} as ArticleRevision)).sort((a:any,b:any)=>{
     const at=a.createdAt?.toDate?.()?.getTime?.() || 0; const bt=b.createdAt?.toDate?.()?.getTime?.() || 0; return bt-at;
   });
 }
@@ -697,18 +722,37 @@ export async function getArticleRevisions(slug:string):Promise<any[]>{
 export async function restoreArticleRevision(revisionId:string):Promise<Article>{
   const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
   const snap=await getDoc(doc(db,'articleRevisions',revisionId)); if(!snap.exists()) throw new Error('Revision not found.');
-  const article={...(snap.data()?.article as Article)};
-  await saveArticle(article);
+  const source=snap.data()?.article as Article;
+  if(!source?.slug) throw new Error('This revision is invalid.');
+  const currentSnap=await getDoc(doc(db,'articles',source.slug));
+  if(currentSnap.exists()) await createArticleRevision(normalizeArticleRecord(currentSnap.data(), currentSnap.id), 'before-restore');
+  const article={...source};
+  await saveArticle(article, {createRevision:false, revisionAction:'restored'});
+  await createArticleRevision(article, 'restored');
   return article;
 }
 
-export async function saveArticle(article: Article): Promise<Article> {
+export async function duplicateArticleFromRevision(revisionId:string):Promise<Article>{
+  const admin=auth.currentUser; if(!admin || !checkIsAdmin(admin.email)) throw new Error('Admin access required.');
+  const snap=await getDoc(doc(db,'articleRevisions',revisionId)); if(!snap.exists()) throw new Error('Revision not found.');
+  const source={...(snap.data()?.article as Article)};
+  if(!source?.slug) throw new Error('This revision is invalid.');
+  const base=source.slug.replace(/-copy(?:-\d+)?$/,'');
+  let slug=`${base}-copy`; let n=2;
+  while((await getDoc(doc(db,'articles',slug))).exists()){ slug=`${base}-copy-${n++}`; }
+  const duplicate:Article={...source,id:`article-${Date.now()}`,slug,title:`${source.title} (Copy)`,viewsCount:0,clapsCount:0,reactionCounts:{},isPublished:false,mainPublicationStatus:'unpublished',featured:false,pinned:false,trending:false,promotedToArticleSlug:undefined,sourcePostId:undefined,origin:'admin'};
+  await saveArticle(duplicate,{createRevision:false,revisionAction:'manual'});
+  await createArticleRevision(duplicate,'initial');
+  return duplicate;
+}
+
+export async function saveArticle(article: Article, options:{createRevision?:boolean;revisionAction?:ArticleRevisionAction} = {}): Promise<Article> {
   if (!article.title || !article.slug) {
     throw new Error("Article must have a title and a valid slug.");
   }
   const articleDocRef = doc(db, 'articles', article.slug);
   const existingSnap = await getDoc(articleDocRef);
-  if(existingSnap.exists() && checkIsAdmin(auth.currentUser?.email)) { try { await createArticleRevision({...existingSnap.data(), id: existingSnap.id, slug: existingSnap.id} as Article); } catch(e){ console.warn('Revision snapshot failed:',e); } }
+  if(existingSnap.exists() && checkIsAdmin(auth.currentUser?.email) && options.createRevision !== false) { try { await createArticleRevision(normalizeArticleRecord(existingSnap.data(), existingSnap.id), options.revisionAction || 'auto-save'); } catch(e){ console.warn('Revision snapshot failed:',e); } }
   const isNewArticle = !existingSnap.exists();
   const dataToSave = stripUndefinedDeep({
     ...article,
@@ -716,7 +760,10 @@ export async function saveArticle(article: Article): Promise<Article> {
     createdAt: (article as any).createdAt || serverTimestamp()
   });
   await setDoc(articleDocRef, dataToSave, { merge: true });
-  if (checkIsAdmin(auth.currentUser?.email)) { try { await writeAdminAudit(isNewArticle?'created article':'updated article',`articles/${article.slug}`,existingSnap.exists()?existingSnap.data():null,article); } catch {} }
+  if (checkIsAdmin(auth.currentUser?.email)) {
+    try { await writeAdminAudit(isNewArticle?'created article':'updated article',`articles/${article.slug}`,existingSnap.exists()?existingSnap.data():null,article); } catch {}
+    if (isNewArticle) { try { await createArticleRevision({...article, ...dataToSave} as Article, 'initial'); } catch(e){ console.warn('Initial revision snapshot failed:', e); } }
+  }
 
   // Every registered OFFSCRPT user receives an in-app notification when the admin
   // publishes a genuinely new article. Edits do not generate duplicate alerts.
