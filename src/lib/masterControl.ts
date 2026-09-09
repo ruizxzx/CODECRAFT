@@ -460,24 +460,27 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
   const now = Date.now();
   const d7 = new Date(now - 7 * 86400000);
   const d30 = new Date(now - 30 * 86400000);
-  const [users, articlesSnap, posts, communities, comments, series, reportsOpenCount, analyticsSnap] = await Promise.all([
+  const [users, articlesSnap, posts, communities, comments, series, reportsOpenCount] = await Promise.all([
     getCountFromServer(collection(db, 'users')),
-    getDocs(query(collection(db, 'articles'), limit(500))),
+    getDocs(query(collection(db, 'articles'))),
     getCountFromServer(collection(db, 'posts')),
     getCountFromServer(collection(db, 'communities')),
     getCountFromServer(collectionGroup(db, 'comments')),
     getCountFromServer(collection(db, 'series')),
     getCountFromServer(query(collection(db, 'reports'), where('status', 'in', ['open', 'under_review', 'action_taken']))),
-    getDocs(collectionGroup(db, 'analytics')),
   ]);
 
+  // Read analytics directly from each article's authorized subcollection rather
+  // than using a global collection-group query. This keeps the admin analytics
+  // pipeline aligned with article-specific Firestore authorization.
+  const analyticsChunks = await Promise.all(articlesSnap.docs.map(article =>
+    getDocs(query(collection(db, 'articles', article.id, 'analytics'), limit(1500)))
+      .then(snap => snap.docs.map(d => ({ id: d.id, path: d.ref.path, articleSlug: article.id, ...(d.data() as Record<string, unknown>) })))
+  ));
+  const analyticsSnapDocs = analyticsChunks.flat();
+
   type Row = Record<string, any> & { id:string; path:string; articleSlug:string };
-  const rows: Row[] = analyticsSnap.docs.map(d => ({
-    id: d.id,
-    path: d.ref.path,
-    articleSlug: d.ref.parent.parent?.id || '',
-    ...(d.data() as Record<string, unknown>),
-  }));
+  const rows: Row[] = analyticsSnapDocs as Row[];
   const articleRows = articlesSnap.docs.map(d => ({ slug: d.id, ...(d.data() as Record<string, any>) }));
   const dateValue = (value: unknown): number => value && typeof (value as any).toDate === 'function' ? (value as any).toDate().getTime() : typeof value === 'string' ? Date.parse(value) || 0 : typeof value === 'number' ? value : 0;
   const eventRows = rows.filter(r => r.type !== 'session');
@@ -563,13 +566,27 @@ export async function getRecommendationHealth(): Promise<RecommendationHealth> {
 
 export async function getActivePresenceCount(): Promise<{ activeUsers: number; measuredAt: number }> {
   await requireMaster();
-  const snap = await getDocs(query(collectionGroup(db, 'members'), limit(3000)));
+  // Collection-group queries over every `members` collection can be rejected by
+  // Firestore rules because unrelated member collections participate in rule
+  // evaluation. Presence is stored under presence/{scopeId}/members, so use the
+  // known health scope plus any explicitly configured scopes instead of scanning
+  // every `members` collection in the database.
+  const scopeIds = new Set<string>(['healthcheck', 'health']);
+  try {
+    const config = await getDoc(doc(db, 'siteConfig', 'global'));
+    const configured = config.data()?.presenceScopes;
+    if (Array.isArray(configured)) for (const scope of configured) if (typeof scope === 'string' && scope) scopeIds.add(scope.slice(0, 128));
+  } catch { /* site config is not required for the health count */ }
+
   const now = Date.now();
   const active = new Set<string>();
-  for (const d of snap.docs) {
-    const data: any = d.data();
-    const expiresAt = data.expiresAt?.toDate?.()?.getTime?.() || 0;
-    if (data.uid && expiresAt > now) active.add(String(data.uid));
+  for (const scopeId of scopeIds) {
+    const snap = await getDocs(query(collection(db, 'presence', scopeId, 'members'), limit(3000)));
+    for (const d of snap.docs) {
+      const data: any = d.data();
+      const expiresAt = data.expiresAt?.toDate?.()?.getTime?.() || 0;
+      if (data.uid && expiresAt > now) active.add(String(data.uid));
+    }
   }
   return { activeUsers: active.size, measuredAt: now };
 }

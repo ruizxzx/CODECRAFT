@@ -86,7 +86,6 @@ export const AdminControlPanel: React.FC<Props> = ({ onSiteConfigRestored, isMod
   const [revisionArticle, setRevisionArticle] = useState<Article | null>(null);
   const [revisions, setRevisions] = useState<ArticleRevision[]>([]);
   const [commentTarget, setCommentTarget] = useState<MasterCommentRecord | null>(null);
-  const [reportResponse, setReportResponse] = useState('');
   const [moderatorPermissions, setModeratorPermissions] = useState<Record<string, boolean>>({});
   const [permissionTarget, setPermissionTarget] = useState<any | null>(null);
 

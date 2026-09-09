@@ -58,11 +58,11 @@ export async function runClientHealthChecks(): Promise<HealthCheckResult[]> {
       stop = subscribePresence('healthcheck', (count) => {
         finish('healthy', `Presence collection is readable; ${count} active member record(s) returned.`);
       }, (error) => {
-        finish('unavailable', error instanceof Error ? error.message : String(error));
+        finish('degraded', `Presence check unavailable: ${error instanceof Error ? error.message : String(error)}`);
       });
       window.setTimeout(() => finish('degraded', 'Presence check timed out; the client is reachable but the presence listener did not respond within 2 seconds.'), 2000);
     } catch (error) {
-      finish('unavailable', error instanceof Error ? error.message : String(error));
+      finish('degraded', `Presence check unavailable: ${error instanceof Error ? error.message : String(error)}`);
     }
   });
   results.push(presenceCheck);

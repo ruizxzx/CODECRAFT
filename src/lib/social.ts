@@ -391,17 +391,17 @@ export async function getAdminRootAndCommunityPosts():Promise<SocialAdminPost[]>
   await requireStaff();
   const rootSnap=await getDocs(query(collection(db,'posts'),limit(500)));
   const root=(rootSnap.docs.map(map) as any[]).map(p=>({...p,sourceType:'root',isFeatured:!!p.isFeatured}));
-  let community:any[]=[];
-  try {
-    const groupSnap=await getDocs(query(collectionGroup(db,'posts'),limit(500)));
-    for(const d of groupSnap.docs){
-      const path=d.ref.path.split('/');
-      if(path.length!==4 || path[0]!=='communities' || path[2]!=='posts') continue;
-      const x:any=map(d); x.sourceType='community'; x.communityId=path[1];
-      try { const c=await getCommunity(path[1]); x.communitySlug=c?.slug||path[1]; } catch { x.communitySlug=path[1]; }
-      community.push(x);
+  const communities=await getCommunities();
+  const communityChunks=await Promise.all(communities.map(async community=>{
+    try {
+      const snap=await getDocs(query(collection(db,'communities',community.id,'posts'),limit(500)));
+      return snap.docs.map(d=>{const x:any=map(d);return {...x,sourceType:'community',communityId:community.id,communitySlug:community.slug||community.id};});
+    } catch(e) {
+      console.warn(`Admin community-post scan failed for ${community.id}`,e);
+      return [];
     }
-  } catch(e){ console.warn('Admin community-post scan failed',e); }
+  }));
+  const community=communityChunks.flat();
   return [...root,...community].sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime()) as SocialAdminPost[];
 }
 

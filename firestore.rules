@@ -129,6 +129,11 @@ service cloud.firestore {
       allow delete: if isSignedIn() && request.auth.uid == userId;
     }
 
+    // Explicit collection-group authorization for privileged diagnostics.
+    match /{path=**}/members/{memberId} {
+      allow read: if isAdmin();
+    }
+
     match /users/{userId} {
       allow read: if true;
       allow create: if isSignedIn() 
@@ -757,6 +762,11 @@ service cloud.firestore {
       }
     }
 
+
+    // Collection-group analytics access for master/admin reporting.
+    match /{path=**}/analytics/{eventId} {
+      allow read: if isAdmin();
+    }
 
     match /articles/{slug}/analytics/{eventId} {
       function canReadAnalytics() {

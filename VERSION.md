@@ -1,11 +1,10 @@
-# OFFSCRPT V74.0
+# OFFSCRPT V74.1
 
-Master Control parity + analytics hardening release.
+Master Control cloud-integrity and diagnostics patch.
 
-- Restores dedicated legacy Master Control sections: Posts, Communities, Questions, Topics, Reports, Users, Messages, Moderators, Site Control, Navigation, Backups.
-- Keeps V73 authority/security controls: master allowlist, emergency lock, granular moderator permissions, system health, runtime diagnostics, audit.
-- Fixes Master Control analytics with Firestore-backed platform, article and creator aggregates and 7D/30D/90D/ALL windows.
-- Adds latest-state bookmark/reaction aggregation and excludes reader identities from creator-facing analytics.
-- Makes Master Control loading resilient with per-resource cloud diagnostics instead of a single failed permission query blanking the entire panel.
-- Fixes root-post comment-lock control to use `commentsLocked`, not post `isLocked`.
-- Fixes System Health presence probe to avoid the reserved `__health__` resource identifier.
+- Fixes Master Control presence diagnostics by avoiding broad collection-group member scans.
+- Fixes admin community-post inventory by querying each community posts collection directly instead of a broad collection-group scan.
+- Fixes platform analytics collection access by reading article analytics through their authorized article subcollections.
+- Removes the initial Master Control presence count from the core load failure path; presence is checked independently in System Health.
+- Preserves real Firestore-backed analytics and synchronization; no synthetic fallback data added.
+- Keeps V74 legacy Master Control parity: Dashboard, Access, Users, Posts, Communities, Questions, Topics, Reports, Messages, Moderators, Comments, Content, Site Control, Navigation, Backups, Analytics, Recommendations, System, Audit.
