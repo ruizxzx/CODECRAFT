@@ -326,9 +326,17 @@ export async function getMessagePeople(uid: string): Promise<CommunityUser[]> {
       if (!peerId) return;
       const isPeerSender = m.senderId === peerId;
       const username = String(isPeerSender ? (m.senderUsername || '') : (m.recipientUsername || ''));
-      const displayName = String(isPeerSender ? (m.senderName || '') : (m.recipientName || username || 'User'));
+      const displayName = String(isPeerSender ? (m.senderName || '') : (m.recipientName || ''));
       const photoURL = String(isPeerSender ? (m.senderAvatar || '') : (m.recipientAvatar || ''));
-      if (byUid.has(peerId)) return;
+      // Legacy messages can lack identity metadata. Do not manufacture a fake "User"
+      // entry; the Social Hub will merge richer public-profile data by UID when available.
+      if (!username && !displayName && !photoURL) return;
+      if (byUid.has(peerId)) {
+        const existing = byUid.get(peerId)!;
+        const existingScore = Number(!!existing.username) + Number(!!existing.displayName) + Number(!!existing.photoURL);
+        const nextScore = Number(!!username) + Number(!!displayName) + Number(!!photoURL);
+        if (nextScore <= existingScore) return;
+      }
       byUid.set(peerId, {
         uid: peerId,
         username,

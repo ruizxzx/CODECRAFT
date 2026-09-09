@@ -50,7 +50,20 @@ export const SocialHubView:React.FC<Props>=({userProfile,onNavigate,siteConfig})
  const requireAuth=()=>{if(!userProfile){setError('Sign in to use this feature.');return false;}return true;};
  const showErr=(e:unknown)=>{setError(errText(e));setNotice('');};
  const clearFeedback=()=>{setError('');setNotice('');};
- const refresh=async()=>{setLoading(true);clearFeedback();const r=await Promise.allSettled([getCommunities(),getQuestions(),getTopics(),getAllCommunityUsers(),getPosts(),getAllCommunityFeedPosts(),userProfile ? getMessagePeople(userProfile.uid) : Promise.resolve([])]);const [c,q,t,u,p,cp,mp]=r as any[];const failed:string[]=[];if(c.status==='fulfilled')setCommunities(c.value);else failed.push('communities');if(q.status==='fulfilled')setQuestions(q.value);else failed.push('questions');if(t.status==='fulfilled')setTopics(t.value);else failed.push('topics');const publicPeople=u.status==='fulfilled'?u.value:[];const messagePeople=mp.status==='fulfilled'?mp.value:[];if(publicPeople.length||messagePeople.length){const merged=new Map<string,CommunityUser>();[...publicPeople,...messagePeople].forEach((person:any)=>{if(person?.uid)merged.set(person.uid,person);});setUsers(Array.from(merged.values()));}else{setUsers([]);if(u.status!=='fulfilled')failed.push('people');}if(p.status==='fulfilled')setLegacy(uniq(p.value));else failed.push('blogs');if(cp.status==='fulfilled')setAllCommunityPosts(uniq(cp.value));else failed.push('community feed');if(failed.length)setNotice(`Cloud sync warning: ${failed.join(', ')} unavailable.`);setLoading(false);};
+ const refresh=async()=>{setLoading(true);clearFeedback();const r=await Promise.allSettled([getCommunities(),getQuestions(),getTopics(),getAllCommunityUsers(),getPosts(),getAllCommunityFeedPosts(),userProfile ? getMessagePeople(userProfile.uid) : Promise.resolve([])]);const [c,q,t,u,p,cp,mp]=r as any[];const failed:string[]=[];if(c.status==='fulfilled')setCommunities(c.value);else failed.push('communities');if(q.status==='fulfilled')setQuestions(q.value);else failed.push('questions');if(t.status==='fulfilled')setTopics(t.value);else failed.push('topics');const publicPeople=u.status==='fulfilled'?u.value:[];const messagePeople=mp.status==='fulfilled'?mp.value:[];if(publicPeople.length||messagePeople.length){const merged=new Map<string,CommunityUser>();
+// Public profile data is authoritative. Legacy message participants are only a fallback
+// and must never overwrite a richer current identity with blank/default values.
+publicPeople.forEach((person:any)=>{if(person?.uid && (person.username||person.displayName)){merged.set(person.uid,person);}});
+messagePeople.forEach((person:any)=>{
+  if(!person?.uid || (!person.username && !person.displayName && !person.photoURL)) return;
+  const existing=merged.get(person.uid);
+  if(!existing){merged.set(person.uid,person);return;}
+  const existingScore=Number(!!existing.username)+Number(!!existing.displayName)+Number(!!existing.photoURL);
+  const nextScore=Number(!!person.username)+Number(!!person.displayName)+Number(!!person.photoURL);
+  if(nextScore>existingScore) merged.set(person.uid,person);
+});
+setUsers(Array.from(merged.values()));
+}else{setUsers([]);if(u.status!=='fulfilled')failed.push('people');}if(p.status==='fulfilled')setLegacy(uniq(p.value));else failed.push('blogs');if(cp.status==='fulfilled')setAllCommunityPosts(uniq(cp.value));else failed.push('community feed');if(failed.length)setNotice(`Cloud sync warning: ${failed.join(', ')} unavailable.`);setLoading(false);};
  useEffect(()=>{void refresh();},[userProfile?.uid]);
  useEffect(()=>{if(!selected){setCommunityPosts([]);return;}return subscribeCommunityFeed(selected.id,s=>setCommunityPosts(uniq(s)));},[selected?.id]);
  useEffect(()=>subscribeCommunityPosts(undefined,s=>setLegacy(uniq(s))),[]);
