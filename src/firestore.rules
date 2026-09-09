@@ -170,7 +170,7 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if true;
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       allow create: if isSignedIn() 
         && (registrationsEnabled() || isAdmin())
         && isValidId(userId)
@@ -182,24 +182,37 @@ service cloud.firestore {
         && incoming().get('platformRole', 'member') == (isAdmin() ? 'master_admin' : 'member')
         && incoming().get('role', '') == (isAdmin() ? 'Master Admin' : '')
         && (incoming().username == '' || existsAfter(/databases/$(database)/documents/usernames/$(incoming().username)));
+      // Self profile edits. UID, email, timestamps, roles and moderation state remain immutable here.
       allow update: if isSignedIn()
         && request.auth.uid == userId
         && incoming().uid == existing().uid
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'updatedAt'])
-        && validProfileUpdate(incoming(), existing())
-        && (incoming().get('username', '') == existing().get('username', '')
-          || incoming().get('username', '') == ''
-          || existsAfter(/databases/$(database)/documents/usernames/$(incoming().get('username', ''))))
-        || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
-        || (isAdmin() && existing().username == 'krishsarkar' && existing().get('isAuthor', false) == true && incoming().uid == existing().uid && incoming().username == existing().username && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
-        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'isSuspended', 'restrictCommenting', 'restrictPosting', 'restrictCommunities', 'restrictReactions', 'restrictFollowing', 'moderatorNote', 'warningCount', 'suspensionUntil', 'updatedAt']))
-        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt']))
-        || (isPlatformModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt']))
-        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))
-        || (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']))
-        || (isAdmin() && isValidUser(incoming()));
+        && incoming().diff(existing()).affectedKeys().hasOnly(['username','displayName','photoURL','coverImageUrl','websiteUrl','location','socialX','socialGithub','socialTelegram','socialInstagram','bio','themeColor','creatorPage','updatedAt'])
+        && (!incoming().diff(existing()).affectedKeys().hasAny(['username']) || (incoming().username == '' || (incoming().username is string && incoming().username.matches('^[a-zA-Z0-9_]+$') && incoming().username.size() >= 3 && incoming().username.size() <= 30)))
+        && (!incoming().diff(existing()).affectedKeys().hasAny(['displayName']) || (incoming().displayName is string && incoming().displayName.size() <= 64))
+        && (!incoming().diff(existing()).affectedKeys().hasAny(['bio']) || (incoming().bio is string && incoming().bio.size() <= 500))
+        && (!incoming().diff(existing()).affectedKeys().hasAny(['themeColor']) || (incoming().themeColor is string && incoming().themeColor.matches('^#[0-9a-fA-F]{6}$')))
+        && (incoming().get('username','') == existing().get('username','') || incoming().get('username','') == '' || existsAfter(/databases/$(database)/documents/usernames/$(incoming().get('username',''))));
+      // Master admin may edit protected profile fields, including the handle, but only through approved fields.
+      allow update: if isAdmin()
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['username','displayName','photoURL','coverImageUrl','websiteUrl','location','socialX','socialGithub','socialTelegram','socialInstagram','bio','themeColor','creatorPage','role','platformRole','isAuthor','isVerified','verificationColor','updatedAt'])
+        && (incoming().get('username','') == existing().get('username','') || incoming().get('username','') == '' || existsAfter(/databases/$(database)/documents/usernames/$(incoming().get('username',''))));
+      // Master moderation controls.
+      allow update: if isAdmin()
+        && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked','isSuspended','restrictCommenting','restrictPosting','restrictCommunities','restrictReactions','restrictFollowing','moderatorNote','warningCount','suspensionUntil','updatedAt'])
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified','verificationColor','updatedAt'])
+        && incoming().updatedAt == request.time;
+      allow update: if isSignedIn() && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount','updatedAt']);
+      allow update: if isSignedIn() && request.auth.uid == userId && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount','updatedAt']);
       allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
 
       match /followers/{followerId} {
@@ -527,18 +540,19 @@ service cloud.firestore {
 
     match /usernames/{username} {
       allow read: if true;
-      allow update: if isSignedIn()
-        && existing().uid == request.auth.uid
-        && incoming().uid == request.auth.uid
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username;
       allow create: if isSignedIn()
-        && incoming().keys().hasAll(["uid"]) && incoming().keys().size() == 1
-        && incoming().uid is string && incoming().uid == request.auth.uid
-        && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username;
+        && incoming().keys().hasAll(['uid'])
+        && incoming().uid is string
+        && existsAfter(/databases/$(database)/documents/users/$(incoming().uid))
+        && getAfter(/databases/$(database)/documents/users/$(incoming().uid)).data.get('username','') == username
+        && (incoming().get('updatedAt', request.time) == request.time || isAdmin());
+      allow update: if isSignedIn()
+        && existing().uid == incoming().uid
+        && (existing().uid == request.auth.uid || isAdmin())
+        && getAfter(/databases/$(database)/documents/users/$(existing().uid)).data.get('username','') == username;
       allow delete: if isSignedIn()
-        && existing().uid == request.auth.uid
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username != username;
+        && (existing().uid == request.auth.uid || isAdmin())
+        && getAfter(/databases/$(database)/documents/users/$(existing().uid)).data.get('username','') != username;
     }
 
     // Private resume point for an authenticated reader. This is deliberately

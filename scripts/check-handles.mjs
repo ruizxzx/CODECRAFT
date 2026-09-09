@@ -8,7 +8,6 @@ const required = [
   "collectionGroup(db, 'comments')",
   "collectionGroup(db, 'members')",
   "collectionGroup(db, 'following')",
-  "collectionGroup(db, 'notifications')",
   "collection(db, 'messages')",
   "collection(db, 'reports')",
   "collection(db, 'questions')",

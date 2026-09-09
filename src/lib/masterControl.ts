@@ -9,6 +9,7 @@ import {
   limit,
   onSnapshot,
   query,
+  runTransaction,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -16,6 +17,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db, checkIsAdmin } from './firebase';
+import { syncUserIdentityAcrossContent, getCommunityProfile } from './community';
 
 export type EmergencyKey =
   | 'maintenanceMode' | 'readOnlyMode' | 'registrationsEnabled' | 'commentsEnabled'
@@ -413,6 +415,51 @@ function parseCommentDoc(refPath: string, id: string, data: any): MasterCommentR
     return { ...base, sourceType: 'community_post', communityId: parts[1], postId: parts[3] };
   }
   return { ...base, sourceType: 'post' };
+}
+
+export async function changeUserHandleAsMaster(userId: string, requestedHandle: string): Promise<{ oldHandle: string; newHandle: string }> {
+  await requireMaster();
+  const uid = String(userId || '').trim();
+  if (!uid) throw new Error('User UID is required.');
+  const newHandle = String(requestedHandle || '').toLowerCase().replace(/^@/, '').trim().replace(/[^a-z0-9_]/g, '').slice(0, 30);
+  if (newHandle && (newHandle.length < 3 || newHandle.length > 30)) throw new Error('Handle must be 3–30 characters or blank.');
+  const userRef = doc(db, 'users', uid);
+  const result = await runTransaction(db, async tx => {
+    const userSnap = await tx.get(userRef);
+    if (!userSnap.exists()) throw new Error('User profile not found.');
+    const current: any = userSnap.data();
+    const oldHandle = String(current.username || '').toLowerCase();
+    if (oldHandle === newHandle) return { oldHandle, newHandle };
+
+    const newRef = newHandle ? doc(db, 'usernames', newHandle) : null;
+    const oldRef = oldHandle ? doc(db, 'usernames', oldHandle) : null;
+    const newSnap = newRef ? await tx.get(newRef) : null;
+    if (newSnap?.exists() && String(newSnap.data()?.uid || '') !== uid) {
+      throw new Error('Handle is already claimed by another account.');
+    }
+    if (newRef) tx.set(newRef, { uid, updatedAt: serverTimestamp() }, { merge: false });
+    if (oldRef && oldHandle !== newHandle) tx.delete(oldRef);
+    tx.update(userRef, { username: newHandle, updatedAt: serverTimestamp() });
+    return { oldHandle, newHandle };
+  });
+  try {
+    const latest = await getCommunityProfile(uid);
+    if (latest) {
+      await syncUserIdentityAcrossContent(uid, {
+        displayName: latest.displayName || '',
+        photoURL: latest.photoURL || '',
+        username: latest.username || '',
+        isVerified: !!latest.isVerified,
+        verificationColor: latest.verificationColor || '#2196F3'
+      });
+    }
+  } catch (syncError) {
+    // Canonical handle change is already committed. Keep the admin operation successful
+    // while exposing propagation failure through diagnostics rather than rolling back identity.
+    console.warn('Admin handle propagation incomplete; canonical handle saved:', syncError);
+  }
+  await audit('admin_change_user_handle', `users/${uid}`, { username: result.oldHandle }, { username: result.newHandle });
+  return result;
 }
 
 export async function getRecentCommentsForMaster(): Promise<MasterCommentRecord[]> {

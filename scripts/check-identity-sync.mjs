@@ -10,7 +10,7 @@ if(!rules.includes('function validProfileUpdate(next, prev)')) failures.push('le
 if(!rules.includes("match /{path=**}/members/{memberId}")) failures.push('member identity group rule missing');
 if(!rules.includes("match /{path=**}/following/{followingId}")) failures.push('following identity group rule missing');
 if(!prefs.includes('updateCommunityProfile(user.uid')) failures.push('preferences profile save missing');
-if(!profile.includes('updateCommunityProfile(userAuth.uid')) failures.push('public profile editor save missing');
+if(!profile.includes('await updateCommunityProfile(profile.uid, {')) failures.push('public profile editor save missing');
 if(community.includes("query(collectionGroup(db, 'notifications'), where('actorId', '==', userId))")) failures.push('private notification collection-group propagation still present');
 if(failures.length){ console.error('IDENTITY SYNC CHECK FAILED'); failures.forEach(f=>console.error(' - '+f)); process.exit(1); }
 console.log('IDENTITY SYNC CHECK OK');
