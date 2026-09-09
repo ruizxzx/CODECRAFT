@@ -42,6 +42,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { loginWithGoogle, auth, logout, checkIsAdmin, ADMIN_EMAILS } from '../lib/firebase';
+import { resolveMasterAccess } from '../lib/masterControl';
 import { isPlatformModerator } from '../lib/social';
 import { 
   saveArticle, 
@@ -108,7 +109,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      const master = !!user && checkIsAdmin(user.email);
+      const master = !!user && await resolveMasterAccess(user);
       const moderator = !!user && !master && await isPlatformModerator(user.uid);
       setIsAuthenticated(master || moderator);
       setIsModerator(moderator);
@@ -129,7 +130,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     try {
       setIsLoggingIn(true);
       const user = await loginWithGoogle();
-      if (user && checkIsAdmin(user.email)) {
+      if (user && await resolveMasterAccess(user)) {
         setIsAuthenticated(true);
         setIsModerator(false);
         setCurrentUserEmail(user.email || null);

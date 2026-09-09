@@ -1,6 +1,7 @@
 import { collection, deleteDoc, deleteField, doc, getDoc, getDocs, getCountFromServer, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db, auth, checkIsAdmin } from './firebase';
 import { Article, Series } from '../types';
+import { resolveMasterAccess } from './masterControl';
 
 export async function getSeriesById(id: string): Promise<Series | null> {
   const snap = await getDoc(doc(db, 'series', id));
@@ -57,7 +58,7 @@ export async function getSeriesArticlesFromAllArticles(seriesId: string, article
 export async function createSeries(input: Omit<Series, 'createdAt'|'updatedAt'|'articleCount'>): Promise<Series> {
   const user = auth.currentUser;
   if (!user) throw new Error('Sign in to create a series.');
-  if (input.ownerId !== user.uid && !checkIsAdmin(user.email)) throw new Error('You can only create your own series.');
+  if (input.ownerId !== user.uid && !(await resolveMasterAccess(user))) throw new Error('You can only create your own series.');
   const id = input.id || input.slug;
   if (!id) throw new Error('Series ID is required.');
   const payload = {
@@ -77,7 +78,7 @@ export async function updateSeries(id: string, patch: Partial<Series>): Promise<
   if (!snap.exists()) throw new Error('Series not found.');
   const existing = snap.data() as Series;
   const user = auth.currentUser;
-  if (!user || (existing.ownerId !== user.uid && !checkIsAdmin(user.email))) throw new Error('Series editor access required.');
+  if (!user || (existing.ownerId !== user.uid && !(await resolveMasterAccess(user)))) throw new Error('Series editor access required.');
   const clean: any = { ...patch, updatedAt: serverTimestamp() };
   delete clean.id; delete clean.createdAt; delete clean.articleCount;
   await updateDoc(ref, clean);
@@ -89,7 +90,7 @@ export async function deleteSeries(id: string): Promise<void> {
   if (!snap.exists()) return;
   const existing = snap.data() as Series;
   const user = auth.currentUser;
-  if (!user || (existing.ownerId !== user.uid && !checkIsAdmin(user.email))) throw new Error('Series delete access required.');
+  if (!user || (existing.ownerId !== user.uid && !(await resolveMasterAccess(user)))) throw new Error('Series delete access required.');
   await deleteDoc(ref);
 }
 
@@ -98,7 +99,7 @@ export async function deleteSeries(id: string): Promise<void> {
  * article documents are protected by the article Firestore rules. */
 export async function reorderSeriesArticles(seriesId: string, seriesName: string, articles: Article[]): Promise<void> {
   const user = auth.currentUser;
-  if (!user || !checkIsAdmin(user.email)) throw new Error('Master admin access required.');
+  if (!user || !(await resolveMasterAccess(user))) throw new Error('Master admin access required.');
   const batch = writeBatch(db);
   articles.forEach((article, index) => {
     batch.update(doc(db, 'articles', article.slug), {
@@ -115,7 +116,7 @@ export async function reorderSeriesArticles(seriesId: string, seriesName: string
  * that leaves a series is returned to a clean, legacy-compatible shape. */
 export async function setArticleSeriesMembership(articleSlug: string, seriesId?: string, seriesName?: string, seriesOrder?: number): Promise<void> {
   const user = auth.currentUser;
-  if (!user || !checkIsAdmin(user.email)) throw new Error('Master admin access required.');
+  if (!user || !(await resolveMasterAccess(user))) throw new Error('Master admin access required.');
 
   const articleRef = doc(db, 'articles', articleSlug);
   const articleSnap = await getDoc(articleRef);

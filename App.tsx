@@ -40,17 +40,22 @@ import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
 import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
+import { SystemHealthView } from './components/SystemHealthView';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
-import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor, subscribeCommunityProfile } from './lib/community';
+import { getCommunityProfile, ensureCommunityProfileForUser, subscribeUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor, subscribeCommunityProfile } from './lib/community';
 import { subscribeReadingQueue, toggleReadingQueue, subscribeThemePreference } from './lib/account';
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
 import { notifyToast } from './lib/toast';
 import { recordArticleAnalyticsEvent } from './lib/analytics';
+import { runSyncedOperation } from './lib/sync';
+import { resolveMasterAccess } from './lib/masterControl';
 
-const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
-const SAVED_COMMUNITY_KEY = 'krishficient_saved_community_v1';
+const SAVED_SLUGS_GUEST_KEY = 'offscrpt_saved_slugs_guest_v1';
+const SAVED_COMMUNITY_GUEST_KEY = 'offscrpt_saved_community_guest_v1';
+const savedSlugsKey = (uid?: string | null) => uid ? `offscrpt:saved:articles:${uid}:v2` : SAVED_SLUGS_GUEST_KEY;
+const savedCommunityKey = (uid?: string | null) => uid ? `offscrpt:saved:posts:${uid}:v2` : SAVED_COMMUNITY_GUEST_KEY;
 
 
 class PageErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError:boolean; message:string}> {
@@ -137,16 +142,17 @@ export default function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCmsOpen, setIsCmsOpen] = useState(false);
   const [canAccessCms, setCanAccessCms] = useState(false);
+  const [cloudMasterAdmin, setCloudMasterAdmin] = useState(false);
   const [cmsEditorRequest, setCmsEditorRequest] = useState<{ mode: 'new' | 'edit'; article?: Article; token: number } | null>(null);
   const [isRssOpen, setIsRssOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (!user) { if (!cancelled) setCanAccessCms(false); return; }
-      const master = checkIsAdmin(user.email);
+      if (!user) { if (!cancelled) { setCanAccessCms(false); setCloudMasterAdmin(false); } return; }
+      const master = await resolveMasterAccess(user);
       let moderator = false;
       if (!master) moderator = await isPlatformModerator(user.uid);
-      if (!cancelled) setCanAccessCms(master || moderator);
+      if (!cancelled) { setCloudMasterAdmin(master); setCanAccessCms(master || moderator); }
     });
     return () => { cancelled = true; unsubscribe(); };
   }, []);
@@ -155,7 +161,7 @@ export default function App() {
   // Bookmarked / Saved articles state
   const [savedSlugs, setSavedSlugs] = useState<string[]>(() => {
     try {
-      const stored = localStorage.getItem(SAVED_SLUGS_KEY);
+      const stored = localStorage.getItem(SAVED_SLUGS_GUEST_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -164,7 +170,7 @@ export default function App() {
 
   const [savedCommunityPostIds, setSavedCommunityPostIds] = useState<string[]>(() => {
     try {
-      const stored = localStorage.getItem(SAVED_COMMUNITY_KEY);
+      const stored = localStorage.getItem(SAVED_COMMUNITY_GUEST_KEY);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -172,6 +178,8 @@ export default function App() {
   });
 
   const [userAuth, setUserAuth] = useState(auth.currentUser);
+  const saveSubscriptionRef = React.useRef<(() => void) | null>(null);
+  const authGenerationRef = React.useRef(0);
   const [userProfile, setUserProfile] = useState<CommunityUser | null>(null);
   const [continueReadingSlug, setContinueReadingSlug] = useState<string | null>(null);
   const [readingQueueIds, setReadingQueueIds] = useState<string[]>([]);
@@ -180,6 +188,9 @@ export default function App() {
   // Sync auth state & cloud saved items
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {
+      const generation = ++authGenerationRef.current;
+      saveSubscriptionRef.current?.();
+      saveSubscriptionRef.current = null;
       setUserAuth(user);
       if (user) {
         // Load or automatically create the persistent cloud profile.
@@ -193,6 +204,7 @@ export default function App() {
 
           if (checkIsAdmin(user.email)) {
             const cloudConfig = await getSiteConfig();
+            if (generation !== authGenerationRef.current) return;
             try {
               const synced = await syncAdminAuthorProfile({
                 name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
@@ -216,6 +228,7 @@ export default function App() {
           if (prof) {
             await ensureFollowingAuthor(user.uid, prof.username);
           }
+          if (generation !== authGenerationRef.current) return;
           setUserProfile(prof);
           setIsHandleModalOpen(false);
         } catch (e) {
@@ -225,41 +238,50 @@ export default function App() {
           setUserProfile(null);
         }
 
-        // Load cloud saves
-        try {
-          const cloudSaves = await getUserSaves(user.uid);
-          if (cloudSaves && cloudSaves.length > 0) {
-            const cloudArticleSlugs = cloudSaves.filter(s => s.itemType === 'article').map(s => s.itemId);
-            const cloudCommunityIds = cloudSaves.filter(s => s.itemType === 'post').map(s => s.itemId);
+        // Cloud saves are authoritative for signed-in users and stream to every tab/device.
+        // Do not merge stale device-local state into the account, which would resurrect saves
+        // that were removed elsewhere.
+        if (generation !== authGenerationRef.current) return;
+        saveSubscriptionRef.current = subscribeUserSaves(user.uid, cloudSaves => {
+          if (generation !== authGenerationRef.current) return;
+          const cloudArticleSlugs = cloudSaves.filter(s => s.itemType === 'article').map(s => s.itemId);
+          const cloudCommunityIds = cloudSaves.filter(s => s.itemType === 'post').map(s => s.itemId);
+          setSavedSlugs(cloudArticleSlugs);
+          setSavedCommunityPostIds(cloudCommunityIds);
+          try {
+            localStorage.setItem(savedSlugsKey(user.uid), JSON.stringify(cloudArticleSlugs));
+            localStorage.setItem(savedCommunityKey(user.uid), JSON.stringify(cloudCommunityIds));
+          } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+        }, error => console.warn('Cloud save synchronization failed:', error));
 
-            setSavedSlugs(prev => {
-              const merged = Array.from(new Set([...prev, ...cloudArticleSlugs]));
-              try { localStorage.setItem(SAVED_SLUGS_KEY, JSON.stringify(merged)); } catch {}
-              return merged;
-            });
-
-            setSavedCommunityPostIds(prev => {
-              const merged = Array.from(new Set([...prev, ...cloudCommunityIds]));
-              try { localStorage.setItem(SAVED_COMMUNITY_KEY, JSON.stringify(merged)); } catch {}
-              return merged;
-            });
-          }
-        } catch (e) {
-          console.error("Error loading cloud saves:", e);
-        }
 
         try {
           const progress = await getReadingProgress(user.uid);
+          if (generation !== authGenerationRef.current) return;
           setContinueReadingSlug(progress?.articleSlug || null);
         } catch (e) {
           console.error("Error loading reading progress:", e);
         }
       } else {
+        saveSubscriptionRef.current?.();
+        saveSubscriptionRef.current = null;
         setUserProfile(null);
         setContinueReadingSlug(null);
+        try {
+          const guestArticles = JSON.parse(localStorage.getItem(SAVED_SLUGS_GUEST_KEY) || '[]');
+          const guestPosts = JSON.parse(localStorage.getItem(SAVED_COMMUNITY_GUEST_KEY) || '[]');
+          setSavedSlugs(Array.isArray(guestArticles) ? guestArticles : []);
+          setSavedCommunityPostIds(Array.isArray(guestPosts) ? guestPosts : []);
+        } catch {
+          setSavedSlugs([]); setSavedCommunityPostIds([]);
+        }
       }
     });
-    return () => unsub();
+    return () => {
+      unsub();
+      saveSubscriptionRef.current?.();
+      saveSubscriptionRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -294,13 +316,13 @@ export default function App() {
       document.documentElement.classList.toggle('dark', theme === 'dark');
       document.documentElement.dataset.theme = theme;
       document.documentElement.style.colorScheme = theme;
-      try { localStorage.setItem('offscrpt:theme', theme); } catch {}
+      try { localStorage.setItem('offscrpt:theme', theme); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     };
     try {
       const cached = localStorage.getItem('offscrpt:theme');
       if (cached === 'dark' || cached === 'light') apply(cached as 'light'|'dark');
       else if (window.matchMedia('(prefers-color-scheme: dark)').matches) apply('dark');
-    } catch {}
+    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     if (!userAuth?.uid) return;
     return subscribeThemePreference(apply);
   }, [userAuth?.uid]);
@@ -357,6 +379,17 @@ export default function App() {
   // URL Hash Sync for standard navigation & browser back button support
   useEffect(() => {
     const handleHashChange = () => {
+      const pathname = window.location.pathname.replace(/\/$/, '') || '/';
+      const pathMatch = pathname.match(/^\/article\/([^/]+)$/);
+      const seriesMatch = pathname.match(/^\/series\/([^/]+)(?:\/part-(\d+))?$/);
+      const profileMatch = pathname.match(/^\/@([^/]+)$/);
+      const postMatch = pathname.match(/^\/post\/([^/]+)$/);
+      const topicMatch = pathname.match(/^\/topic\/([^/]+)$/);
+      if(pathMatch){setActiveArticleSlug(decodeURIComponent(pathMatch[1]));setCurrentPage('article');return;}
+      if(seriesMatch){setActiveArticleSlug(decodeURIComponent(seriesMatch[1]));setCurrentPage('series');return;}
+      if(profileMatch){setActiveArticleSlug(decodeURIComponent(profileMatch[1]));setCurrentPage('community_profile');return;}
+      if(postMatch){setActiveArticleSlug(decodeURIComponent(postMatch[1]));setCurrentPage('community_post');return;}
+      if(topicMatch){setActiveArticleSlug(decodeURIComponent(topicMatch[1]));setCurrentPage('topic');return;}
       const hash = window.location.hash.replace('#', '');
       if (!hash || hash === 'home') {
         setCurrentPage('home');
@@ -424,6 +457,13 @@ export default function App() {
         const username = hash.replace('@', '');
         setActiveArticleSlug(username);
         setCurrentPage('community_profile');
+      } else if (hash === 'health') {
+        if (checkIsAdmin(auth.currentUser?.email)) setCurrentPage('health');
+        else {
+          setCurrentPage('home');
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        setActiveArticleSlug(null);
       } else if (hash === 'cms' || hash === 'admin') {
         if (canAccessCms) setCurrentPage('cms');
         else { setCurrentPage('home'); window.history.replaceState(null, '', window.location.pathname + window.location.search); }
@@ -477,71 +517,55 @@ export default function App() {
 
   const handleToggleSave = async (slug: string) => {
     const targetArticle = articles.find(a => a.slug === slug);
-    const willBeSaved = !savedSlugs.includes(slug);
+    const wasSaved = savedSlugs.includes(slug);
+    const willBeSaved = !wasSaved;
+    const applyLocal = (saved: boolean) => {
+      setSavedSlugs(prev => {
+        const next = saved ? Array.from(new Set([...prev, slug])) : prev.filter(s => s !== slug);
+        try { localStorage.setItem(savedSlugsKey(userAuth?.uid), JSON.stringify(next)); } catch (e) { console.warn('LocalStorage save failed:', e); }
+        return next;
+      });
+    };
 
-    setSavedSlugs((prev) => {
-      const next = willBeSaved
-        ? [...prev, slug]
-        : prev.filter((s) => s !== slug);
-      try {
-        localStorage.setItem(SAVED_SLUGS_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn('LocalStorage save failed:', e);
-      }
-      return next;
-    });
-
-    if (userAuth) {
-      try {
-        await toggleUserSaveInCloud(
-          userAuth.uid,
-          slug,
-          'article',
-          !willBeSaved,
-          targetArticle?.title || slug
-        );
-        void recordArticleAnalyticsEvent(slug, 'bookmark', { active: willBeSaved, title: targetArticle?.title || slug }).catch(()=>{});
-        notifyToast(willBeSaved ? 'Saved to your library.' : 'Removed from your saved items.', 'success');
-      } catch (e) {
-        console.error("Error saving dispatch to cloud:", e);
-      }
+    applyLocal(willBeSaved);
+    if (!userAuth) return;
+    try {
+      await runSyncedOperation(() => toggleUserSaveInCloud(userAuth.uid, slug, 'article', wasSaved, targetArticle?.title || slug));
+      void recordArticleAnalyticsEvent(slug, 'bookmark', { active: willBeSaved, title: targetArticle?.title || slug }).catch((error) => console.warn('Bookmark analytics event failed:', error));
+      notifyToast(willBeSaved ? 'Saved to your library.' : 'Removed from your saved items.', 'success');
+    } catch (e) {
+      // Do not leave the UI claiming a cloud state that failed to persist.
+      applyLocal(wasSaved);
+      console.error('Error saving dispatch to cloud:', e);
+      notifyToast(e instanceof Error ? e.message : 'Could not sync saved state.', 'error');
     }
   };
 
   const handleToggleSaveCommunity = async (postId: string, title?: string) => {
-    const willBeSaved = !savedCommunityPostIds.includes(postId);
-
-    setSavedCommunityPostIds((prev) => {
-      const next = willBeSaved
-        ? [...prev, postId]
-        : prev.filter((id) => id !== postId);
-      try {
-        localStorage.setItem(SAVED_COMMUNITY_KEY, JSON.stringify(next));
-      } catch (e) {
-        console.warn('LocalStorage save failed for community post:', e);
-      }
-      return next;
-    });
-
-    if (userAuth) {
-      try {
-        await toggleUserSaveInCloud(
-          userAuth.uid,
-          postId,
-          'post',
-          !willBeSaved,
-          title || 'Community Post'
-        );
-        notifyToast(willBeSaved ? 'Saved community post.' : 'Removed from your saved items.', 'success');
-      } catch (e) {
-        console.error("Error saving community post to cloud:", e);
-      }
+    const wasSaved = savedCommunityPostIds.includes(postId);
+    const willBeSaved = !wasSaved;
+    const applyLocal = (saved: boolean) => {
+      setSavedCommunityPostIds(prev => {
+        const next = saved ? Array.from(new Set([...prev, postId])) : prev.filter(id => id !== postId);
+        try { localStorage.setItem(savedCommunityKey(userAuth?.uid), JSON.stringify(next)); } catch (e) { console.warn('LocalStorage save failed for community post:', e); }
+        return next;
+      });
+    };
+    applyLocal(willBeSaved);
+    if (!userAuth) return;
+    try {
+      await runSyncedOperation(() => toggleUserSaveInCloud(userAuth.uid, postId, 'post', wasSaved, title || 'Community Post'));
+      notifyToast(willBeSaved ? 'Saved community post.' : 'Removed from your saved items.', 'success');
+    } catch (e) {
+      applyLocal(wasSaved);
+      console.error('Error saving community post to cloud:', e);
+      notifyToast(e instanceof Error ? e.message : 'Could not sync saved state.', 'error');
     }
   };
 
   const handleToggleQueue = async (slug: string) => {
     if (!userAuth) {
-      try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch {}
+      try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       return;
     }
     const queued = readingQueueIds.includes(slug);
@@ -573,15 +597,18 @@ export default function App() {
   };
 
   const handleUpdateSiteConfig = async (newConfig: SiteConfig) => {
+    const previous = siteConfig;
     setSiteConfig(newConfig);
     try {
       await saveSiteConfig(newConfig);
     } catch (e) {
-      console.error("Failed to persist site config to Firestore:", e);
+      setSiteConfig(previous);
+      console.error('Failed to persist site config to Firestore:', e);
+      notifyToast(e instanceof Error ? e.message : 'Site configuration sync failed.', 'error');
     }
   };
 
-  const isMasterAdmin = checkIsAdmin(userAuth?.email);
+  const isMasterAdmin = cloudMasterAdmin || checkIsAdmin(userAuth?.email);
   const openAdminStudioForNewArticle = () => {
     if (!isMasterAdmin) return;
     setCmsEditorRequest({ mode: 'new', token: Date.now() });
@@ -662,6 +689,8 @@ export default function App() {
               SYNCHRONIZING {siteConfig.logoPart1}{siteConfig.logoPart2} REPOSITORY
             </div>
           </div>
+        ) : currentPage === 'health' ? (
+          <SystemHealthView />
         ) : currentPage === 'cms' ? (
           <AdminStudioModal
             isOpen={true}

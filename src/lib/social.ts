@@ -1,6 +1,7 @@
 import { db, auth, checkIsAdmin } from './firebase';
 import { collection, collectionGroup, doc, getDoc, getDocs, query, orderBy, where, limit, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, onSnapshot, increment, runTransaction } from 'firebase/firestore';
 import { CommunityUser } from '../types';
+import { resolveMasterAccess } from './masterControl';
 
 const id = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 const date = (v:any) => v?.toDate ? v.toDate().toISOString() : (v || new Date().toISOString());
@@ -28,27 +29,27 @@ const communityDedupeKey=(data:{communityId:string;authorId:string;title:string;
 
 export async function isPlatformModerator(uid?:string):Promise<boolean>{
   if(!uid || !auth.currentUser || auth.currentUser.uid !== uid) return false;
-  if(isSocialAdmin()) return false;
-  try { return (await getDoc(doc(db,'siteModerators',uid))).exists(); } catch { return false; }
+  if(isSocialAdmin() || await resolveMasterAccess()) return false;
+  try { return (await getDoc(doc(db,'siteModerators',uid))).data()?.enabled !== false; } catch { return false; }
 }
 export const MODERATOR_PERMISSIONS=['manageReports','moderatePosts','moderateComments','manageUsers','editArticles','deleteArticles','viewAnalytics'] as const;
 export type ModeratorPermission=typeof MODERATOR_PERMISSIONS[number];
-export async function getModeratorPermissions(uid?:string):Promise<Record<ModeratorPermission,boolean>>{ const blank=Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,false])) as Record<ModeratorPermission,boolean>; if(isSocialAdmin()) return Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,true])) as Record<ModeratorPermission,boolean>; if(!uid||auth.currentUser?.uid!==uid)return blank; try{return {...blank,...((await getDoc(doc(db,'siteModerators',uid))).data()?.permissions||{})}}catch{return blank} }
-export async function setModeratorPermissions(uid:string,permissions:Partial<Record<ModeratorPermission,boolean>>){ if(!isSocialAdmin())throw new Error('Only master admins can change moderator permissions.'); const clean=Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,!!permissions[p]])); await updateDoc(doc(db,'siteModerators',uid),{permissions:clean,updatedAt:serverTimestamp()}); }
-export async function isStaffMember(uid?:string):Promise<boolean>{ return isSocialAdmin() || await isPlatformModerator(uid); }
+export async function getModeratorPermissions(uid?:string):Promise<Record<ModeratorPermission,boolean>>{ const blank=Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,false])) as Record<ModeratorPermission,boolean>; if(isSocialAdmin() || await resolveMasterAccess()) return Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,true])) as Record<ModeratorPermission,boolean>; if(!uid||auth.currentUser?.uid!==uid)return blank; try{return {...blank,...((await getDoc(doc(db,'siteModerators',uid))).data()?.permissions||{})}}catch{return blank} }
+export async function setModeratorPermissions(uid:string,permissions:Partial<Record<ModeratorPermission,boolean>>){ if(!(isSocialAdmin() || await resolveMasterAccess()))throw new Error('Only master admins can change moderator permissions.'); const clean=Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,!!permissions[p]])); await updateDoc(doc(db,'siteModerators',uid),{permissions:clean,updatedAt:serverTimestamp()}); }
+export async function isStaffMember(uid?:string):Promise<boolean>{ return isSocialAdmin() || await resolveMasterAccess() || await isPlatformModerator(uid); }
 export async function getPlatformModerators():Promise<Array<any>>{
-  if(!isSocialAdmin()) throw new Error('Master admin access required.');
+  if(!(isSocialAdmin() || await resolveMasterAccess())) throw new Error('Master admin access required.');
   const snap=await getDocs(collection(db,'siteModerators'));
   return snap.docs.map(d=>({id:d.id,...d.data()}));
 }
 export async function addPlatformModerator(uid:string, username:string, displayName:string):Promise<void>{
-  if(!isSocialAdmin()) throw new Error('Only a master admin can add moderators.');
+  if(!(isSocialAdmin() || await resolveMasterAccess())) throw new Error('Only a master admin can add moderators.');
   if(!uid) throw new Error('User is required.');
   await setDoc(doc(db,'siteModerators',uid),{uid,username,displayName,role:'moderator',permissions:Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,true])),createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
   await updateDoc(doc(db,'users',uid),{role:'Moderator',platformRole:'moderator',updatedAt:serverTimestamp()});
 }
 export async function removePlatformModerator(uid:string):Promise<void>{
-  if(!isSocialAdmin()) throw new Error('Only a master admin can remove moderators.');
+  if(!(isSocialAdmin() || await resolveMasterAccess())) throw new Error('Only a master admin can remove moderators.');
   const p=await profile(uid);
   if((p as any)?.email && checkIsAdmin((p as any).email)) throw new Error('Master administrators cannot be removed.');
   await deleteDoc(doc(db,'siteModerators',uid));
@@ -97,14 +98,14 @@ export async function createCommunity(user:CommunityUser,name:string,description
 export async function updateCommunity(communityId:string, userId:string, data:Partial<Pick<SocialCommunity,'name'|'description'|'iconUrl'|'bannerUrl'|'rules'|'isPrivate'|'isArchived'|'isLocked'|'allowLinks'|'allowMedia'|'defaultPostType'>>){
   if(!auth.currentUser) throw new Error('Sign in required.');
   const c=await getCommunity(communityId); if(!c) throw new Error('Community not found.');
-  if(c.ownerId!==userId && !(isSocialAdmin() || await isPlatformModerator(userId))) throw new Error('Only the community creator or site staff can edit this community.');
+  if(c.ownerId!==userId && !(await resolveMasterAccess() || await isPlatformModerator(userId))) throw new Error('Only the community creator or site staff can edit this community.');
   const payload:any={updatedAt:serverTimestamp()}; Object.entries(data).forEach(([k,v])=>{ if(v!==undefined) payload[k]=v; });
   await updateDoc(doc(db,'communities',communityId),payload);
 }
 
 export async function deleteCommunity(communityId:string,userId:string){
   const c=await getCommunity(communityId); if(!c) return;
-  if(c.ownerId!==userId && !(isSocialAdmin() || await isPlatformModerator(userId))) throw new Error('Only the community creator or site staff can delete this community.');
+  if(c.ownerId!==userId && !(await resolveMasterAccess() || await isPlatformModerator(userId))) throw new Error('Only the community creator or site staff can delete this community.');
   const chunk=async(refs:any[])=>{ for(let i=0;i<refs.length;i+=400){ const b=writeBatch(db); refs.slice(i,i+400).forEach((r:any)=>b.delete(r)); await b.commit(); } };
   const refs:any[]=[];
   const posts=await getDocs(collection(db,'communities',communityId,'posts'));
@@ -127,8 +128,8 @@ export async function deleteCommunity(communityId:string,userId:string){
 export async function getCommunityMembers(cid:string){ const s=await getDocs(collection(db,'communities',cid,'members')); return s.docs.map(d=>({id:d.id,...d.data()})) as Array<{id:string;uid:string;username:string;role:string;createdAt:any}>; }
 export async function setCommunityMemberRole(cid:string,memberId:string,role:'member'|'moderator'|'owner',actorId:string){
   const c=await getCommunity(cid); if(!c) throw new Error('Community not found.');
-  if(c.ownerId!==actorId && !(isSocialAdmin() || await isPlatformModerator(actorId))) throw new Error('Only the community creator or site staff can manage members.');
-  if(role==='owner' && !isSocialAdmin()) throw new Error('Only a master admin can transfer community ownership.');
+  if(c.ownerId!==actorId && !(await resolveMasterAccess() || await isPlatformModerator(actorId))) throw new Error('Only the community creator or site staff can manage members.');
+  if(role==='owner' && !(await resolveMasterAccess())) throw new Error('Only a master admin can transfer community ownership.');
   const b=writeBatch(db);
   if(role==='owner') {
     b.update(doc(db,'communities',cid),{ownerId:memberId,updatedAt:serverTimestamp()});
@@ -139,7 +140,7 @@ export async function setCommunityMemberRole(cid:string,memberId:string,role:'me
 }
 export async function removeCommunityMember(cid:string,memberId:string,actorId:string){
   const c=await getCommunity(cid); if(!c) throw new Error('Community not found.');
-  if(c.ownerId!==actorId && !(isSocialAdmin() || await isPlatformModerator(actorId))) throw new Error('Only the community creator or site staff can manage members.');
+  if(c.ownerId!==actorId && !(await resolveMasterAccess() || await isPlatformModerator(actorId))) throw new Error('Only the community creator or site staff can manage members.');
   if(c.ownerId===memberId) throw new Error('Transfer ownership before removing the creator.');
   await deleteDoc(doc(db,'communities',cid,'members',memberId)); await updateDoc(doc(db,'communities',cid),{membersCount:increment(-1),updatedAt:serverTimestamp()});
 }
@@ -378,11 +379,11 @@ export async function getUserMutes(uid:string){ const s=await getDocs(collection
 
 
 
-async function requireStaff(){ if(!(await isStaffMember(auth.currentUser?.uid))) throw new Error('Staff access required.'); }
+async function requireStaff(){ if(await resolveMasterAccess()) return; if(!(await isStaffMember(auth.currentUser?.uid))) throw new Error('Staff access required.'); }
 
 export async function adminSetCommunityPostModeration(cid:string,pid:string,changes:{isPinned?:boolean;isLocked?:boolean;isArchived?:boolean;isFeatured?:boolean;flair?:string}){ await requireStaff(); await updateDoc(doc(db,'communities',cid,'posts',pid),{...changes,updatedAt:serverTimestamp()}); }
 export async function adminSetCommunitySettings(cid:string,data:Partial<Pick<SocialCommunity,'isPrivate'|'isArchived'|'isLocked'|'allowLinks'|'allowMedia'|'defaultPostType'>>){ await requireStaff(); await updateDoc(doc(db,'communities',cid),{...data,updatedAt:serverTimestamp()}); }
-export async function adminSetCommunityMemberRole(cid:string,memberId:string,role:'member'|'moderator',actorId:string){ if(!isSocialAdmin()) throw new Error('Only a master admin can override community roles from Master Control.'); await setCommunityMemberRole(cid,memberId,role,actorId); }
+export async function adminSetCommunityMemberRole(cid:string,memberId:string,role:'member'|'moderator',actorId:string){ if(!(await resolveMasterAccess())) throw new Error('Only a master admin can override community roles from Master Control.'); await setCommunityMemberRole(cid,memberId,role,actorId); }
 
 export interface SocialAdminPost extends CommunityFeedPost { sourceType:'community'|'root'; communityId?:string; communitySlug?:string; isFeatured?:boolean; }
 

@@ -206,6 +206,14 @@ export interface SiteConfig {
   aboutMeImageUrl?: string;
   metaDescription?: string;
   maintenanceMode?: boolean;
+  emergencyAdminLock?: boolean;
+  readOnlyMode?: boolean;
+  registrationsEnabled?: boolean;
+  commentsEnabled?: boolean;
+  postingEnabled?: boolean;
+  reactionsEnabled?: boolean;
+  followingEnabled?: boolean;
+  uploadsEnabled?: boolean;
   maintenanceMessage?: string;
   communityEnabled?: boolean;
   allowCommunityCreation?: boolean;
@@ -236,7 +244,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'activity' | 'creator_studio' | 'creators' | 'preferences';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'activity' | 'creator_studio' | 'creators' | 'preferences' | 'health';
 
 export interface CommunityUser {
   uid: string;
@@ -255,6 +263,15 @@ export interface CommunityUser {
   bio: string;
   themeColor: string;
   isBlocked?: boolean;
+  isSuspended?: boolean;
+  suspensionUntil?: string | null;
+  restrictCommenting?: boolean;
+  restrictPosting?: boolean;
+  restrictCommunities?: boolean;
+  restrictReactions?: boolean;
+  restrictFollowing?: boolean;
+  moderatorNote?: string;
+  warningCount?: number;
   followersCount?: number;
   followingCount?: number;
   role?: string;

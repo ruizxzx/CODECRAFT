@@ -11,18 +11,28 @@ service cloud.firestore {
     function existing() { return resource.data; }
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
     
-    // Google-authenticated owners only. This is enforced by Firestore itself;
-    // the client-side admin UI check is only a convenience, not authorization.
-    function isAdmin() { 
-      return isSignedIn() && (
-        request.auth.token.get('email_verified', false) == true &&
-        request.auth.token.get('email', '') in ['ruizxzxz@gmail.com', 'krishsarkar456@gmail.com']
-      ); 
+    // Bootstrap owners remain hard-coded so the system cannot lock itself out.
+    // Additional master admins are stored in protected Firestore documents.
+    function isBootstrapAdmin() {
+      return isSignedIn()
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('email', '') in ['ruizxzxz@gmail.com', 'krishsarkar456@gmail.com'];
     }
-    function isPlatformModerator() { return isSignedIn() && exists(/databases/$(database)/documents/siteModerators/$(request.auth.uid)); }
-    function hasModeratorPermission(permission) { return isSignedIn() && (isAdmin() || (exists(/databases/$(database)/documents/siteModerators/$(request.auth.uid)) && get(/databases/$(database)/documents/siteModerators/$(request.auth.uid)).data.get('permissions', {}).get(permission, false) == true)); }
+    function isConfiguredMasterAdmin() {
+      return isSignedIn() && !((siteConfigExists() && get(/databases/$(database)/documents/siteConfig/global).data.get('emergencyAdminLock', false) == true)) && (
+        (exists(/databases/$(database)/documents/masterAdmins/$(request.auth.uid))
+          && get(/databases/$(database)/documents/masterAdmins/$(request.auth.uid)).data.get('enabled', true) == true)
+        || (request.auth.token.get('email_verified', false) == true
+          && exists(/databases/$(database)/documents/masterAdminEmails/$(request.auth.token.email))
+          && get(/databases/$(database)/documents/masterAdminEmails/$(request.auth.token.email)).data.get('enabled', true) == true)
+      );
+    }
+    function isAdmin() { return isBootstrapAdmin() || isConfiguredMasterAdmin(); }
+    function isPlatformModerator() { return isSignedIn() && exists(/databases/$(database)/documents/siteModerators/$(request.auth.uid)) && get(/databases/$(database)/documents/siteModerators/$(request.auth.uid)).data.get('enabled', true) == true; }
+    function hasModeratorPermission(permission) { return isSignedIn() && (isAdmin() || (isPlatformModerator() && get(/databases/$(database)/documents/siteModerators/$(request.auth.uid)).data.get('permissions', {}).get(permission, false) == true)); }
     function isStaff() { return isAdmin() || isPlatformModerator(); }
     function siteConfigExists() { return exists(/databases/$(database)/documents/siteConfig/global); }
+    function emergencyAdminLock() { return siteConfigExists() && get(/databases/$(database)/documents/siteConfig/global).data.get('emergencyAdminLock', false) == true; }
     function publicBlogsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowPublicBlogs', true) == true; }
     function communityBlogsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowCommunityBlogs', true) == true; }
     function communityDiscussionsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowCommunityDiscussions', true) == true; }
@@ -31,6 +41,23 @@ service cloud.firestore {
     function questionsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowQuestions', true) == true; }
     function topicsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowTopics', true) == true; }
     function directMessagesEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowDirectMessages', true) == true; }
+    function commentsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('commentsEnabled', true) == true; }
+    function postingEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('postingEnabled', true) == true; }
+    function reactionsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('reactionsEnabled', true) == true; }
+    function followingEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('followingEnabled', true) == true; }
+    function registrationsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('registrationsEnabled', true) == true; }
+    function uploadsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('uploadsEnabled', true) == true; }
+    function readOnlyMode() { return siteConfigExists() && get(/databases/$(database)/documents/siteConfig/global).data.get('readOnlyMode', false) == true; }
+    function maintenanceMode() { return siteConfigExists() && get(/databases/$(database)/documents/siteConfig/global).data.get('maintenanceMode', false) == true; }
+    function userBlocked(uid) { return get(/databases/$(database)/documents/users/$(uid)).data.get('isBlocked', false) == true; }
+    function userRestricted(uid, field) { return get(/databases/$(database)/documents/users/$(uid)).data.get(field, false) == true; }
+    function writesClosed() { return readOnlyMode() || maintenanceMode(); }
+    function userMayWrite(uid) { return isSignedIn() && !userBlocked(uid) && !userRestricted(uid, 'isSuspended') && !writesClosed(); }
+    function userMayComment(uid) { return userMayWrite(uid) && commentsEnabled() && !userRestricted(uid, 'restrictCommenting'); }
+    function userMayPost(uid) { return userMayWrite(uid) && postingEnabled() && !userRestricted(uid, 'restrictPosting'); }
+    function userMayReact(uid) { return userMayWrite(uid) && reactionsEnabled() && !userRestricted(uid, 'restrictReactions'); }
+    function userMayFollow(uid) { return userMayWrite(uid) && followingEnabled() && !userRestricted(uid, 'restrictFollowing'); }
+    function userMayCommunity(uid) { return userMayWrite(uid) && !userRestricted(uid, 'restrictCommunities'); }
 
 
     match /runtimeErrors/{errorId} {
@@ -69,6 +96,16 @@ service cloud.firestore {
         && data.get('followingCount', 0) is number
         && data.get('role', '') is string
         && data.get('platformRole', 'member') in ['member','moderator','master_admin']
+        && data.get('isBlocked', false) is bool
+        && data.get('isSuspended', false) is bool
+        && data.get('restrictCommenting', false) is bool
+        && data.get('restrictPosting', false) is bool
+        && data.get('restrictCommunities', false) is bool
+        && data.get('restrictReactions', false) is bool
+        && data.get('restrictFollowing', false) is bool
+        && data.get('moderatorNote', '') is string && data.get('moderatorNote', '').size() <= 1000
+        && data.get('warningCount', 0) is number
+        && data.get('suspensionUntil', '') is string && data.get('suspensionUntil', '').size() <= 64
         && data.get('isAuthor', false) is bool
         && data.get('isVerified', false) is bool
         && data.get('verificationColor', '#2196F3') is string && data.get('verificationColor', '#2196F3').matches('^#[0-9a-fA-F]{6}$')
@@ -95,6 +132,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if true;
       allow create: if isSignedIn() 
+        && (registrationsEnabled() || isAdmin())
         && isValidId(userId)
         && request.auth.uid == userId
         && isValidUser(incoming())
@@ -120,7 +158,7 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'updatedAt']))
         || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
         || (isAdmin() && existing().username == 'krishsarkar' && existing().get('isAuthor', false) == true && incoming().uid == existing().uid && incoming().username == existing().username && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
-        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'updatedAt']))
+        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'isSuspended', 'restrictCommenting', 'restrictPosting', 'restrictCommunities', 'restrictReactions', 'restrictFollowing', 'moderatorNote', 'warningCount', 'suspensionUntil', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])) || (isPlatformModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt']))
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))
         || (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']))
@@ -129,7 +167,7 @@ service cloud.firestore {
 
       match /followers/{followerId} {
         allow read: if true;
-        allow create: if isSignedIn()
+        allow create: if userMayFollow(request.auth.uid)
           && request.auth.uid == followerId
           && incoming().keys().hasAll(["createdAt", "uid", "username"])
           && incoming().uid == followerId;
@@ -138,7 +176,7 @@ service cloud.firestore {
 
       match /following/{followingId} {
         allow read: if true;
-        allow create: if isSignedIn()
+        allow create: if userMayFollow(request.auth.uid)
           && request.auth.uid == userId
           && incoming().keys().hasAll(["createdAt", "uid", "username"])
           && incoming().uid == followingId;
@@ -235,7 +273,7 @@ service cloud.firestore {
 
     match /communities/{communityId} {
       allow read: if true;
-      allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || communityCreationEnabled())
+      allow create: if userMayCommunity(request.auth.uid) && (isAdmin() || isPlatformModerator() || communityCreationEnabled())
         && incoming().ownerId == request.auth.uid
         && incoming().membersCount == 1
         && incoming().postsCount == 0
@@ -322,7 +360,7 @@ service cloud.firestore {
 
     match /questions/{questionId} {
       allow read: if true;
-      allow create: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || questionsEnabled()) && incoming().authorId == request.auth.uid && validText(incoming().title,256) && validText(incoming().details,100000) && incoming().answersCount == 0;
+      allow create: if userMayPost(request.auth.uid) && (isAdmin() || hasModeratorPermission('moderatePosts') || questionsEnabled()) && incoming().authorId == request.auth.uid && validText(incoming().title,256) && validText(incoming().details,100000) && incoming().answersCount == 0;
       allow update: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId);
       allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().authorId);
       match /answers/{answerId} {
@@ -338,26 +376,26 @@ service cloud.firestore {
       }
       match /followers/{userId} {
         allow read: if true;
-        allow create: if isSignedIn() && request.auth.uid == userId;
+        allow create: if userMayFollow(request.auth.uid) && request.auth.uid == userId;
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
     }
 
     match /topics/{topicId} {
       allow read: if true;
-      allow create: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || topicsEnabled()) && incoming().createdBy == request.auth.uid && validText(incoming().name,80) && validText(incoming().slug,80);
+      allow create: if userMayPost(request.auth.uid) && (isAdmin() || hasModeratorPermission('moderatePosts') || topicsEnabled()) && incoming().createdBy == request.auth.uid && validText(incoming().name,80) && validText(incoming().slug,80);
       allow update: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().createdBy || incoming().diff(existing()).affectedKeys().hasOnly(['followersCount','updatedAt']));
       allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || request.auth.uid == existing().createdBy);
       match /followers/{userId} {
         allow read: if true;
-        allow create: if isSignedIn() && request.auth.uid == userId;
+        allow create: if userMayFollow(request.auth.uid) && request.auth.uid == userId;
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
     }
 
     match /messages/{messageId} {
       allow read: if isAdmin() || (isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.recipientId || request.auth.uid in resource.data.get('participants', [])));
-      allow create: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || directMessagesEnabled()) && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participants && incoming().recipientId in incoming().participants && validText(incoming().content,5000);
+      allow create: if userMayWrite(request.auth.uid) && (isAdmin() || hasModeratorPermission('moderatePosts') || directMessagesEnabled()) && request.auth.uid == incoming().senderId && request.auth.uid in incoming().participants && incoming().recipientId in incoming().participants && validText(incoming().content,5000);
       allow update: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId) && incoming().diff(existing()).affectedKeys().hasOnly(['content','read']));
       allow delete: if isAdmin() || (isSignedIn() && (request.auth.uid == existing().senderId || request.auth.uid == existing().recipientId));
     }
@@ -380,7 +418,7 @@ service cloud.firestore {
 
     match /users/{userId}/mutes/{targetUid} {
       allow read: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow create: if userMayFollow(request.auth.uid) && request.auth.uid == userId;
       allow delete: if isSignedIn() && request.auth.uid == userId;
     }
 
@@ -496,7 +534,7 @@ service cloud.firestore {
 
     match /posts/{postId} {
       allow read: if true;
-      allow create: if isSignedIn()
+      allow create: if userMayPost(request.auth.uid)
         && isValidId(postId)
         && !get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBlocked', false)
         && isValidPost(incoming())
@@ -552,20 +590,22 @@ service cloud.firestore {
             && data.get('verificationColor', '#2196F3') is string && data.get('verificationColor', '#2196F3').matches('^#[0-9a-fA-F]{6}$')
             && data.content is string && data.content.size() <= 5000
             && data.createdAt is timestamp
-            && data.updatedAt is timestamp;
+            && data.updatedAt is timestamp
+            && data.get('isHidden', false) is bool
+            && data.get('isDeleted', false) is bool;
         }
 
         allow read: if true;
-        allow create: if isSignedIn()
+        allow create: if userMayComment(request.auth.uid)
           && isValidId(commentId)
-          && !get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isBlocked', false)
           && isValidComment(incoming())
           && incoming().authorId == request.auth.uid
           && incoming().createdAt == request.time
-          && incoming().updatedAt == request.time;
+          && incoming().updatedAt == request.time
+          && !get(/databases/$(database)/documents/posts/$(postId)).data.get('commentsLocked', false);
         allow update: if isSignedIn()
           && isValidComment(incoming())
-          && (request.auth.uid == existing().authorId || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])))
+          && (request.auth.uid == existing().authorId || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])) || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isHidden','isDeleted','content','moderationReason','updatedAt'])))
           && incoming().authorId == existing().authorId
           && incoming().postId == existing().postId
           && incoming().createdAt == existing().createdAt
@@ -576,7 +616,7 @@ service cloud.firestore {
 
       match /votes/{userId} {
         allow read: if true;
-        allow create, update: if isSignedIn()
+        allow create, update: if userMayReact(request.auth.uid)
           && userId == request.auth.uid
           && incoming().postId == postId
           && incoming().userId == request.auth.uid
@@ -586,7 +626,7 @@ service cloud.firestore {
 
       match /claps/{userId} {
         allow read: if true;
-        allow create, update: if isSignedIn()
+        allow create, update: if userMayReact(request.auth.uid)
           && userId == request.auth.uid
           && incoming().postId == postId
           && incoming().userId == request.auth.uid;
@@ -595,7 +635,7 @@ service cloud.firestore {
 
       match /reposts/{userId} {
         allow read: if true;
-        allow create: if isSignedIn() && userId == request.auth.uid && incoming().userId == request.auth.uid;
+        allow create: if userMayReact(request.auth.uid) && userId == request.auth.uid && incoming().userId == request.auth.uid;
         allow delete: if isSignedIn() && (userId == request.auth.uid || get(/databases/$(database)/documents/posts/$(postId)).data.authorId == request.auth.uid || isAdmin());
       }
     }
@@ -605,7 +645,7 @@ service cloud.firestore {
       allow read: if true;
       match /followers/{userId} {
         allow read: if true;
-        allow create: if isSignedIn() && request.auth.uid == userId && incoming().userId == request.auth.uid && incoming().createdAt is timestamp;
+        allow create: if userMayFollow(request.auth.uid) && request.auth.uid == userId && incoming().userId == request.auth.uid && incoming().createdAt is timestamp;
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
       allow create: if isSignedIn()
@@ -625,6 +665,17 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /masterAdmins/{userId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /masterAdminEmails/{email} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin()
+        && email is string && email.size() <= 320;
+    }
+
     match /site_config/{docId} {
       allow read: if true;
       allow write: if isAdmin();
@@ -632,7 +683,9 @@ service cloud.firestore {
 
     match /siteConfig/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin() && (isBootstrapAdmin() || incoming().get('emergencyAdminLock', false) == false);
+      allow update: if isBootstrapAdmin() || (isAdmin() && !emergencyAdminLock());
+      allow delete: if isBootstrapAdmin();
     }
 
     match /siteConfigBackups/{backupId} {
@@ -666,7 +719,7 @@ service cloud.firestore {
 
       match /reactions/{userId} {
         allow read: if true;
-        allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().userId == request.auth.uid;
+        allow create, update: if userMayReact(request.auth.uid) && request.auth.uid == userId && incoming().userId == request.auth.uid;
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
       match /comments/{commentId} {
@@ -681,7 +734,9 @@ service cloud.firestore {
             && data.get('isDeleted',false) is bool;
         }
         allow read: if true;
-        allow create: if isSignedIn() && validArticleComment(incoming())
+        allow create: if userMayComment(request.auth.uid)
+          && !get(/databases/$(database)/documents/articles/$(slug)).data.get('commentsLocked', false)
+          && validArticleComment(incoming())
           && incoming().authorId == request.auth.uid
           && incoming().createdAt == request.time && incoming().updatedAt == request.time;
         allow update: if isSignedIn() && validArticleComment(incoming())
@@ -691,11 +746,12 @@ service cloud.firestore {
           && ((request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt','mentionedUsernames','editedAt']))
             || (hasModeratorPermission('moderateComments') && incoming().diff(existing()).affectedKeys().hasOnly(['isHidden','moderationReason','updatedAt']))
             || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['authorName','authorAvatar','authorUsername','isVerified','verificationColor','updatedAt']))
+            || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isDeleted','content','updatedAt']))
             || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['likeCount','updatedAt']) && (incoming().likeCount == existing().get('likeCount',0) + 1 || incoming().likeCount == existing().get('likeCount',0) - 1)));
         allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || hasModeratorPermission('moderateComments'));
         match /reactions/{userId} {
           allow read: if true;
-          allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().userId == request.auth.uid;
+          allow create, update: if userMayReact(request.auth.uid) && request.auth.uid == userId && incoming().userId == request.auth.uid;
           allow delete: if isSignedIn() && request.auth.uid == userId;
         }
       }
@@ -778,6 +834,12 @@ service cloud.firestore {
     match /admins/{userId} {
       allow read: if true;
     }
+    match /communities/{communityId}/posts/{postId}/comments/{commentId} {
+      allow read: if true;
+      allow update: if isAdmin() || hasModeratorPermission('moderateComments');
+      allow delete: if isAdmin() || hasModeratorPermission('moderateComments');
+    }
+
     // Collection-group read access for profile activity aggregation.
     match /{path=**}/comments/{commentId} {
       allow read: if true;

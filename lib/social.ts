@@ -1,6 +1,7 @@
 import { db, auth, checkIsAdmin } from './firebase';
 import { collection, collectionGroup, doc, getDoc, getDocs, query, orderBy, where, limit, setDoc, updateDoc, deleteDoc, writeBatch, serverTimestamp, onSnapshot, increment, runTransaction } from 'firebase/firestore';
 import { CommunityUser } from '../types';
+import { resolveMasterAccess } from './masterControl';
 
 const id = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 const date = (v:any) => v?.toDate ? v.toDate().toISOString() : (v || new Date().toISOString());
@@ -28,27 +29,31 @@ const communityDedupeKey=(data:{communityId:string;authorId:string;title:string;
 
 export async function isPlatformModerator(uid?:string):Promise<boolean>{
   if(!uid || !auth.currentUser || auth.currentUser.uid !== uid) return false;
-  if(isSocialAdmin()) return false;
-  try { return (await getDoc(doc(db,'siteModerators',uid))).exists(); } catch { return false; }
+  if(isSocialAdmin() || await resolveMasterAccess()) return false;
+  try { return (await getDoc(doc(db,'siteModerators',uid))).data()?.enabled !== false; } catch { return false; }
 }
-export async function isStaffMember(uid?:string):Promise<boolean>{ return isSocialAdmin() || await isPlatformModerator(uid); }
+export const MODERATOR_PERMISSIONS=['manageReports','moderatePosts','moderateComments','manageUsers','editArticles','deleteArticles','viewAnalytics'] as const;
+export type ModeratorPermission=typeof MODERATOR_PERMISSIONS[number];
+export async function getModeratorPermissions(uid?:string):Promise<Record<ModeratorPermission,boolean>>{ const blank=Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,false])) as Record<ModeratorPermission,boolean>; if(isSocialAdmin() || await resolveMasterAccess()) return Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,true])) as Record<ModeratorPermission,boolean>; if(!uid||auth.currentUser?.uid!==uid)return blank; try{return {...blank,...((await getDoc(doc(db,'siteModerators',uid))).data()?.permissions||{})}}catch{return blank} }
+export async function setModeratorPermissions(uid:string,permissions:Partial<Record<ModeratorPermission,boolean>>){ if(!(isSocialAdmin() || await resolveMasterAccess()))throw new Error('Only master admins can change moderator permissions.'); const clean=Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,!!permissions[p]])); await updateDoc(doc(db,'siteModerators',uid),{permissions:clean,updatedAt:serverTimestamp()}); }
+export async function isStaffMember(uid?:string):Promise<boolean>{ return isSocialAdmin() || await resolveMasterAccess() || await isPlatformModerator(uid); }
 export async function getPlatformModerators():Promise<Array<any>>{
-  if(!isSocialAdmin()) throw new Error('Master admin access required.');
+  if(!(isSocialAdmin() || await resolveMasterAccess())) throw new Error('Master admin access required.');
   const snap=await getDocs(collection(db,'siteModerators'));
   return snap.docs.map(d=>({id:d.id,...d.data()}));
 }
 export async function addPlatformModerator(uid:string, username:string, displayName:string):Promise<void>{
-  if(!isSocialAdmin()) throw new Error('Only a master admin can add moderators.');
+  if(!(isSocialAdmin() || await resolveMasterAccess())) throw new Error('Only a master admin can add moderators.');
   if(!uid) throw new Error('User is required.');
-  await setDoc(doc(db,'siteModerators',uid),{uid,username,displayName,role:'moderator',createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+  await setDoc(doc(db,'siteModerators',uid),{uid,username,displayName,role:'moderator',permissions:Object.fromEntries(MODERATOR_PERMISSIONS.map(p=>[p,true])),createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
   await updateDoc(doc(db,'users',uid),{role:'Moderator',platformRole:'moderator',updatedAt:serverTimestamp()});
 }
 export async function removePlatformModerator(uid:string):Promise<void>{
-  if(!isSocialAdmin()) throw new Error('Only a master admin can remove moderators.');
+  if(!(isSocialAdmin() || await resolveMasterAccess())) throw new Error('Only a master admin can remove moderators.');
   const p=await profile(uid);
   if((p as any)?.email && checkIsAdmin((p as any).email)) throw new Error('Master administrators cannot be removed.');
   await deleteDoc(doc(db,'siteModerators',uid));
-  try { await updateDoc(doc(db,'users',uid),{role:'Member',platformRole:'member',updatedAt:serverTimestamp()}); } catch {}
+  try { await updateDoc(doc(db,'users',uid),{role:'Member',platformRole:'member',updatedAt:serverTimestamp()}); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
 }
 
 export async function getCommunities():Promise<SocialCommunity[]> {
@@ -72,7 +77,7 @@ export async function getCommunities():Promise<SocialCommunity[]> {
   const items=Array.from(unique.values()).sort((a,b)=>(b.membersCount||0)-(a.membersCount||0) || (b.postsCount||0)-(a.postsCount||0));
   return Promise.all(items.map(async c=>{
     if(c.ownerUsername) return c;
-    try { const p=await profile(c.ownerId); if(p) return {...c,ownerUsername:p.username,ownerName:p.displayName,ownerAvatar:p.photoURL||''}; } catch {}
+    try { const p=await profile(c.ownerId); if(p) return {...c,ownerUsername:p.username,ownerName:p.displayName,ownerAvatar:p.photoURL||''}; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     return c;
   }));
 }
@@ -93,14 +98,14 @@ export async function createCommunity(user:CommunityUser,name:string,description
 export async function updateCommunity(communityId:string, userId:string, data:Partial<Pick<SocialCommunity,'name'|'description'|'iconUrl'|'bannerUrl'|'rules'|'isPrivate'|'isArchived'|'isLocked'|'allowLinks'|'allowMedia'|'defaultPostType'>>){
   if(!auth.currentUser) throw new Error('Sign in required.');
   const c=await getCommunity(communityId); if(!c) throw new Error('Community not found.');
-  if(c.ownerId!==userId && !(isSocialAdmin() || await isPlatformModerator(userId))) throw new Error('Only the community creator or site staff can edit this community.');
+  if(c.ownerId!==userId && !(await resolveMasterAccess() || await isPlatformModerator(userId))) throw new Error('Only the community creator or site staff can edit this community.');
   const payload:any={updatedAt:serverTimestamp()}; Object.entries(data).forEach(([k,v])=>{ if(v!==undefined) payload[k]=v; });
   await updateDoc(doc(db,'communities',communityId),payload);
 }
 
 export async function deleteCommunity(communityId:string,userId:string){
   const c=await getCommunity(communityId); if(!c) return;
-  if(c.ownerId!==userId && !(isSocialAdmin() || await isPlatformModerator(userId))) throw new Error('Only the community creator or site staff can delete this community.');
+  if(c.ownerId!==userId && !(await resolveMasterAccess() || await isPlatformModerator(userId))) throw new Error('Only the community creator or site staff can delete this community.');
   const chunk=async(refs:any[])=>{ for(let i=0;i<refs.length;i+=400){ const b=writeBatch(db); refs.slice(i,i+400).forEach((r:any)=>b.delete(r)); await b.commit(); } };
   const refs:any[]=[];
   const posts=await getDocs(collection(db,'communities',communityId,'posts'));
@@ -108,7 +113,7 @@ export async function deleteCommunity(communityId:string,userId:string){
   // complete and cannot leave orphaned votes/poll votes/replies behind.
   for(const post of posts.docs){
     for(const sub of ['votes','pollVotes','comments','reposts','claps']){
-      try { const snap=await getDocs(collection(db,'communities',communityId,'posts',post.id,sub)); snap.docs.forEach(d=>refs.push(d.ref)); } catch {}
+      try { const snap=await getDocs(collection(db,'communities',communityId,'posts',post.id,sub)); snap.docs.forEach(d=>refs.push(d.ref)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     }
     refs.push(post.ref);
   }
@@ -123,8 +128,8 @@ export async function deleteCommunity(communityId:string,userId:string){
 export async function getCommunityMembers(cid:string){ const s=await getDocs(collection(db,'communities',cid,'members')); return s.docs.map(d=>({id:d.id,...d.data()})) as Array<{id:string;uid:string;username:string;role:string;createdAt:any}>; }
 export async function setCommunityMemberRole(cid:string,memberId:string,role:'member'|'moderator'|'owner',actorId:string){
   const c=await getCommunity(cid); if(!c) throw new Error('Community not found.');
-  if(c.ownerId!==actorId && !(isSocialAdmin() || await isPlatformModerator(actorId))) throw new Error('Only the community creator or site staff can manage members.');
-  if(role==='owner' && !isSocialAdmin()) throw new Error('Only a master admin can transfer community ownership.');
+  if(c.ownerId!==actorId && !(await resolveMasterAccess() || await isPlatformModerator(actorId))) throw new Error('Only the community creator or site staff can manage members.');
+  if(role==='owner' && !(await resolveMasterAccess())) throw new Error('Only a master admin can transfer community ownership.');
   const b=writeBatch(db);
   if(role==='owner') {
     b.update(doc(db,'communities',cid),{ownerId:memberId,updatedAt:serverTimestamp()});
@@ -135,7 +140,7 @@ export async function setCommunityMemberRole(cid:string,memberId:string,role:'me
 }
 export async function removeCommunityMember(cid:string,memberId:string,actorId:string){
   const c=await getCommunity(cid); if(!c) throw new Error('Community not found.');
-  if(c.ownerId!==actorId && !(isSocialAdmin() || await isPlatformModerator(actorId))) throw new Error('Only the community creator or site staff can manage members.');
+  if(c.ownerId!==actorId && !(await resolveMasterAccess() || await isPlatformModerator(actorId))) throw new Error('Only the community creator or site staff can manage members.');
   if(c.ownerId===memberId) throw new Error('Transfer ownership before removing the creator.');
   await deleteDoc(doc(db,'communities',cid,'members',memberId)); await updateDoc(doc(db,'communities',cid),{membersCount:increment(-1),updatedAt:serverTimestamp()});
 }
@@ -233,7 +238,7 @@ export async function createCommunityPost(cid:string,user:CommunityUser,title:st
     // A deterministic document id makes double-clicks idempotent. If the same
     // publication raced with this write, re-read the cloud document instead of
     // presenting a false failure to the user.
-    const raced=await getDoc(postRef).catch(()=>null);
+    const raced=await getDoc(postRef).catch((error)=>{console.warn('Post existence check failed:',error);return null});
     if(raced?.exists()) return Object.assign(map(raced) as CommunityFeedPost,{publishStatus:'existing' as const});
     throw err;
   }
@@ -249,7 +254,7 @@ export async function deleteCommunityPost(cid:string,pid:string,uid:string){
   const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) return;
   if(p.data().authorId!==uid && !(await canModerateCommunity(cid,uid))) throw new Error('You cannot delete this post.');
   const refs:any[]=[];
-  for(const sub of ['votes','pollVotes','comments','reposts','claps']){ try { const snap=await getDocs(collection(db,'communities',cid,'posts',pid,sub)); snap.docs.forEach(v=>refs.push(v.ref)); } catch {} }
+  for(const sub of ['votes','pollVotes','comments','reposts','claps']){ try { const snap=await getDocs(collection(db,'communities',cid,'posts',pid,sub)); snap.docs.forEach(v=>refs.push(v.ref)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }
   refs.push(p.ref);
   for(let i=0;i<refs.length;i+=400){ const b=writeBatch(db); refs.slice(i,i+400).forEach(r=>b.delete(r)); await b.commit(); }
   const gone=await getDoc(p.ref); if(gone.exists()) throw new Error('Post deletion was not confirmed in the cloud.');
@@ -287,7 +292,7 @@ export async function deleteQuestion(qid:string,uid:string){ const q=await getDo
 export async function getAnswers(qid:string){ const s=await getDocs(query(collection(db,'questions',qid,'answers'),limit(200))); return (s.docs.map(map) as SocialAnswer[]).sort((a,b)=>(b.upvotesCount||0)-(a.upvotesCount||0)); }
 export async function createAnswer(qid:string,user:CommunityUser,content:string){ const aid=id(); const data={questionId:qid,content:content.trim().slice(0,100000),authorId:user.uid,authorUsername:user.username,authorName:user.displayName,authorAvatar:user.photoURL||'',upvotesCount:0,downvotesCount:0,isBest:false,createdAt:serverTimestamp(),updatedAt:serverTimestamp()}; const b=writeBatch(db); b.set(doc(db,'questions',qid,'answers',aid),data); b.update(doc(db,'questions',qid),{answersCount:increment(1),updatedAt:serverTimestamp()}); await b.commit(); const q=await getDoc(doc(db,'questions',qid)); if(q.exists()) await notify(q.data().authorId,{type:'reply',actorId:user.uid,actorUsername:user.username,actorName:user.displayName,actorAvatar:user.photoURL||'',message:'answered your question',targetType:'question',targetId:qid}); return {...data,id:aid,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()} as SocialAnswer; }
 export async function updateAnswer(qid:string,aid:string,uid:string,content:string){const a=await getDoc(doc(db,'questions',qid,'answers',aid));if(!a.exists())throw new Error('Answer not found.');if(a.data().authorId!==uid&&!isSocialAdmin()&&(await getDoc(doc(db,'questions',qid))).data()?.authorId!==uid)throw new Error('You cannot edit this answer.');await updateDoc(a.ref,{content:content.trim().slice(0,100000),updatedAt:serverTimestamp()});}
-export async function deleteAnswer(qid:string,aid:string,uid:string){const a=await getDoc(doc(db,'questions',qid,'answers',aid));if(!a.exists())return;const q=await getDoc(doc(db,'questions',qid));if(a.data().authorId!==uid&&!isSocialAdmin()&&q.data()?.authorId!==uid)throw new Error('You cannot delete this answer.');await deleteDoc(a.ref);try{await updateDoc(q.ref,{answersCount:increment(-1),updatedAt:serverTimestamp()});}catch{}}
+export async function deleteAnswer(qid:string,aid:string,uid:string){const a=await getDoc(doc(db,'questions',qid,'answers',aid));if(!a.exists())return;const q=await getDoc(doc(db,'questions',qid));if(a.data().authorId!==uid&&!isSocialAdmin()&&q.data()?.authorId!==uid)throw new Error('You cannot delete this answer.');await deleteDoc(a.ref);try{await updateDoc(q.ref,{answersCount:increment(-1),updatedAt:serverTimestamp()});}catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }}
 export async function markBestAnswer(qid:string,aid:string,uid:string){ const q=await getDoc(doc(db,'questions',qid)); if(!q.exists()||q.data().authorId!==uid&&!isSocialAdmin()) throw new Error('Only the question author or an admin can choose the best answer.'); const answers=await getDocs(collection(db,'questions',qid,'answers')); const b=writeBatch(db); answers.docs.forEach(d=>b.update(d.ref,{isBest:d.id===aid,updatedAt:serverTimestamp()})); b.update(q.ref,{bestAnswerId:aid,updatedAt:serverTimestamp()}); await b.commit(); const a=await getDoc(doc(db,'questions',qid,'answers',aid)); if(a.exists()) await notify(a.data().authorId,{type:'reply',actorId:uid,actorUsername:(await profile(uid))?.username||'',actorName:(await profile(uid))?.displayName||'',message:'marked your answer as the best answer',targetType:'question',targetId:qid}); }
 export async function voteAnswer(qid:string,aid:string,uid:string,type:'up'|'down'){ const ref=doc(db,'questions',qid,'votes',uid); const existing=await getDoc(ref); const b=writeBatch(db); const aRef=doc(db,'questions',qid,'answers',aid); if(existing.exists()&&existing.data().type===type){b.delete(ref);b.update(aRef,{[type==='up'?'upvotesCount':'downvotesCount']:increment(-1)});} else { const prev=existing.exists()?existing.data().type:null; b.set(ref,{type,answerId:aid,createdAt:serverTimestamp()}); b.update(aRef,{[type==='up'?'upvotesCount':'downvotesCount']:increment(1),...(prev?{[prev==='up'?'upvotesCount':'downvotesCount']:increment(-1)}:{})}); } await b.commit(); }
 
@@ -374,11 +379,11 @@ export async function getUserMutes(uid:string){ const s=await getDocs(collection
 
 
 
-async function requireStaff(){ if(!(await isStaffMember(auth.currentUser?.uid))) throw new Error('Staff access required.'); }
+async function requireStaff(){ if(await resolveMasterAccess()) return; if(!(await isStaffMember(auth.currentUser?.uid))) throw new Error('Staff access required.'); }
 
 export async function adminSetCommunityPostModeration(cid:string,pid:string,changes:{isPinned?:boolean;isLocked?:boolean;isArchived?:boolean;isFeatured?:boolean;flair?:string}){ await requireStaff(); await updateDoc(doc(db,'communities',cid,'posts',pid),{...changes,updatedAt:serverTimestamp()}); }
 export async function adminSetCommunitySettings(cid:string,data:Partial<Pick<SocialCommunity,'isPrivate'|'isArchived'|'isLocked'|'allowLinks'|'allowMedia'|'defaultPostType'>>){ await requireStaff(); await updateDoc(doc(db,'communities',cid),{...data,updatedAt:serverTimestamp()}); }
-export async function adminSetCommunityMemberRole(cid:string,memberId:string,role:'member'|'moderator',actorId:string){ if(!isSocialAdmin()) throw new Error('Only a master admin can override community roles from Master Control.'); await setCommunityMemberRole(cid,memberId,role,actorId); }
+export async function adminSetCommunityMemberRole(cid:string,memberId:string,role:'member'|'moderator',actorId:string){ if(!(await resolveMasterAccess())) throw new Error('Only a master admin can override community roles from Master Control.'); await setCommunityMemberRole(cid,memberId,role,actorId); }
 
 export interface SocialAdminPost extends CommunityFeedPost { sourceType:'community'|'root'; communityId?:string; communitySlug?:string; isFeatured?:boolean; }
 
@@ -404,7 +409,7 @@ export async function adminUpdateRootPost(postId:string,title:string,content:str
 export async function adminUpdateCommunityPost(cid:string,pid:string,title:string,content:string){ await requireStaff(); const ref=doc(db,'communities',cid,'posts',pid); const p=await getDoc(ref); if(!p.exists()) throw new Error('Post not found.'); const data:any=p.data(); const patch:any={title:title.trim().slice(0,256),content:content.trim().slice(0,100000),editedAt:serverTimestamp(),updatedAt:serverTimestamp()}; if(data.postType==='blog' && (data.promotedToArticleSlug || data.mainPublicationStatus==='published')){patch.editReviewStatus='approved';patch.editReviewedAt=serverTimestamp();patch.editReviewedBy=auth.currentUser?.uid||'';} await updateDoc(ref,patch); }
 export async function adminSetCommunityPostFeatured(cid:string,pid:string,featured:boolean){ await requireStaff(); await updateDoc(doc(db,'communities',cid,'posts',pid),{isFeatured:featured,updatedAt:serverTimestamp()}); }
 export async function adminDeleteRootPost(postId:string){ await requireStaff(); const p=await getDoc(doc(db,'posts',postId)); if(!p.exists()) return; const refs:any[]=[]; for(const sub of ['comments','votes','claps','reposts']){const snap=await getDocs(collection(db,'posts',postId,sub));snap.docs.forEach(d=>refs.push(d.ref));} refs.push(p.ref); for(let i=0;i<refs.length;i+=400){const b=writeBatch(db);refs.slice(i,i+400).forEach(r=>b.delete(r));await b.commit();} }
-export async function adminDeleteCommunityPost(cid:string,pid:string){ await requireStaff(); const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) return; const votes=await getDocs(collection(db,'communities',cid,'posts',pid,'votes')); const refs=[...votes.docs.map(v=>v.ref),p.ref]; for(let i=0;i<refs.length;i+=400){const b=writeBatch(db);refs.slice(i,i+400).forEach(r=>b.delete(r));await b.commit();} try{await updateDoc(doc(db,'communities',cid),{postsCount:increment(-1),updatedAt:serverTimestamp()});}catch{} }
+export async function adminDeleteCommunityPost(cid:string,pid:string){ await requireStaff(); const p=await getDoc(doc(db,'communities',cid,'posts',pid)); if(!p.exists()) return; const votes=await getDocs(collection(db,'communities',cid,'posts',pid,'votes')); const refs=[...votes.docs.map(v=>v.ref),p.ref]; for(let i=0;i<refs.length;i+=400){const b=writeBatch(db);refs.slice(i,i+400).forEach(r=>b.delete(r));await b.commit();} try{await updateDoc(doc(db,'communities',cid),{postsCount:increment(-1),updatedAt:serverTimestamp()});}catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }
 export async function adminSetRootPostFeatured(postId:string,featured:boolean){ await requireStaff(); await updateDoc(doc(db,'posts',postId),{isFeatured:featured,updatedAt:serverTimestamp()}); }
 export async function getAdminMessages():Promise<SocialMessage[]>{ await requireStaff(); const s=await getDocs(query(collection(db,'messages'),limit(500))); return s.docs.map(map).sort((a,b)=>new Date(b.createdAt||0).getTime()-new Date(a.createdAt||0).getTime()) as SocialMessage[]; }
 export async function adminUpdateMessage(mid:string,content:string){ await requireStaff(); await updateDoc(doc(db,'messages',mid),{content:content.trim().slice(0,5000)}); }

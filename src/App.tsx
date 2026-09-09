@@ -50,6 +50,7 @@ import { Loader2 } from 'lucide-react';
 import { notifyToast } from './lib/toast';
 import { recordArticleAnalyticsEvent } from './lib/analytics';
 import { runSyncedOperation } from './lib/sync';
+import { resolveMasterAccess } from './lib/masterControl';
 
 const SAVED_SLUGS_GUEST_KEY = 'offscrpt_saved_slugs_guest_v1';
 const SAVED_COMMUNITY_GUEST_KEY = 'offscrpt_saved_community_guest_v1';
@@ -141,16 +142,17 @@ export default function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCmsOpen, setIsCmsOpen] = useState(false);
   const [canAccessCms, setCanAccessCms] = useState(false);
+  const [cloudMasterAdmin, setCloudMasterAdmin] = useState(false);
   const [cmsEditorRequest, setCmsEditorRequest] = useState<{ mode: 'new' | 'edit'; article?: Article; token: number } | null>(null);
   const [isRssOpen, setIsRssOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      if (!user) { if (!cancelled) setCanAccessCms(false); return; }
-      const master = checkIsAdmin(user.email);
+      if (!user) { if (!cancelled) { setCanAccessCms(false); setCloudMasterAdmin(false); } return; }
+      const master = await resolveMasterAccess(user);
       let moderator = false;
       if (!master) moderator = await isPlatformModerator(user.uid);
-      if (!cancelled) setCanAccessCms(master || moderator);
+      if (!cancelled) { setCloudMasterAdmin(master); setCanAccessCms(master || moderator); }
     });
     return () => { cancelled = true; unsubscribe(); };
   }, []);
@@ -606,7 +608,7 @@ export default function App() {
     }
   };
 
-  const isMasterAdmin = checkIsAdmin(userAuth?.email);
+  const isMasterAdmin = cloudMasterAdmin || checkIsAdmin(userAuth?.email);
   const openAdminStudioForNewArticle = () => {
     if (!isMasterAdmin) return;
     setCmsEditorRequest({ mode: 'new', token: Date.now() });

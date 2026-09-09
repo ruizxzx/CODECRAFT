@@ -3,6 +3,7 @@ import { PageView, SiteConfig, CommunityUser } from '../types';
 import { DEFAULT_TOP_NAVIGATION, DEFAULT_MENU_NAVIGATION } from '../lib/cms';
 import { notifyToast } from '../lib/toast';
 import { auth, loginWithGoogle, logout, checkIsAdmin } from '../lib/firebase';
+import { resolveMasterAccess } from '../lib/masterControl';
 import { isPlatformModerator } from '../lib/social';
 import { useAuthUser } from '../lib/useAuthUser';
 import { subscribeUnreadNotificationCount } from '../lib/community';
@@ -117,7 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
     let cancelled = false;
     const unsubscribe = auth.onAuthStateChanged(async (u) => {
       if (!u) { if (!cancelled) setCanOpenCms(false); return; }
-      const master = checkIsAdmin(u.email);
+      const master = await resolveMasterAccess(u);
       const moderator = !master && await isPlatformModerator(u.uid);
       if (!cancelled) setCanOpenCms(master || moderator);
     });
