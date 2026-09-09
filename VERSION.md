@@ -1,18 +1,11 @@
-# OFFSCRPT V69
+# OFFSCRPT V67
 
-Authenticated-runtime hardening release.
+Article/community runtime hardening release.
 
-## Critical fix
-- Fixed `ReferenceError: inputRef is not defined` in MentionTextarea.
-- MentionTextarea now owns a safe internal textarea ref when a parent ref is not supplied.
-- Preserves the existing parent textarea ref when supplied.
-
-## Additional latent runtime fixes
-- Added missing CommunityEditor autosave sync state.
-- Added missing admin-role derivation in CommunityProfileView.
-- Fixed Explore creator Promise destructuring.
-- Restored the missing `writeAdminAudit` import used by CMS operations.
-- Restored orange creator theme fallback for uncustomized profiles.
-
-## Source integrity
-- Synchronized modified application files between the root and `src/` trees.
+- Fix article render crash caused by unsafe optional republisher fields.
+- Harden article related-content tag calculations.
+- Harden legacy article-card tags.
+- Harden Blog category configuration.
+- Harden SeriesStrip against malformed Firestore series records.
+- Add page-level runtime recovery so a single page cannot blank the entire shell.
+- Keep root and `src/` application trees synchronized.

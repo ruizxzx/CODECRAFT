@@ -3,7 +3,7 @@ import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
 import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments, getUserFollowers, getUserFollowing, ProfileListEntry, subscribeCommunityProfile } from '../lib/community';
-import { auth, checkIsAdmin } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
 import { syncUserIdentityAcrossContent } from '../lib/community';
@@ -111,7 +111,6 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
   // are managed separately in Admin Studio and must never overwrite a user's
   // personal account display name.
   const isOwner = !!activeUser && !!profile && activeUser.uid === profile.uid;
-  const isAdmin = checkIsAdmin(activeUser?.email);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,7 +123,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         if (!p) return;
         setDisplayNameInput(p.displayName || '');
         setBioInput(p.bio || '');
-        setThemeInput(p.themeColor || '#D97706');
+        setThemeInput(p.themeColor || '#000000');
         setPhotoUrlInput(p.photoURL || '');
         setCoverUrlInput(p.coverImageUrl || '');
         setWebsiteInput(p.websiteUrl || '');

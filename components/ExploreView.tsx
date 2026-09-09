@@ -90,7 +90,7 @@ export const ExploreView: React.FC<Props> = ({ articles, userAuth, userProfile, 
       getQuestions().catch(() => []),
       getTopics().catch(() => []),
       getAllCommunityUsers().catch(() => []),
-    ]).then(([p, s, f, c, q, t, u]) => {
+    ]).then(([p, s, f, c, q, t]) => {
       if (!active) return;
       setPosts(p as CommunityPost[]);
       setSeries(s as Series[]);

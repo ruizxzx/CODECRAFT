@@ -18,7 +18,7 @@ import {
   increment,
   runTransaction
 } from 'firebase/firestore';
-import { db, auth, checkIsAdmin, writeAdminAudit } from './firebase';
+import { db, auth, checkIsAdmin } from './firebase';
 import { deletePost, getCommunityProfile, getPost } from './community';
 import { Article, SiteConfig, BentoLink, ArticleComment, CommunityPost, NavigationItemConfig } from '../types';
 import { INITIAL_ARTICLES } from '../data/articles';
