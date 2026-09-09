@@ -234,6 +234,14 @@ function normalizeUsername(value: string): string {
   return value.toLowerCase().trim().replace(/[^a-z0-9_]/g, '').slice(0, 30);
 }
 
+function validateUsername(value: string): string {
+  const username = normalizeUsername(value);
+  if (username && (username.length < 3 || username.length > 30)) {
+    throw new Error('Handle must be 3–30 characters.');
+  }
+  return username;
+}
+
 async function chooseAvailableUsername(base: string): Promise<string> {
   const cleanBase = normalizeUsername(base) || 'user';
   const root = cleanBase.slice(0, 24) || 'user';
@@ -291,29 +299,23 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
   const existing = await getCommunityProfile(user.uid);
   if (existing) {
     if (checkIsAdmin(user.email) && existing.platformRole !== 'master_admin') {
-      try { await updateDoc(doc(db,'users',user.uid), { platformRole:'master_admin', role:'Master Admin', email:user.email || '', updatedAt:serverTimestamp() }); existing.platformRole='master_admin'; existing.role='Master Admin'; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          platformRole: 'master_admin', role: 'Master Admin', email: user.email || '', updatedAt: serverTimestamp()
+        });
+        existing.platformRole = 'master_admin'; existing.role = 'Master Admin'; existing.email = user.email || '';
+      } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     }
     return existing;
   }
 
-  const emailBase = (user.email || '').split('@')[0] || '';
-  const displayBase = user.displayName || emailBase || 'user';
-  let username = await chooseAvailableUsername(displayBase);
-  const candidates = [username];
-  if (emailBase) candidates.push(normalizeUsername(emailBase));
-  candidates.push('user');
-
-  for (const base of candidates) {
-    if (base) {
-      const candidate = await chooseAvailableUsername(base);
-      if (candidate) { username = candidate; break; }
-    }
-  }
-
+  // IMPORTANT: a Google display name is not a claimed @handle. New accounts start
+  // with an empty username and no username reservation document. The user must
+  // explicitly claim a unique handle through the claim modal/profile settings.
   const profile: any = {
     uid: user.uid,
-    username,
-    displayName: user.displayName || username,
+    username: '',
+    displayName: user.displayName || 'User',
     photoURL: user.photoURL || '',
     bio: 'Software builder & writer',
     themeColor: '#D97706',
@@ -329,48 +331,57 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
     updatedAt: serverTimestamp(),
   };
 
-  // Claim the handle and create the profile atomically. If another client
-  // races for the same username, retry with another generated suffix.
-  for (let attempt = 0; attempt < 8; attempt++) {
-    try {
-      const usernameRef = doc(db, 'usernames', username);
-      const userRef = doc(db, 'users', user.uid);
-      const created = await runTransaction(db, async (tx) => {
-        const [userSnap, usernameSnap] = await Promise.all([tx.get(userRef), tx.get(usernameRef)]);
-        if (userSnap.exists()) return userSnap.data() as CommunityUser;
-        if (usernameSnap.exists() && usernameSnap.data()?.uid !== user.uid) return null;
-        tx.set(usernameRef, { uid: user.uid }, { merge: false });
-        tx.set(userRef, profile);
-        return null;
-      });
-      const resolved = created || await getCommunityProfile(user.uid);
-      if (resolved) {
-        try { await ensureFollowingAuthor(user.uid, resolved.username); } catch (err) { console.warn('Auto-follow author failed:', err); }
-        return resolved;
-      }
-    } catch (error) {
-      console.warn('Automatic handle claim retry:', error);
-    }
-    username = await chooseAvailableUsername(`${normalizeUsername(displayBase).slice(0, 24) || 'user'}${attempt + 1}`);
-    profile.username = username;
-  }
+  const userRef = doc(db, 'users', user.uid);
+  await runTransaction(db, async tx => {
+    const userSnap = await tx.get(userRef);
+    if (userSnap.exists()) return;
+    tx.set(userRef, profile);
+  });
 
-  throw new Error('Unable to automatically create a unique handle.');
+  const resolved = await getCommunityProfile(user.uid);
+  if (!resolved) throw new Error('Unable to create your community profile.');
+  if (resolved.username) {
+    try { await ensureFollowingAuthor(user.uid, resolved.username); } catch (err) { console.warn('Auto-follow author failed:', err); }
+  }
+  return resolved;
 }
 
 export async function createCommunityProfile(data: Omit<CommunityUser, 'createdAt' | 'updatedAt' | 'followersCount' | 'followingCount'>) {
   if (!auth.currentUser) throw new Error("Must be logged in");
   const uid = auth.currentUser.uid;
-  const username = normalizeUsername(data.username);
+  const username = validateUsername(data.username);
   if (username.length < 3) throw new Error('Username must be at least 3 characters.');
 
   const usernameRef = doc(db, 'usernames', username);
   const userRef = doc(db, 'users', uid);
   try {
-    const profile = await runTransaction(db, async (tx) => {
-      const [userSnap, usernameSnap] = await Promise.all([tx.get(userRef), tx.get(usernameRef)]);
-      if (userSnap.exists()) return userSnap.data() as CommunityUser;
-      if (usernameSnap.exists() && usernameSnap.data()?.uid !== uid) throw new Error('Username is already taken. Please choose another.');
+    const existingSnap = await getDoc(userRef);
+    if (existingSnap.exists()) {
+      const existing = existingSnap.data() as any;
+      if (String(existing.username || '')) {
+        if (existing.username === username) return existing as CommunityUser;
+        throw new Error('This account already has a handle. Edit it from Profile Settings.');
+      }
+      // First-time claim: preserve the auto-created Google profile and atomically
+      // reserve the requested handle.
+      await runTransaction(db, async tx => {
+        const [userSnap, handleSnap] = await Promise.all([tx.get(userRef), tx.get(usernameRef)]);
+        if (!userSnap.exists()) throw new Error('Profile not found.');
+        const current: any = userSnap.data();
+        if (String(current.username || '')) throw new Error('This account already has a handle.');
+        if (handleSnap.exists() && handleSnap.data()?.uid !== uid) throw new Error('Username is already taken. Please choose another.');
+        tx.set(usernameRef, { uid }, { merge: false });
+        tx.update(userRef, { username, updatedAt: serverTimestamp(), bio: data.bio || current.bio || 'Software builder & writer', themeColor: data.themeColor || current.themeColor || '#D97706' });
+      });
+      const resolved = await getCommunityProfile(uid);
+      if (!resolved) throw new Error('Unable to claim your handle.');
+      try { await ensureFollowingAuthor(uid, resolved.username); } catch (err) { console.warn('Failed to auto-follow @krishsarkar:', err); }
+      return resolved;
+    }
+
+    const profile = await runTransaction(db, async tx => {
+      const handleSnap = await tx.get(usernameRef);
+      if (handleSnap.exists() && handleSnap.data()?.uid !== uid) throw new Error('Username is already taken. Please choose another.');
       const userData: any = {
         ...data, uid, username,
         role: data.role || '', isAuthor: !!data.isAuthor, isVerified: !!data.isVerified,
@@ -397,11 +408,15 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
   try {
     if (typeof uid !== 'string' || !uid.trim() || uid.length > 128 || uid.includes('/')) throw new Error('Invalid profile ID.');
     const current = auth.currentUser;
-    const adminMayManageCanonicalAuthor = !!current && checkIsAdmin(current.email) && (await getCommunityProfile(uid))?.username?.toLowerCase() === 'krishsarkar';
+    const existingProfile = await getCommunityProfile(uid);
+    const adminMayManageCanonicalAuthor = !!current && checkIsAdmin(current.email) && existingProfile?.username?.toLowerCase() === 'krishsarkar';
     if (!current || (current.uid !== uid && !adminMayManageCanonicalAuthor)) {
       throw new Error('You can only edit your own profile.');
     }
+
     const clean: any = { ...data };
+    const hasUsernameChange = Object.prototype.hasOwnProperty.call(clean, 'username');
+    const requestedUsername = hasUsernameChange ? validateUsername(String(clean.username || '')) : existingProfile?.username || '';
     delete clean.uid;
     delete clean.username;
     delete clean.createdAt;
@@ -415,7 +430,50 @@ export async function updateCommunityProfile(uid: string, data: Partial<Communit
     delete clean.role;
     delete clean.platformRole;
     clean.updatedAt = serverTimestamp();
-    await updateDoc(doc(db, 'users', uid), clean);
+
+    const userRef = doc(db, 'users', uid);
+    const oldUsername = existingProfile?.username || '';
+
+    await runTransaction(db, async tx => {
+      const userSnap = await tx.get(userRef);
+      if (!userSnap.exists()) throw new Error('Profile not found.');
+      const currentData: any = userSnap.data();
+      const currentUsername = String(currentData.username || '');
+      if (hasUsernameChange && requestedUsername !== currentUsername) {
+        const newUsernameRef = requestedUsername ? doc(db, 'usernames', requestedUsername) : null;
+        const oldUsernameRef = currentUsername ? doc(db, 'usernames', currentUsername) : null;
+        const newSnap = newUsernameRef ? await tx.get(newUsernameRef) : null;
+        const oldSnap = oldUsernameRef ? await tx.get(oldUsernameRef) : null;
+        if (newSnap?.exists() && newSnap.data()?.uid !== uid) {
+          throw new Error('Username is already taken. Please choose another.');
+        }
+        if (currentUsername && (!oldSnap?.exists() || oldSnap.data()?.uid !== uid)) {
+          throw new Error('Current handle reservation is missing. Contact an administrator.');
+        }
+        if (requestedUsername) tx.set(newUsernameRef!, { uid }, { merge: false });
+        if (oldUsernameRef && currentUsername !== requestedUsername) tx.delete(oldUsernameRef);
+      }
+
+      const nextUserData = { ...clean, username: requestedUsername };
+      tx.update(userRef, nextUserData);
+    });
+
+    // A profile identity change must propagate to every denormalized identity
+    // snapshot that the platform uses for display. Do this after the canonical
+    // user transaction so the UID remains the stable foreign key everywhere.
+    const identityChanged = hasUsernameChange || Object.prototype.hasOwnProperty.call(clean, 'displayName') || Object.prototype.hasOwnProperty.call(clean, 'photoURL');
+    if (identityChanged) {
+      const latest = await getCommunityProfile(uid);
+      if (latest) {
+        await syncUserIdentityAcrossContent(uid, {
+          displayName: latest.displayName || '',
+          photoURL: latest.photoURL || '',
+          username: latest.username || '',
+          isVerified: !!latest.isVerified,
+          verificationColor: latest.verificationColor || '#2196F3'
+        });
+      }
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, p);
   }
@@ -1094,6 +1152,7 @@ async function getProfileList(userId: string, relation: 'followers' | 'following
     const targetUid = data.uid || d.id;
     const profile = await getCommunityProfile(targetUid);
     if (profile) {
+      if (!profile.username) return null;
       return {
         uid: profile.uid,
         username: profile.username,
@@ -1103,16 +1162,17 @@ async function getProfileList(userId: string, relation: 'followers' | 'following
         verificationColor: profile.verificationColor || '#2196F3'
       };
     }
+    if (!data.username) return null;
     return {
       uid: targetUid,
-      username: data.username || targetUid,
+      username: data.username,
       displayName: data.displayName || data.username || targetUid,
       photoURL: data.photoURL || '',
       isVerified: !!data.isVerified,
       verificationColor: data.verificationColor || '#2196F3'
     };
   }));
-  return entries.sort((a, b) => a.username.localeCompare(b.username));
+  return entries.filter(Boolean).sort((a, b) => a!.username.localeCompare(b!.username)) as ProfileListEntry[];
 }
 
 export async function getUserFollowers(userId: string): Promise<ProfileListEntry[]> {
@@ -1135,45 +1195,146 @@ export async function getUserRepostedPosts(userId: string): Promise<CommunityPos
   return posts.filter(Boolean) as CommunityPost[];
 }
 
-export async function syncUserIdentityAcrossContent(userId: string, profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username' | 'isVerified' | 'verificationColor'>): Promise<{ posts: number; comments: number }> {
+export async function syncUserIdentityAcrossContent(
+  userId: string,
+  profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username' | 'isVerified' | 'verificationColor'>
+): Promise<{ posts: number; comments: number; communityPosts: number; communities: number; memberships: number; relationships: number; questions: number; answers: number; articles: number; messages: number; notifications: number; reports: number; topics: number; series: number; moderators: number; adminNotifications: number }> {
+  if (!userId) throw new Error('Invalid user ID.');
+  const identity = {
+    authorName: profile.displayName || '',
+    authorAvatar: profile.photoURL || '',
+    authorUsername: profile.username || '',
+    isVerified: !!profile.isVerified,
+    verificationColor: profile.verificationColor || '#2196F3',
+    updatedAt: serverTimestamp()
+  };
+  const actorIdentity = {
+    actorUsername: profile.username || '',
+    actorName: profile.displayName || '',
+    actorAvatar: profile.photoURL || '',
+    updatedAt: serverTimestamp()
+  };
   const writes: Array<{ ref: any; data: any }> = [];
-  let postsCount = 0;
-  let commentsCount = 0;
-  const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', userId)));
-  postsSnap.docs.forEach(d => { postsCount += 1; writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }); });
-  let commentsSnap;
-  try {
-    commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)));
-  } catch (indexError) {
-    console.warn('Comments author index unavailable during identity sync; using fallback scan:', indexError);
-    const allComments = await getDocs(collectionGroup(db, 'comments'));
-    commentsSnap = { docs: allComments.docs.filter(d => d.data()?.authorId === userId) } as any;
-  }
-  commentsSnap.docs.forEach(d => { commentsCount += 1; writes.push({ ref: d.ref, data: { authorName: profile.displayName, authorAvatar: profile.photoURL || '', authorUsername: profile.username, isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3', updatedAt: serverTimestamp() } }); });
+  const counters = { posts:0, comments:0, communityPosts:0, communities:0, memberships:0, relationships:0, questions:0, answers:0, articles:0, messages:0, notifications:0, reports:0, topics:0, series:0, moderators:0, adminNotifications:0 };
 
-  // Articles are admin-managed in Firestore. When a trusted admin edits the
-  // canonical @krishsarkar profile, update only articles that belong to that
-  // author so the public publication stays consistent without broad rewrites.
-  if (checkIsAdmin(auth.currentUser?.email) && profile.username.toLowerCase() === 'krishsarkar') {
-    const articlesSnap = await getDocs(collection(db, 'articles'));
-    articlesSnap.docs.forEach(d => {
-      const article = d.data();
-      const a = article.author || {};
-      if (a.uid === userId || a.username?.toLowerCase() === 'krishsarkar') {
-        writes.push({ ref: d.ref, data: {
-          author: { ...a, uid: userId, username: 'krishsarkar', name: profile.displayName, avatar: profile.photoURL || '', bio: a.bio || '', isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || '#2196F3' },
+  const collectByQuery = async (q: any, data: any, key: keyof typeof counters) => {
+    const snap = await getDocs(q);
+    counters[key] += snap.size;
+    snap.docs.forEach((d:any) => writes.push({ ref:d.ref, data }));
+  };
+
+  // Canonical root posts.
+  await collectByQuery(query(collection(db, 'posts'), where('authorId', '==', userId)), identity, 'posts');
+
+  // Community posts + article/community comments + question answers.
+  try {
+    await collectByQuery(query(collectionGroup(db, 'posts'), where('authorId', '==', userId)), identity, 'communityPosts');
+  } catch (e) {
+    console.warn('Community-post identity query failed:', e);
+  }
+  try {
+    await collectByQuery(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)), identity, 'comments');
+  } catch (e) {
+    console.warn('Comment identity query failed:', e);
+  }
+  await collectByQuery(query(collection(db, 'questions'), where('authorId', '==', userId)), identity, 'questions');
+  try {
+    await collectByQuery(query(collectionGroup(db, 'answers'), where('authorId', '==', userId)), identity, 'answers');
+  } catch (e) {
+    console.warn('Answer identity query failed:', e);
+  }
+
+  // Community ownership records.
+  await collectByQuery(query(collection(db, 'communities'), where('ownerId', '==', userId)), {
+    ownerUsername: profile.username || '', ownerName: profile.displayName || '', ownerAvatar: profile.photoURL || '', updatedAt: serverTimestamp()
+  }, 'communities');
+
+  // Every community membership owned by this UID. This is safe because rules
+  // restrict the update to the matching member UID and username-only fields.
+  try {
+    await collectByQuery(query(collectionGroup(db, 'members'), where('uid', '==', userId)), {
+      username: profile.username || '', updatedAt: serverTimestamp()
+    }, 'memberships');
+  } catch (e) {
+    console.warn('Membership identity query failed:', e);
+  }
+
+  // Following records that cache this user's username.
+  try {
+    await collectByQuery(query(collectionGroup(db, 'following'), where('uid', '==', userId)), {
+      username: profile.username || '', updatedAt: serverTimestamp()
+    }, 'relationships');
+  } catch (e) {
+    console.warn('Following identity query failed:', e);
+  }
+
+  // Topics/series created or owned by this user.
+  try { await collectByQuery(query(collection(db, 'topics'), where('createdBy', '==', userId)), { creatorUsername: profile.username || '', updatedAt: serverTimestamp() }, 'topics'); } catch (e) { console.warn('Topic identity query failed:', e); }
+  try { await collectByQuery(query(collection(db, 'series'), where('ownerId', '==', userId)), { ownerUsername: profile.username || '', updatedAt: serverTimestamp() }, 'series'); } catch (e) { console.warn('Series identity query failed:', e); }
+
+  // Messages sent by this user.
+  try {
+    await collectByQuery(query(collection(db, 'messages'), where('senderId', '==', userId)), {
+      senderUsername: profile.username || '', senderName: profile.displayName || '', senderAvatar: profile.photoURL || '', updatedAt: serverTimestamp()
+    }, 'messages');
+  } catch (e) { console.warn('Message identity query failed:', e); }
+
+  // Notifications generated by this user. This updates recipients' cached
+  // actor identity while preserving their notification ownership.
+  try {
+    await collectByQuery(query(collectionGroup(db, 'notifications'), where('actorId', '==', userId)), actorIdentity, 'notifications');
+  } catch (e) { console.warn('Notification identity query failed:', e); }
+
+  // Reports authored by this user.
+  try {
+    await collectByQuery(query(collection(db, 'reports'), where('reporterId', '==', userId)), { reporterUsername: profile.username || '', updatedAt: serverTimestamp() }, 'reports');
+  } catch (e) { console.warn('Report identity query failed:', e); }
+
+  // Master/admin notifications created by this actor.
+  try {
+    await collectByQuery(query(collection(db, 'admin_notifications'), where('actorId', '==', userId)), actorIdentity, 'adminNotifications');
+  } catch (e) { console.warn('Admin-notification identity query failed:', e); }
+
+  // Site moderator registry entry, when the user is a moderator.
+  try {
+    const moderatorRef = doc(db, 'siteModerators', userId);
+    const moderatorSnap = await getDoc(moderatorRef);
+    if (moderatorSnap.exists()) {
+      counters.moderators = 1;
+      writes.push({ ref: moderatorRef, data: { username: profile.username || '', displayName: profile.displayName || '', updatedAt: serverTimestamp() } });
+    }
+  } catch (e) { console.warn('Moderator identity query failed:', e); }
+
+  // Main publication articles use a nested author object. Writers/admins are
+  // allowed to update identity-only fields on articles they own; the rules
+  // prevent any content or publication-state changes through this path.
+  try {
+    const articles = await getDocs(collection(db, 'articles'));
+    articles.docs.forEach((d:any) => {
+      const a:any = d.data()?.author || {};
+      const topAuthorId = d.data()?.authorId || '';
+      if (a.uid === userId || topAuthorId === userId) {
+        counters.articles += 1;
+        writes.push({ ref:d.ref, data:{
+          author: { ...a, uid:userId, username:profile.username || '', name:profile.displayName || '', avatar:profile.photoURL || '', isVerified:!!profile.isVerified, verificationColor:profile.verificationColor || '#2196F3' },
+          authorUsername: profile.username || '',
+          authorName: profile.displayName || '',
+          authorAvatar: profile.photoURL || '',
           updatedAt: serverTimestamp()
         }});
       }
     });
-  }
+  } catch (e) { console.warn('Article identity scan failed:', e); }
 
-  for (let i = 0; i < writes.length; i += 450) {
+  // Commit in safe Firestore batch sizes. Reads are intentionally scoped by UID
+  // wherever possible so username changes do not rewrite unrelated documents.
+  for (let i=0; i<writes.length; i+=450) {
     const batch = writeBatch(db);
-    writes.slice(i, i + 450).forEach(w => batch.update(w.ref, w.data));
+    writes.slice(i, i+450).forEach(w => batch.update(w.ref, w.data));
     await batch.commit();
   }
-  return { posts: postsCount, comments: commentsCount };
+
+  return counters;
 }
 
 export async function getUserComments(userId: string): Promise<Array<{ id: string; content: string; createdAt: string; postId?: string; articleSlug?: string; authorName: string }>> {

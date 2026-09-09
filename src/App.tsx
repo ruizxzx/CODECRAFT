@@ -199,7 +199,7 @@ export default function App() {
       if (user) {
         // Load or automatically create the persistent cloud profile.
         // Existing handles are restored from Firestore; first-time accounts
-        // receive a generated unique handle without showing the claim modal.
+        // start unclaimed and are prompted to explicitly choose a unique handle.
         try {
           let prof = await getCommunityProfile(user.uid);
           if (!prof) {
@@ -234,11 +234,15 @@ export default function App() {
           }
           if (generation !== authGenerationRef.current) return;
           setUserProfile(prof);
-          setIsHandleModalOpen(false);
+          // Newly-created accounts have no reserved @handle. Prompt once so the
+          // user can explicitly claim a globally unique handle instead of silently
+          // reserving their Google display name. Cancel remains supported; the same
+          // identity editor is available from Settings.
+          setIsHandleModalOpen(!prof.username);
         } catch (e) {
           console.error('Error loading/creating user profile:', e);
           // Do not repeatedly force users into the manual claim modal. It is
-          // now a recovery UI only; normal accounts are auto-provisioned.
+          // is only a recovery UI if profile creation/loading fails.
           setUserProfile(null);
         }
 
