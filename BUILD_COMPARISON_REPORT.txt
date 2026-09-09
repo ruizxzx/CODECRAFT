@@ -1,0 +1,93 @@
+OFFSCRPT V72 — BUILD COMPARISON / CONSOLIDATION REPORT
+======================================================
+
+SOURCE BUILDS
+-------------
+1. OFFSCRPT-v71.5-batch-2-firestore-rules-fix
+   Feature-complete Batch 2 base: creator analytics, recommendations, advanced
+   comments, reporting, granular moderator permissions, universal sharing,
+   presence, SystemHealthCenter, Batch 2 Firestore permissions, and V71 article history.
+
+2. OFFSCRPT-V71.5-Stability-Infrastructure
+   Stability/QA layer: runtime error reporting, sync-state infrastructure,
+   build/type/import/export checks, deployment health checks, schema/runtime audits,
+   SystemHealthView, health.ts, runtime.ts, and sync.ts.
+
+CONSOLIDATION DECISION
+----------------------
+V72 keeps the Batch 2 feature/security implementation as the functional baseline
+and layers the stability infrastructure on top. The Stability-Infrastructure
+Firestore rules are NOT used as a wholesale replacement because they regress the
+granular Batch 2 moderator permission model.
+
+FIRESTORE RULES
+---------------
+- Fixed the reported unexpected closing-brace failure.
+- V72 firestore.rules has balanced braces.
+- Preserved granular moderator permission checks.
+- Added bounded runtimeErrors permissions for authenticated clients and staff.
+- Analytics reads remain creator/admin/moderator-analytics scoped.
+- Analytics session creation requires request-time createdAt/openedAt/lastSeenAt.
+- Analytics session updates are limited to safe session fields.
+
+CREATOR ANALYTICS FIXES
+-----------------------
+The supplied comparison identified that the Batch 2 UI existed but the session
+pipeline was not connected to ArticleView. V72 now:
+- creates/updates an analytics session when an article is opened/read;
+- records bounded reading duration;
+- records 25/50/75/100% scroll milestones;
+- records completion;
+- records reaction analytics events;
+- records share analytics events from the reusable ShareMenu;
+- preserves account/visitor privacy by aggregating readers rather than exposing identities;
+- fails visibly on analytics aggregation/query errors instead of converting them to zeroes.
+
+The session writer no longer performs a forbidden client-side analytics read. Initial
+create fields are written on the first create attempt and a safe update retry handles
+concurrent first-write races.
+
+RECOMMENDATIONS
+---------------
+Recommendations remain data-driven from reading history, topics, followed creators,
+followed series, completion/progress, bookmarks, reactions, and recent activity.
+No hardcoded recommendation dataset was introduced.
+
+COMMENTS / REPORTING / SHARING / MODERATION / PRESENCE
+-------------------------------------------------------
+V72 preserves the real Firestore-backed Batch 2 implementations and their UI while
+retaining the stability heartbeat pattern for presence and granular permission checks.
+
+STABILITY INFRASTRUCTURE
+------------------------
+V72 includes:
+- global runtime error capture and authenticated Firestore reporting;
+- sync-state/failure event infrastructure;
+- System Health routing and checks;
+- syntax/import/export/identifier/Firebase/rules/schema/runtime QA scripts;
+- deployment health tooling.
+
+SYSTEM HEALTH
+-------------
+Health checks are meaningful rather than always-green. V72 checks authentication,
+Firestore reachability, Storage initialization, PWA service-worker support, bounded
+Realtime/Presence response, and recent runtime-error log reachability.
+
+ACTIVE SOURCE TREE
+------------------
+The Vite configuration uses src/ as the active root. The active entrypoint is:
+  src/index.html -> src/main.tsx -> src/App.tsx
+QA scripts target this active source tree.
+
+VALIDATION
+----------
+Completed source-level audits include TS/TSX parser validation, local import validation,
+named-export validation, and undeclared-identifier validation over the active src tree.
+
+A full npm run build could not be executed in the isolated build environment because
+package installation could not complete and the local Vite package was incomplete.
+The release therefore does not claim a successful local Vite production build.
+
+RELEASE
+-------
+OFFSCRPT V72 — cumulative V71 + Batch 2 + Stability Infrastructure + analytics/rules fixes.

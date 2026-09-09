@@ -725,7 +725,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
           if (Array.isArray(draft.contentBlocks) && draft.contentBlocks.length) setContentBlocks(draft.contentBlocks);
           setDraftRecoveryAvailable(true);
         }
-      } catch {}
+      } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     };
     void restore();
   }, [adminDraftKey, editingArticleId]);
@@ -741,7 +741,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
     const hasContent = !!(newTitle.trim() || newExcerpt.trim() || contentBlocks.some((b) => (b.content || b.imageUrl || b.videoUrl || b.linkText || b.buttonText)));
     if (!hasContent) return;
     const payload = { title: newTitle, category: newCategory, tags: newTags, excerpt: newExcerpt, coverImage: newCoverImage, coverAlt: newCoverAlt, coverCaption: newCoverCaption, seriesId: newSeriesId, seriesName: newSeriesName, seriesOrder: newSeriesOrder, contentBlocks };
-    try { localStorage.setItem(adminDraftKey, JSON.stringify(payload)); } catch {}
+    try { localStorage.setItem(adminDraftKey, JSON.stringify(payload)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     setDraftSaveState(online ? 'saving' : 'offline');
     const timer = window.setTimeout(() => { void saveDraftSnapshot('admin-article', payload).then(() => setDraftSaveState('saved')).catch(() => setDraftSaveState('offline')); }, 900);
     return () => window.clearTimeout(timer);
@@ -971,8 +971,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
 
       await saveArticle(article);
       onArticlePublished(article);
-      await deleteDraftSnapshot('admin-article').catch(() => {});
-      try { localStorage.removeItem(adminDraftKey); } catch {}
+      await deleteDraftSnapshot('admin-article').catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
+      try { localStorage.removeItem(adminDraftKey); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       setDraftRecoveryAvailable(false);
       setPublishSuccess(true);
       setTimeout(() => {
@@ -1022,8 +1022,8 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
   };
 
   const resetForm = () => {
-    void deleteDraftSnapshot('admin-article').catch(() => {});
-    try { localStorage.removeItem(adminDraftKey); } catch {}
+    void deleteDraftSnapshot('admin-article').catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
+    try { localStorage.removeItem(adminDraftKey); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     setDraftRecoveryAvailable(false);
     setEditingArticleId(null);
     setEditingArticleSlug(null);

@@ -42,7 +42,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
           setContent(draft.content || '');
           setMediaInput(draft.mediaInput || (draft.mediaUrls || []).join('\n'));
         }
-      } catch {}
+      } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       finally { if (!cancelled) setDraftLoaded(true); }
     };
     void restore();
@@ -52,11 +52,11 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
   useEffect(() => {
     if (!draftLoaded || (!title.trim() && !content.trim())) return;
     const payload = { type, title, content, mediaInput, mediaUrls: mediaInput.split('\n').map(v => v.trim()).filter(Boolean).slice(0, 6) };
-    try { localStorage.setItem(localDraftKey, JSON.stringify(payload)); } catch {}
+    try { localStorage.setItem(localDraftKey, JSON.stringify(payload)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     setSyncState(navigator.onLine?'saving':'offline');
     const timer = window.setTimeout(() => {
       Promise.all([saveCommunityDraft(profile.uid, { type, title, content, mediaUrls: payload.mediaUrls }), saveDraftSnapshot('community-editor', payload)])
-        .then(()=>setSyncState('synced')).catch(()=>setSyncState('failed'));
+        .then(()=>setSyncState('synced')).catch((error)=>{console.error('Community editor sync failed:',error);setSyncState('failed')});
     }, 700);
     return () => window.clearTimeout(timer);
   }, [draftLoaded, profile.uid, localDraftKey, type, title, content, mediaInput]);
@@ -83,9 +83,9 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
         verificationColor: profile.verificationColor || '#2196F3',
         mediaUrls: mediaInput.split('\n').map(v => v.trim()).filter(Boolean).slice(0, 6)
       });
-      await clearCommunityDraft(profile.uid).catch(() => {});
-      await deleteDraftSnapshot('community-editor').catch(() => {});
-      try { localStorage.removeItem(localDraftKey); } catch {}
+      await clearCommunityDraft(profile.uid).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
+      await deleteDraftSnapshot('community-editor').catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
+      try { localStorage.removeItem(localDraftKey); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       onPublished(post);
     } catch (error) {
       console.error(error);

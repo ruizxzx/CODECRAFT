@@ -45,7 +45,7 @@ export const NotificationsView: React.FC<Props> = ({ userProfile, onNavigate }) 
     return [{ kind:'day', key } as any, ...result];
   }), [groups]);
   const open = (n: Notification) => {
-    void markNotificationRead(userProfile!.uid, n.id).catch(() => {});
+    void markNotificationRead(userProfile!.uid, n.id).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
     if (n.targetType === 'post' && n.targetId) onNavigate('community_post', n.targetId);
     else if (n.targetType === 'article' && n.targetId) onNavigate('article', n.targetId);
     else if (n.targetType === 'question' && n.targetId) onNavigate('social', 'questions');

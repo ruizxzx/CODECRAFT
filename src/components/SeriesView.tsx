@@ -60,9 +60,9 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
     if (!active) return;
     let alive = true;
     setProgress({});
-    getSeriesReadingProgress(active.items).then(p => { if (alive) setProgress(p); }).catch(()=>{});
+    getSeriesReadingProgress(active.items).then(p => { if (alive) setProgress(p); }).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
     const unsubProgress = subscribeSeriesReadingProgress(active.items, p => alive && setProgress(p));
-    if (user) { getSeriesFollowStatus(active.id, user.uid).then(v=>alive&&setFollowed(v)).catch(()=>setFollowed(false)); } else setFollowed(false);
+    if (user) { getSeriesFollowStatus(active.id, user.uid).then(v=>alive&&setFollowed(v)).catch((error)=>{console.warn('Series follow status load failed:',error);alive&&setFollowed(false)}); } else setFollowed(false);
     const unsubFollowers = subscribeSeriesFollowerCount(active.id, v=>alive&&setFollowers(v));
     return () => { alive = false; unsubFollowers(); unsubProgress(); };
   }, [active?.id, active?.items.length, user?.uid]);
@@ -96,7 +96,7 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
   const refreshProgress = async () => { if (active) setProgress(await getSeriesReadingProgress(active.items)); };
   const showNotice = (message:string) => { setNotice(message); window.setTimeout(()=>setNotice(null),2200); };
   const copyUrl = async () => { if (!active) return; const url=`${window.location.origin}${window.location.pathname}#series/${active.id}`; try { await navigator.clipboard.writeText(url); showNotice('SERIES LINK COPIED'); } catch { showNotice(url); } };
-  const copyOutline = async () => { if (!active) return; const text=[active.title,'',active.description,'',...active.items.map((a,i)=>`${String(i+1).padStart(2,'0')}. ${a.title} — ${safeMinutes(a)} min`)].join('\n'); try { await navigator.clipboard.writeText(text); showNotice('SERIES OUTLINE COPIED'); } catch {} };
+  const copyOutline = async () => { if (!active) return; const text=[active.title,'',active.description,'',...active.items.map((a,i)=>`${String(i+1).padStart(2,'0')}. ${a.title} — ${safeMinutes(a)} min`)].join('\n'); try { await navigator.clipboard.writeText(text); showNotice('SERIES OUTLINE COPIED'); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } };
   const printSeries = () => window.print();
   const downloadOutline = () => { if(!active) return; const text=[active.title,active.description,'',...active.items.map((a,i)=>`${i+1}. ${a.title}\n${a.excerpt}`)].join('\n\n'); const blob=new Blob([text],{type:'text/plain'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`${slugify(active.title)}-outline.txt`; a.click(); URL.revokeObjectURL(url); };
   const toggleFollow = async () => { if (!user || !active) return; setBusy(true); try { const next=await toggleSeriesFollow(active.id,user.uid); setFollowed(next); setFollowers(v=>Math.max(0,v+(next?1:-1))); showNotice(next?'SERIES SAVED TO YOUR LIBRARY':'SERIES REMOVED FROM YOUR LIBRARY'); } catch(e:any){setError(e?.message||'Could not update series follow.');} finally{setBusy(false);} };

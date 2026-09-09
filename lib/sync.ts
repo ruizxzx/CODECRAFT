@@ -26,7 +26,6 @@ export async function runSyncedOperation<T>(
     return result;
   } catch (error) {
     setState?.('failed');
-    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('offscrpt:health-failed-write'));
     throw error;
   }
 }

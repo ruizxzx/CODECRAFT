@@ -24,7 +24,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, postsCount, siteConfig }
   const [showTerminal, setShowTerminal] = useState(false);
   const [activeTab, setActiveTab] = useState<'stack' | 'status' | 'manifesto'>('stack');
   const [readerCount, setReaderCount] = useState<number | null>(null);
-  useEffect(() => { let active = true; getCountFromServer(collection(db, 'users')).then(s => { if (active) setReaderCount(s.data().count); }).catch(() => {}); return () => { active = false; }; }, []);
+  useEffect(() => { let active = true; getCountFromServer(collection(db, 'users')).then(s => { if (active) setReaderCount(s.data().count); }).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error)); return () => { active = false; }; }, []);
 
   return (
     <section 

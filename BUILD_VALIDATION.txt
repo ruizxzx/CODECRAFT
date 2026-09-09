@@ -1,0 +1,29 @@
+OFFSCRPT V72 BUILD VALIDATION STATUS
+====================================
+
+SOURCE VALIDATION
+- Active Vite root: src/
+- Active entrypoint: src/index.html -> src/main.tsx -> src/App.tsx
+- TS/TSX parser validation: PASS (77 files)
+- Undeclared identifier diagnostics (2304/2552): PASS (0)
+- Local relative import validation: PASS (77 files)
+- Local named-export validation: PASS (77 files)
+- Firestore rules structural validation: PASS (173 opening / 173 closing braces)
+- Firebase initialization/rules presence checks: PASS
+- Schema audit: PASS
+- Runtime-pattern audit: PASS
+
+PRODUCTION BUILD
+- npm run build: NOT EXECUTED SUCCESSFULLY IN THIS ISOLATED ENVIRONMENT.
+- npm dependency installation could not complete; offline cache does not contain
+  @vitejs/plugin-react, and the local Vite package was incomplete.
+- No claim of a successful Vite production bundle is made from this environment.
+
+RUNTIME / DATA VALIDATION
+- Analytics session writes are now connected to ArticleView and no longer require
+  a reader-side analytics read.
+- Firestore analytics create/update timestamp rules match the client writer.
+- Share/reaction/completion analytics events are wired.
+- Aggregation errors are surfaced instead of silently becoming zero metrics.
+- Runtime errors are queued for signed-out clients and persisted after authentication.
+- Sync failures dispatch a health event for the admin observability layer.

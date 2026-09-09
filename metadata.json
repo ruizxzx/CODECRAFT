@@ -1,20 +1,19 @@
 {
   "name": "OFFSCRPT",
-  "version": "71.5",
-  "description": "OFFSCRPT V71.5 \u2014 Batch 2 cumulative production release with V71 article history, creator analytics, behavior-driven recommendations, upgraded comments, universal sharing/deep links, granular moderator permissions, reporting, presence, and system health.",
+  "version": "72.0",
+  "description": "OFFSCRPT V72 cumulative production release: V71 article history + V71.5 Batch 2 + analytics/stability fixes.",
+  "release": "OFFSCRPT V72",
   "majorCapabilities": [
-    "Unified Social / Community",
-    "Cloud-synced moderation",
-    "Master Control",
-    "Direct messaging",
-    "Community blogs and discussions",
-    "Complete profile post history",
-    "Instagram social link configuration",
-    "Production Series Library and curriculum",
-    "Cloud reading progress and completion",
-    "Real article engagement metrics",
-    "Universal creator identity surfaces",
-    "Automatic structured-content reading-time calculation"
-  ],
-  "release": "OFFSCRPT V71.5 \u2014 Batch 2"
+    "V71 Article History",
+    "Creator Analytics",
+    "Recommendations",
+    "Advanced Comments",
+    "Reporting",
+    "Granular Moderation",
+    "Universal Sharing",
+    "Presence",
+    "System Health",
+    "Runtime Error Reporting",
+    "Sync State Infrastructure"
+  ]
 }

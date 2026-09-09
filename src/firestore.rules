@@ -32,6 +32,23 @@ service cloud.firestore {
     function topicsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowTopics', true) == true; }
     function directMessagesEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowDirectMessages', true) == true; }
 
+
+    match /runtimeErrors/{errorId} {
+      allow create: if isSignedIn()
+        && incoming().uid == request.auth.uid
+        && incoming().message is string
+        && incoming().message.size() <= 2000
+        && incoming().path is string
+        && incoming().path.size() <= 2000
+        && incoming().version is string
+        && incoming().version.size() <= 32
+        && incoming().source is string
+        && incoming().source.size() <= 200
+        && incoming().createdAt is timestamp;
+      allow read: if isAdmin() || isPlatformModerator();
+      allow update, delete: if isAdmin();
+    }
+
     // USER VALIDATION
     function isValidUser(data) {
       return data.keys().hasAll(["uid", "username", "displayName", "createdAt", "updatedAt"])
@@ -686,9 +703,54 @@ service cloud.firestore {
 
 
     match /articles/{slug}/analytics/{eventId} {
-      allow read: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/articles/$(slug)).data.get('author', {}).get('uid','') == request.auth.uid) || hasModeratorPermission('viewAnalytics');
-      allow create: if request.resource.data.slug == slug && request.resource.data.createdAt == request.time && (request.resource.data.get('userId','') == '' || (isSignedIn() && request.resource.data.get('userId','') == request.auth.uid));
-      allow update: if isSignedIn() && request.resource.data.get('userId','') == request.auth.uid;
+      function canReadAnalytics() {
+        return isAdmin()
+          || hasModeratorPermission('viewAnalytics')
+          || (isSignedIn() && get(/databases/$(database)/documents/articles/$(slug)).data.get('author', {}).get('uid', '') == request.auth.uid);
+      }
+      function validAnalyticsIdentity(data) {
+        return data.get('userId', '') is string
+          && data.get('visitorId', '') is string
+          && (
+            data.get('userId', '') == ''
+            || (isSignedIn() && data.get('userId', '') == request.auth.uid)
+          );
+      }
+      function validAnalyticsShape(data) {
+        return data.slug == slug
+          && data.type in ['session', 'share', 'bookmark', 'reaction', 'complete']
+          && validAnalyticsIdentity(data);
+      }
+
+      allow read: if canReadAnalytics();
+
+      allow create: if validAnalyticsShape(incoming())
+        && (
+          (
+            incoming().type == 'session'
+            && incoming().createdAt == request.time
+            && incoming().openedAt == request.time
+            && incoming().lastSeenAt == request.time
+          )
+          ||
+          (
+            incoming().type in ['share', 'bookmark', 'reaction', 'complete']
+            && incoming().createdAt == request.time
+          )
+        );
+
+      allow update: if validAnalyticsShape(incoming())
+        && existing().type == 'session'
+        && incoming().type == 'session'
+        && incoming().slug == existing().slug
+        && incoming().get('userId', '') == existing().get('userId', '')
+        && incoming().get('visitorId', '') == existing().get('visitorId', '')
+        && incoming().lastSeenAt is timestamp
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'lastSeenAt', 'maxScrollPercent', 'durationMs', 'completed',
+          'currentSection', 'scrollY', 'seriesId', 'seriesOrder', 'device', 'source'
+        ]);
+
       allow delete: if isAdmin();
     }
 

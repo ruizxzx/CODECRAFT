@@ -101,7 +101,7 @@ export const PublicBlogComposer: React.FC<Props> = ({
           if (Array.isArray(draft.blocks) && draft.blocks.length) setBlocks(draft.blocks);
           setStatus('Recovered unsent draft from cloud/local backup.');
         }
-      } catch {}
+      } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     };
     void restore();
     return () => { cancelled = true; };
@@ -112,8 +112,8 @@ export const PublicBlogComposer: React.FC<Props> = ({
     const hasContent = !!(title.trim() || excerpt.trim() || blocks.some(b => (b.content || b.linkText || b.buttonText || b.imageUrl || b.videoUrl)));
     if (!hasContent) return;
     const payload = { title, excerpt, category, tags, coverImage, coverImageAlt, coverImageCaption, seriesName, seriesOrder, blocks };
-    try { localStorage.setItem(localDraftKey, JSON.stringify(payload)); } catch {}
-    const timer = window.setTimeout(() => { void saveDraftSnapshot('public-blog', payload).catch(() => {}); }, 900);
+    try { localStorage.setItem(localDraftKey, JSON.stringify(payload)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    const timer = window.setTimeout(() => { void saveDraftSnapshot('public-blog', payload).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error)); }, 900);
     return () => window.clearTimeout(timer);
   }, [initialPost, localDraftKey, title, excerpt, category, tags, coverImage, coverImageAlt, coverImageCaption, seriesName, seriesOrder, blocks]);
 
@@ -263,7 +263,7 @@ export const PublicBlogComposer: React.FC<Props> = ({
 
       await clearCommunityDraft(userProfile.uid).catch(() => undefined);
       await deleteDraftSnapshot('public-blog').catch(() => undefined);
-      try { localStorage.removeItem(localDraftKey); } catch {}
+      try { localStorage.removeItem(localDraftKey); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       onPublished(post);
       // Keep the success state visible long enough for the caller to render it.
       window.setTimeout(onClose, 250);

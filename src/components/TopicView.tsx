@@ -33,14 +33,14 @@ export const TopicView:React.FC<Props>=({slug,articles,onNavigate})=>{
   const [followed,setFollowed]=useState(false);
   const [followBusy,setFollowBusy]=useState(false);
   const [followers,setFollowers]=useState(0);
-  useEffect(()=>{let a=true;if(!user){setFollowed(false);} else { getTopicFollowStatus(topic).then(v=>a&&setFollowed(v)).catch(()=>{});} getDoc(doc(db,'topics',topic)).then(s=>a&&setFollowers(Number(s.data()?.followersCount||0))).catch(()=>{}); return()=>{a=false}},[topic,user?.uid]);
+  useEffect(()=>{let a=true;if(!user){setFollowed(false);} else { getTopicFollowStatus(topic).then(v=>a&&setFollowed(v)).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));} getDoc(doc(db,'topics',topic)).then(s=>a&&setFollowers(Number(s.data()?.followersCount||0))).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error)); return()=>{a=false}},[topic,user?.uid]);
   /**/
   const toggleFollow=async()=>{if(!user){notifyToast('Sign in to follow topics.','info');return}setFollowBusy(true);try{const next=await followTopic(topic);setFollowed(next);notifyToast(next?`Following #${topic}.`:`Unfollowed #${topic}.`,'success')}catch(e:any){notifyToast(e?.message||'Could not update topic follow.','error')}finally{setFollowBusy(false)}};
 
   useEffect(()=>{
     let active=true;
     setLoading(true);
-    Promise.all([getPosts().catch(()=>[]),getSeriesList(100).catch(()=>[])]).then(([p,s])=>{
+    Promise.all([getPosts().catch((error)=>{console.warn('Topic posts load failed:',error);return []}),getSeriesList(100).catch((error)=>{console.warn('Topic series load failed:',error);return []})]).then(([p,s])=>{
       if(!active)return;
       setPosts(p as CommunityPost[]); setSeries(s as Series[]);
     }).finally(()=>active&&setLoading(false));

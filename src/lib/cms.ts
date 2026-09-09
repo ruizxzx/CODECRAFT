@@ -228,12 +228,12 @@ export async function getSiteConfig(): Promise<SiteConfig> {
 
 export async function saveSiteConfig(config: SiteConfig): Promise<void> {
   const configDocRef = doc(db, 'siteConfig', 'global');
-  const beforeSnap = await getDoc(configDocRef).catch(()=>null);
+  const beforeSnap = await getDoc(configDocRef).catch((error)=>{console.warn('Site config snapshot lookup failed:',error);return null});
   await setDoc(configDocRef, {
     ...config,
     updatedAt: serverTimestamp()
   }, { merge: true });
-  if (checkIsAdmin(auth.currentUser?.email)) { try { await writeAdminAudit('changed site config','siteConfig/global',beforeSnap?.exists?beforeSnap.data():null,config); } catch {} }
+  if (checkIsAdmin(auth.currentUser?.email)) { try { await writeAdminAudit('changed site config','siteConfig/global',beforeSnap?.exists?beforeSnap.data():null,config); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }
 }
 
 
@@ -466,7 +466,7 @@ async function hydrateArticleOriginalAuthor(article: Article): Promise<Article> 
     }
     if (!post?.authorId) return article;
     let profile:any = null;
-    try { profile = await getCommunityProfile(post.authorId); } catch {}
+    try { profile = await getCommunityProfile(post.authorId); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     const originalAuthor = {
       ...fallback,
       uid: post.authorId,
@@ -634,7 +634,7 @@ export async function recordArticleView(slug:string, viewerId?:string):Promise<v
   // protected by the cloud receipt transaction below.
   const localKey = `offscrpt:view:${slug}:${day}`;
   if (!authenticated) {
-    try { if (localStorage.getItem(localKey) === '1') return; } catch {}
+    try { if (localStorage.getItem(localKey) === '1') return; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     try {
       await setDoc(receiptRef, { slug, visitorId: identity, day, createdAt: serverTimestamp() }, { merge: false });
       await runTransaction(db, async (tx) => {
@@ -643,7 +643,7 @@ export async function recordArticleView(slug:string, viewerId?:string):Promise<v
         const current = Number(articleSnap.data()?.viewsCount || 0);
         tx.update(articleRef, { viewsCount: current + 1, updatedAt: serverTimestamp() });
       });
-      try { localStorage.setItem(localKey, '1'); } catch {}
+      try { localStorage.setItem(localKey, '1'); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     } catch(e){ console.warn('Anonymous article view tracking failed:', e); }
     return;
   }
@@ -762,7 +762,7 @@ export async function saveArticle(article: Article, options:{createRevision?:boo
   });
   await setDoc(articleDocRef, dataToSave, { merge: true });
   if (checkIsAdmin(auth.currentUser?.email)) {
-    try { await writeAdminAudit(isNewArticle?'created article':'updated article',`articles/${article.slug}`,existingSnap.exists()?existingSnap.data():null,article); } catch {}
+    try { await writeAdminAudit(isNewArticle?'created article':'updated article',`articles/${article.slug}`,existingSnap.exists()?existingSnap.data():null,article); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     if (isNewArticle) { try { await createArticleRevision({...article, ...dataToSave} as Article, 'initial'); } catch(e){ console.warn('Initial revision snapshot failed:', e); } }
   }
 
@@ -802,7 +802,7 @@ export async function saveArticle(article: Article, options:{createRevision?:boo
 
 async function resolveOriginalCreatorForPromotion(post: CommunityPost) {
   let profile:any = null;
-  try { profile = post.authorId ? await getCommunityProfile(post.authorId) : null; } catch {}
+  try { profile = post.authorId ? await getCommunityProfile(post.authorId) : null; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
   const username = profile?.username || post.authorUsername || 'creator';
   const name = profile?.displayName || post.authorName || username;
   const avatar = profile?.photoUrl || post.authorAvatar || '';
@@ -835,7 +835,7 @@ export async function promoteCommunityBlogToMain(post: CommunityPost, collaborat
     const existingArticle = existingSource.data() as any;
     const restored = { ...existingArticle, id: existingSource.id, slug: existingSource.id, title: post.title, excerpt: post.excerpt || post.content.slice(0,240), coverImage: post.coverImage || '', coverImageAlt: post.coverImageAlt || post.title, category: post.category || 'Community', tags: Array.isArray(post.tags) ? post.tags : [], content: blocks, author: originalAuthor, originalAuthor, sourcePostId: post.id, sourceCommunityId: (post as any).communityId || undefined, isPublished: true, mainPublicationStatus: 'published', updatedAt: serverTimestamp() };
     await setDoc(existingSource.ref, stripUndefinedDeep(restored), { merge: true });
-    try { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: slug, mainPublicationStatus: 'published', updatedAt: serverTimestamp() }); } catch {}
+    try { const sourceRef = (post as any).communityId ? doc(db,'communities',(post as any).communityId,'posts',post.id) : doc(db,'posts',post.id); await updateDoc(sourceRef, { promotedToArticleSlug: slug, mainPublicationStatus: 'published', updatedAt: serverTimestamp() }); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     return { ...existingArticle, id: slug, slug, isPublished: true, mainPublicationStatus: 'published' } as Article;
   }
   while ((await getDoc(doc(db,'articles',slug))).exists()) slug = `community-${baseSlug}-${n++}`;
@@ -895,7 +895,7 @@ export async function approvePublicBlogEdit(sourcePostId:string, sourceCommunity
     if(source.authorId && source.authorId!==auth.currentUser?.uid) {
       await setDoc(doc(db,'users',source.authorId,'notifications',`edit-approval-${slug}-${Date.now()}`),{type:'blog_edit_approved',actorId:auth.currentUser?.uid||'',actorUsername:'krishsarkar',actorName:'Krish',message:`approved your edited blog: ${source.title||article.title}`.slice(0,200),targetType:'article',targetId:slug,read:false,createdAt:serverTimestamp()});
     }
-  } catch {}
+  } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
 }
 
 export async function unpublishMainArticle(article: Article): Promise<void> {
@@ -918,7 +918,7 @@ export async function unpublishMainArticle(article: Article): Promise<void> {
         ? doc(db, 'communities', data.sourceCommunityId, 'posts', data.sourcePostId)
         : doc(db, 'posts', data.sourcePostId);
       await updateDoc(sourceRef, { mainPublicationStatus: 'unpublished', updatedAt: serverTimestamp() });
-    } catch {}
+    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
   }
 }
 
@@ -997,9 +997,9 @@ export async function syncAuthorToAllCloudArticles(author: {
 
 export async function deleteArticle(slug: string): Promise<void> {
   if (!slug) return;
-  const before=await getDoc(doc(db,'articles',slug)).catch(()=>null);
+  const before=await getDoc(doc(db,'articles',slug)).catch((error)=>{console.warn('Article snapshot lookup failed:',error);return null});
   await deleteDoc(doc(db, 'articles', slug));
-  if(checkIsAdmin(auth.currentUser?.email)){ try { await writeAdminAudit('deleted article',`articles/${slug}`,before?.exists?before.data():null,null); } catch {} }
+  if(checkIsAdmin(auth.currentUser?.email)){ try { await writeAdminAudit('deleted article',`articles/${slug}`,before?.exists?before.data():null,null); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } }
   await setDoc(doc(db, 'deleted_articles', slug), {
     slug,
     deletedAt: serverTimestamp()

@@ -29,3 +29,9 @@ No rules were added that expose per-user article-view receipts.
 
 ## V48 deployment note
 Deploy `firestore.rules` before using the V48 account dashboard, reading queue, notification preferences, and cloud draft recovery. Reading-progress rules also prevent an automatic checkpoint from downgrading a manually completed article; only the explicit reset/delete path can clear completion.
+
+## OFFSCRPT V72 additions
+
+Deploy the V72 Firestore rules from `firestore.rules`. This ruleset retains Batch 2 granular moderator permissions and adds bounded `runtimeErrors` access plus corrected analytics session create/update validation.
+
+The V72 analytics client intentionally does not read analytics session documents from reader clients. Reader sessions are write-only from the client; creator/admin aggregation performs the protected analytics reads.

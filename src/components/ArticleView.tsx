@@ -34,6 +34,7 @@ import { auth, loginWithGoogle } from '../lib/firebase';
 import { useAuthUser } from '../lib/useAuthUser';
 import { getArticleLikeStatus, toggleArticleLike, getPost, getCommunityProfile } from '../lib/community';
 import { recordArticleView, ARTICLE_REACTIONS, getArticleReaction, setArticleReaction, getSeriesArticles } from '../lib/cms';
+import { upsertArticleAnalyticsSession, recordArticleAnalyticsEvent } from '../lib/analytics';
 import { getSeriesList } from '../lib/series';
 import { calculateArticleReadingTime, getArticleReadingProgress, saveArticleReadingProgress, resetArticleReadingProgress, recordArticleHistory, ArticleEngagementStats, subscribeArticleEngagementStats } from '../lib/reading';
 import { UserIdentity } from './UserIdentity';
@@ -66,7 +67,7 @@ function getVideoEmbedUrl(url: string): string | null {
       const id = parsed.pathname.split('/').filter(Boolean)[0];
       return id ? `https://player.vimeo.com/video/${encodeURIComponent(id)}` : null;
     }
-  } catch {}
+  } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
   return null;
 }
 
@@ -119,6 +120,11 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const articleContentEndRef = React.useRef<HTMLDivElement | null>(null);
   const activeTocIdRef = React.useRef('');
   const completionCommittedRef = React.useRef(false);
+  const analyticsActiveMsRef = React.useRef(performance.now());
+  const analyticsLastTickRef = React.useRef(performance.now());
+  const analyticsScrollRef = React.useRef(0);
+  const analyticsSectionRef = React.useRef('');
+  const analyticsMilestonesRef = React.useRef<Set<number>>(new Set());
   const user = useAuthUser();
   const [reaction, setReaction] = useState<ArticleReaction|null>(null);
   const [reactionBusy, setReactionBusy] = useState(false);
@@ -138,14 +144,58 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [tocOpen, setTocOpen] = useState(true);
   const [copiedTocId, setCopiedTocId] = useState<string | null>(null);
 
-  useEffect(() => { void recordArticleView(article.slug, user?.uid); }, [article.slug, user?.uid]);
+  useEffect(() => {
+    void recordArticleView(article.slug, user?.uid);
+    analyticsActiveMsRef.current = 0;
+    analyticsLastTickRef.current = performance.now();
+    analyticsScrollRef.current = 0;
+    analyticsSectionRef.current = '';
+    analyticsMilestonesRef.current = new Set();
+
+    const writeSession = (completed = false) => {
+      const now = performance.now();
+      if (document.visibilityState !== 'hidden') {
+        analyticsActiveMsRef.current += Math.max(0, now - analyticsLastTickRef.current);
+      }
+      analyticsLastTickRef.current = now;
+      void upsertArticleAnalyticsSession(article.slug, {
+        durationMs: Math.round(analyticsActiveMsRef.current),
+        maxScrollPercent: analyticsScrollRef.current,
+        currentSection: analyticsSectionRef.current,
+        completed,
+        source: 'article-view',
+        seriesId: article.seriesId || '',
+        seriesOrder: Number(article.seriesOrder || 0),
+        scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
+      }).catch((error) => console.warn('Article analytics session write failed:', error));
+    };
+
+    const onVisibility = () => {
+      const now = performance.now();
+      if (document.visibilityState === 'hidden') {
+        analyticsActiveMsRef.current += Math.max(0, now - analyticsLastTickRef.current);
+      }
+      analyticsLastTickRef.current = now;
+      if (document.visibilityState === 'visible') writeSession();
+    };
+
+    const interval = window.setInterval(() => writeSession(), 15000);
+    document.addEventListener('visibilitychange', onVisibility);
+    writeSession();
+
+    return () => {
+      writeSession();
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.clearInterval(interval);
+    };
+  }, [article.slug, user?.uid]);
   useEffect(() => subscribeArticleEngagementStats(article.slug, setEngagement), [article.slug]);
-  useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); savedCheckpointRef.current = { scrollY: p?.scrollY, viewportHeight: p?.viewportHeight, lastSection: p?.lastSection, device: p?.device, source: p?.source, seriesId: p?.seriesId, seriesOrder: p?.seriesOrder }; setSavedCloudProgress(pct); maxAutoProgressRef.current = pct; setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct, { lastSection:p?.lastSection, scrollY:p?.scrollY, device:p?.device, source:p?.source }).catch(() => {}); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
+  useEffect(() => { let active = true; setProgressHydrated(!user); if (!user) { setSavedCloudProgress(0); setArticleCompleted(false); setScrollProgress(0); setResumeVisible(false); return () => { active = false; }; } setProgressHydrated(false); getArticleReadingProgress(article.slug).then(p => { if (!active) return; const pct = p?.completed ? 100 : Number(p?.percent || 0); savedCheckpointRef.current = { scrollY: p?.scrollY, viewportHeight: p?.viewportHeight, lastSection: p?.lastSection, device: p?.device, source: p?.source, seriesId: p?.seriesId, seriesOrder: p?.seriesOrder }; setSavedCloudProgress(pct); maxAutoProgressRef.current = pct; setArticleCompleted(!!p?.completed); setResumeVisible(pct >= 10 && pct < 100 && !p?.completed); setScrollProgress(pct); setProgressHydrated(true); void recordArticleHistory(article, pct, { lastSection:p?.lastSection, scrollY:p?.scrollY, device:p?.device, source:p?.source }).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error)); }).catch(() => { if (active) setProgressHydrated(true); }); return () => { active = false; }; }, [article.slug, user?.uid]);
 
   useEffect(() => { lastSavedProgressRef.current = -1; maxAutoProgressRef.current = 0; completionCommittedRef.current = false; setScrollProgress(0); setPagePosition(0); setSavedCloudProgress(0); setArticleCompleted(false); setResumeVisible(false); }, [article.slug]);
-  useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch(()=>setReaction(null)); else setReaction(null); }, [article.slug,user]);
-  useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch(()=>setSeriesArticles([])); else setSeriesArticles([]); }, [article.seriesId]);
-  useEffect(() => { getSeriesList(100).then(setAllSeries).catch(()=>setAllSeries([])); }, []);
+  useEffect(() => { if(user) getArticleReaction(article.slug,user.uid).then(setReaction).catch((error)=>{console.warn('Article reaction status load failed:',error);setReaction(null)}); else setReaction(null); }, [article.slug,user]);
+  useEffect(() => { if(article.seriesId) getSeriesArticles(article.seriesId).then(setSeriesArticles).catch((error)=>{console.warn('Series articles load failed:',error);setSeriesArticles([])}); else setSeriesArticles([]); }, [article.seriesId]);
+  useEffect(() => { getSeriesList(100).then(setAllSeries).catch((error)=>{console.warn('Series list load failed:',error);setAllSeries([])}); }, []);
   useEffect(() => {
     let active = true;
     const resolve = async () => {
@@ -167,12 +217,12 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               const snap = await getDocs(query(collectionGroup(db, 'posts'), limit(500)));
               const match = snap.docs.find((d:any) => d.id === article.sourcePostId);
               if (match) post = { ...match.data(), id: match.id };
-            } catch {}
+            } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
           }
         }
         if (!post?.authorId) { if (active) setResolvedOriginalAuthor(fallback); return; }
         let profile:any = null;
-        try { profile = await getCommunityProfile(post.authorId); } catch {}
+        try { profile = await getCommunityProfile(post.authorId); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
         if (active) setResolvedOriginalAuthor({
           ...fallback,
           uid: post.authorId,
@@ -236,6 +286,23 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         rawProgress = ((-startRect.top) / travel) * 100;
       }
       rawProgress = Math.round(Math.min(100, Math.max(0, rawProgress)));
+      analyticsScrollRef.current = Math.max(analyticsScrollRef.current, rawProgress);
+      analyticsSectionRef.current = activeTocIdRef.current || '';
+      for (const milestone of [25, 50, 75, 100]) {
+        if (rawProgress >= milestone && !analyticsMilestonesRef.current.has(milestone)) {
+          analyticsMilestonesRef.current.add(milestone);
+          void upsertArticleAnalyticsSession(article.slug, {
+            maxScrollPercent: analyticsScrollRef.current,
+            durationMs: Math.round(analyticsActiveMsRef.current + Math.max(0, performance.now() - analyticsLastTickRef.current)),
+            currentSection: analyticsSectionRef.current,
+            completed: milestone === 100,
+            source: 'article-scroll',
+            seriesId: article.seriesId || '',
+            seriesOrder: Number(article.seriesOrder || 0),
+            scrollY: window.scrollY,
+          }).catch((error) => console.warn('Article analytics milestone write failed:', error));
+        }
+      }
 
       // Two deliberately separate progress concepts:
       // 1) pagePosition = the reader's CURRENT viewport position (retracts when scrolling up).
@@ -264,8 +331,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
             saveTimerRef.current = window.setTimeout(() => {
               const details = { scrollY: window.scrollY, viewportHeight: window.innerHeight, device: `${navigator.platform || 'unknown'} · ${window.innerWidth}x${window.innerHeight}`, source: 'article-scroll', seriesId: article.seriesId || '', seriesOrder: article.seriesOrder || 0 };
-              void saveArticleReadingProgress(article.slug, cloudProgress, activeTocIdRef.current || '', false, details).catch(() => {});
-              void recordArticleHistory(article, cloudProgress, { ...details, lastSection: activeTocIdRef.current || '' }).catch(() => {});
+              void saveArticleReadingProgress(article.slug, cloudProgress, activeTocIdRef.current || '', false, details).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
+              void recordArticleHistory(article, cloudProgress, { ...details, lastSection: activeTocIdRef.current || '' }).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
             }, 350);
           }
         }
@@ -279,7 +346,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         void saveArticleReadingProgress(article.slug, 100, activeTocIdRef.current || 'end', false, { scrollY: window.scrollY, viewportHeight: window.innerHeight, device: `${navigator.platform || 'unknown'} · ${window.innerWidth}x${window.innerHeight}`, source: 'article-scroll', seriesId: article.seriesId || '', seriesOrder: article.seriesOrder || 0 })
           .then(() => { if (!disposed) { maxAutoProgressRef.current = 100; setSavedCloudProgress(100); } })
           .catch(() => { completionCommittedRef.current = false; });
-        void recordArticleHistory(article, 100, { lastSection: activeTocIdRef.current || 'end', scrollY: window.scrollY, device: `${navigator.platform || 'unknown'} · ${window.innerWidth}x${window.innerHeight}`, source: 'article-scroll', seriesId: article.seriesId || '', seriesOrder: article.seriesOrder || 0 }).catch(() => {});
+        void recordArticleHistory(article, 100, { lastSection: activeTocIdRef.current || 'end', scrollY: window.scrollY, device: `${navigator.platform || 'unknown'} · ${window.innerWidth}x${window.innerHeight}`, source: 'article-scroll', seriesId: article.seriesId || '', seriesOrder: article.seriesOrder || 0 }).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
       }
     };
 
@@ -303,7 +370,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
     // Image/video/font layout changes can move the endpoint after the first render.
     const fontReady = (document as any).fonts?.ready;
-    if (fontReady?.then) void fontReady.then(requestCalculate).catch(() => {});
+    if (fontReady?.then) void fontReady.then(requestCalculate).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
     window.setTimeout(requestCalculate, 100);
     window.setTimeout(requestCalculate, 500);
     window.setTimeout(requestCalculate, 1200);
@@ -323,7 +390,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   // means repeated opens update one record instead of creating duplicates.
   useEffect(() => {
     if (!user || !progressHydrated) return;
-    void recordArticleHistory(article, savedCloudProgress).catch(() => {});
+    void recordArticleHistory(article, savedCloudProgress).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
   }, [article.slug, user?.uid, progressHydrated]);
 
   const resumeArticle = () => {
@@ -359,6 +426,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
     setCompleteBusy(true);
     try {
       await saveArticleReadingProgress(article.slug, 100, activeTocId || 'completed', true, { scrollY: window.scrollY, viewportHeight: window.innerHeight, device: `${navigator.platform || 'unknown'} · ${window.innerWidth}x${window.innerHeight}`, source: 'manual-complete', seriesId: article.seriesId || '', seriesOrder: article.seriesOrder || 0 });
+      void upsertArticleAnalyticsSession(article.slug, { completed: true, maxScrollPercent: 100, durationMs: Math.round(analyticsActiveMsRef.current + Math.max(0, performance.now() - analyticsLastTickRef.current)), currentSection: activeTocId || 'completed', source: 'manual-complete', seriesId: article.seriesId || '', seriesOrder: Number(article.seriesOrder || 0), scrollY: window.scrollY }).catch((error) => console.warn('Completion analytics session write failed:', error));
+      void recordArticleAnalyticsEvent(article.slug, 'complete', { source: 'manual-complete' }).catch((error) => console.warn('Completion analytics event failed:', error));
       setSavedCloudProgress(100);
       maxAutoProgressRef.current = 100;
       setScrollProgress(100);
@@ -380,7 +449,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       setSavedCloudProgress(0);
       setScrollProgress(0);
       lastSavedProgressRef.current = -1;
-      void recordArticleHistory(article, 0).catch(() => {});
+      void recordArticleHistory(article, 0).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
     } catch (error) {
       console.error('Could not reset article progress:', error);
     } finally { setCompleteBusy(false); }
@@ -461,7 +530,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       await navigator.clipboard.writeText(url);
       setCopiedTocId(id);
       window.setTimeout(() => setCopiedTocId(null), 1600);
-    } catch {}
+    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
   };
 
   return (
@@ -882,7 +951,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         <div className="my-10 border-4 border-black bg-white p-5 neo-shadow">
           <div className="font-display font-black uppercase mb-3 flex items-center gap-2"><HeartPulse className="w-4 h-4"/> Reader reactions</div>
           <div className="flex flex-wrap gap-2">
-            {ARTICLE_REACTIONS.map((r)=><button key={r} disabled={reactionBusy} onClick={async()=>{let u=user;if(!u){try{u=await loginWithGoogle();}catch{return}} if(!u)return;setReactionBusy(true);try{const previous=reaction;const next=reaction===r?null:r;await setArticleReaction(article.slug,u.uid,next);setReaction(next);setEngagement(prev=>{const counts={...prev.reactions};if(previous) counts[previous]=Math.max(0,(counts[previous]||0)-1);if(next) counts[next]=(counts[next]||0)+1;return {...prev,reactions:counts};});}catch(e){console.warn(e)}finally{setReactionBusy(false)}}} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${reaction===r?'bg-[var(--color-primary)]':'bg-white'}`}>{r} <span className="ml-1 opacity-70">{engagement.reactions[r]||0}</span></button>)}
+            {ARTICLE_REACTIONS.map((r)=><button key={r} disabled={reactionBusy} onClick={async()=>{let u=user;if(!u){try{u=await loginWithGoogle();}catch{return}} if(!u)return;setReactionBusy(true);try{const previous=reaction;const next=reaction===r?null:r;await setArticleReaction(article.slug,u.uid,next);setReaction(next); void recordArticleAnalyticsEvent(article.slug, 'reaction', { active: !!next, reaction: next || previous || '', source: 'article-reaction' }).catch((error) => console.warn('Reaction analytics event failed:', error));setEngagement(prev=>{const counts={...prev.reactions};if(previous) counts[previous]=Math.max(0,(counts[previous]||0)-1);if(next) counts[next]=(counts[next]||0)+1;return {...prev,reactions:counts};});}catch(e){console.warn(e)}finally{setReactionBusy(false)}}} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black uppercase ${reaction===r?'bg-[var(--color-primary)]':'bg-white'}`}>{r} <span className="ml-1 opacity-70">{engagement.reactions[r]||0}</span></button>)}
           </div>
         </div>
 

@@ -159,7 +159,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
     try {
       if (navigator.share) await navigator.share({ title: post?.title || 'OFFSCRPT post', text: post?.content?.slice(0, 140) || '', url });
       else { await navigator.clipboard.writeText(url); notifyToast('Link copied.'); }
-    } catch (e) { if ((e as any)?.name !== 'AbortError') { try { await navigator.clipboard.writeText(url); notifyToast('Link copied.'); } catch {} } }
+    } catch (e) { if ((e as any)?.name !== 'AbortError') { try { await navigator.clipboard.writeText(url); notifyToast('Link copied.'); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); } } }
   };
 
   const openEdit = () => { if (!post) return; setEditTitle(post.title); setEditContent(post.content); setIsEditing(true); };
@@ -382,7 +382,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
                   if (parsed.hostname.includes('youtube.com')) { const id = parsed.searchParams.get('v'); if (id) embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(id)}`; }
                   else if (parsed.hostname === 'youtu.be') { const id = parsed.pathname.replace(/^\//, '').split('/')[0]; if (id) embedUrl = `https://www.youtube.com/embed/${encodeURIComponent(id)}`; }
                   else if (parsed.hostname.includes('vimeo.com')) { const id = parsed.pathname.split('/').filter(Boolean)[0]; if (id) embedUrl = `https://player.vimeo.com/video/${encodeURIComponent(id)}`; }
-                } catch {}
+                } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
                 return <figure key={idx} className="space-y-2">{embedUrl ? <div className="aspect-video w-full border-2 border-black bg-black"><iframe src={embedUrl} title={block.videoTitle || post.title} className="w-full h-full border-0" loading="lazy" referrerPolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div> : <video src={rawUrl} controls preload="metadata" className="w-full max-h-[620px] border-2 border-black" />}{block.videoCaption && <figcaption className="font-mono text-[10px] text-neutral-500"><RichText text={block.videoCaption} onMentionClick={(username) => onNavigate('community_profile', username)} /></figcaption>}</figure>;
               }
               if (block.type === 'image') return <figure key={idx} className="space-y-2">{block.imageHref ? <a href={block.imageHref} target={/^https?:/i.test(block.imageHref) ? '_blank' : undefined} rel={/^https?:/i.test(block.imageHref) ? 'noopener noreferrer' : undefined}><img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-[620px] object-cover border-2 border-black"/></a> : <img src={block.imageUrl} alt={block.imageAlt || ''} className="w-full max-h-[620px] object-cover border-2 border-black"/>}{block.imageCaption && <figcaption className="font-mono text-[10px] text-neutral-500"><RichText text={block.imageCaption} onMentionClick={(username) => onNavigate('community_profile', username)} /></figcaption>}</figure>;

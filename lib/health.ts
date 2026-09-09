@@ -1,7 +1,6 @@
 import { getStorage, ref } from 'firebase/storage';
-import { collection, doc, getDocs, getDoc, limit, query } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { subscribePresence } from './presence';
 
 export type HealthStatus = 'healthy' | 'degraded' | 'unavailable';
 export interface HealthCheckResult {
@@ -44,30 +43,12 @@ export async function runClientHealthChecks(): Promise<HealthCheckResult[]> {
     detail: 'serviceWorker' in navigator ? 'Service worker API is available.' : 'Service worker API is unavailable in this browser/context.',
     checkedAt: Date.now(),
   });
-  const presenceCheck = await new Promise<HealthCheckResult>((resolve) => {
-    const started = performance.now();
-    let settled = false;
-    let stop = () => undefined;
-    const finish = (status: HealthStatus, detail: string) => {
-      if (settled) return;
-      settled = true;
-      stop();
-      resolve({ name: 'Realtime / Presence', status, latencyMs: Math.round(performance.now() - started), detail, checkedAt: Date.now() });
-    };
-    try {
-      stop = subscribePresence('__health__', (count) => {
-        finish('healthy', `Presence collection is readable; ${count} active member record(s) returned.`);
-      }, (error) => {
-        finish('unavailable', error instanceof Error ? error.message : String(error));
-      });
-      window.setTimeout(() => finish('degraded', 'Presence check timed out; the client is reachable but the presence listener did not respond within 2 seconds.'), 2000);
-    } catch (error) {
-      finish('unavailable', error instanceof Error ? error.message : String(error));
-    }
+  results.push({
+    name: 'Realtime / Presence',
+    status: 'degraded',
+    detail: 'No second-by-second presence writer is permitted by the stability release. Presence must be evaluated by its bounded heartbeat implementation when enabled.',
+    checkedAt: Date.now(),
   });
-  results.push(presenceCheck);
-
-  results.push(await timed('Runtime diagnostics', () => getDocs(query(collection(db, 'runtimeErrors'), limit(20))), snap => `Runtime error log reachable; ${snap.size} recent record(s) sampled.`));
   return results;
 }
 

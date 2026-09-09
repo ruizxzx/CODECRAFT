@@ -57,9 +57,9 @@ export const SocialHubView:React.FC<Props>=({userProfile,onNavigate,siteConfig})
  useEffect(()=>subscribeAllCommunityPosts(s=>setAllCommunityPosts(uniq(s))),[]);
  useEffect(()=>{if(!selected||!membersOpen)return;getCommunityMembers(selected.id).then(setMembers).catch(e=>showErr(e));},[selected?.id,membersOpen]);
  useEffect(()=>{setSortMode(siteConfig.socialDefaultSort||'new');},[siteConfig.socialDefaultSort]);
- useEffect(()=>{if(!selected||!userProfile){setIsMember(false);return;} void isCommunityMember(selected.id,userProfile.uid).then(setIsMember).catch(()=>setIsMember(selected.ownerId===userProfile.uid));},[selected?.id,userProfile?.uid,selected?.ownerId]);
+ useEffect(()=>{if(!selected||!userProfile){setIsMember(false);return;} void isCommunityMember(selected.id,userProfile.uid).then(setIsMember).catch((error)=>{console.warn('Community membership check failed:',error);setIsMember(selected.ownerId===userProfile.uid)});},[selected?.id,userProfile?.uid,selected?.ownerId]);
  useEffect(()=>{if(!userProfile){setMessages([]);return;}return subscribeMessages(userProfile.uid,setMessages);},[userProfile?.uid]);
- useEffect(()=>{if(!userProfile||!activeChat){setConversation([]);return;}void getMessagesSafe(userProfile.uid,activeChat.uid);const unsub=subscribeConversation(userProfile.uid,activeChat.uid,setConversation);void markConversationRead(userProfile.uid,activeChat.uid).catch(()=>{});return unsub;},[activeChat?.uid,userProfile?.uid]);
+ useEffect(()=>{if(!userProfile||!activeChat){setConversation([]);return;}void getMessagesSafe(userProfile.uid,activeChat.uid);const unsub=subscribeConversation(userProfile.uid,activeChat.uid,setConversation);void markConversationRead(userProfile.uid,activeChat.uid).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));return unsub;},[activeChat?.uid,userProfile?.uid]);
  const getMessagesSafe=async(a:string,b:string)=>{try{const mod=await import('../lib/social');setConversation(await mod.getMessages(a,b));}catch(e){showErr(e);}};
  const choose=(c:SocialCommunity)=>{setSelected(c);setTab('communities');clearFeedback();};
  const reset=()=>{setTitle('');setContent('');setName('');setDescription('');setTopicsInput('');setIconUrl('');setBannerUrl('');setRulesInput('');setFlair('');setLinkUrl('');setMediaUrl('');setPollOptions('');setPostType('discussion');};

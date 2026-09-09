@@ -40,6 +40,7 @@ import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
 import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
+import { SystemHealthView } from './components/SystemHealthView';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
 import { getCommunityProfile, ensureCommunityProfileForUser, getUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor, subscribeCommunityProfile } from './lib/community';
@@ -48,6 +49,7 @@ import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } f
 import { Loader2 } from 'lucide-react';
 import { notifyToast } from './lib/toast';
 import { recordArticleAnalyticsEvent } from './lib/analytics';
+import { runSyncedOperation } from './lib/sync';
 
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
 const SAVED_COMMUNITY_KEY = 'krishficient_saved_community_v1';
@@ -234,13 +236,13 @@ export default function App() {
 
             setSavedSlugs(prev => {
               const merged = Array.from(new Set([...prev, ...cloudArticleSlugs]));
-              try { localStorage.setItem(SAVED_SLUGS_KEY, JSON.stringify(merged)); } catch {}
+              try { localStorage.setItem(SAVED_SLUGS_KEY, JSON.stringify(merged)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
               return merged;
             });
 
             setSavedCommunityPostIds(prev => {
               const merged = Array.from(new Set([...prev, ...cloudCommunityIds]));
-              try { localStorage.setItem(SAVED_COMMUNITY_KEY, JSON.stringify(merged)); } catch {}
+              try { localStorage.setItem(SAVED_COMMUNITY_KEY, JSON.stringify(merged)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
               return merged;
             });
           }
@@ -294,13 +296,13 @@ export default function App() {
       document.documentElement.classList.toggle('dark', theme === 'dark');
       document.documentElement.dataset.theme = theme;
       document.documentElement.style.colorScheme = theme;
-      try { localStorage.setItem('offscrpt:theme', theme); } catch {}
+      try { localStorage.setItem('offscrpt:theme', theme); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     };
     try {
       const cached = localStorage.getItem('offscrpt:theme');
       if (cached === 'dark' || cached === 'light') apply(cached as 'light'|'dark');
       else if (window.matchMedia('(prefers-color-scheme: dark)').matches) apply('dark');
-    } catch {}
+    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     if (!userAuth?.uid) return;
     return subscribeThemePreference(apply);
   }, [userAuth?.uid]);
@@ -435,6 +437,13 @@ export default function App() {
         const username = hash.replace('@', '');
         setActiveArticleSlug(username);
         setCurrentPage('community_profile');
+      } else if (hash === 'health') {
+        if (checkIsAdmin(auth.currentUser?.email)) setCurrentPage('health');
+        else {
+          setCurrentPage('home');
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+        setActiveArticleSlug(null);
       } else if (hash === 'cms' || hash === 'admin') {
         if (canAccessCms) setCurrentPage('cms');
         else { setCurrentPage('home'); window.history.replaceState(null, '', window.location.pathname + window.location.search); }
@@ -504,14 +513,14 @@ export default function App() {
 
     if (userAuth) {
       try {
-        await toggleUserSaveInCloud(
+        await runSyncedOperation(() => toggleUserSaveInCloud(
           userAuth.uid,
           slug,
           'article',
           !willBeSaved,
           targetArticle?.title || slug
-        );
-        void recordArticleAnalyticsEvent(slug, 'bookmark', { active: willBeSaved, title: targetArticle?.title || slug }).catch(()=>{});
+        ));
+        void recordArticleAnalyticsEvent(slug, 'bookmark', { active: willBeSaved, title: targetArticle?.title || slug }).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
         notifyToast(willBeSaved ? 'Saved to your library.' : 'Removed from your saved items.', 'success');
       } catch (e) {
         console.error("Error saving dispatch to cloud:", e);
@@ -536,13 +545,13 @@ export default function App() {
 
     if (userAuth) {
       try {
-        await toggleUserSaveInCloud(
+        await runSyncedOperation(() => toggleUserSaveInCloud(
           userAuth.uid,
           postId,
           'post',
           !willBeSaved,
           title || 'Community Post'
-        );
+        ));
         notifyToast(willBeSaved ? 'Saved community post.' : 'Removed from your saved items.', 'success');
       } catch (e) {
         console.error("Error saving community post to cloud:", e);
@@ -552,7 +561,7 @@ export default function App() {
 
   const handleToggleQueue = async (slug: string) => {
     if (!userAuth) {
-      try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch {}
+      try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       return;
     }
     const queued = readingQueueIds.includes(slug);
@@ -673,6 +682,8 @@ export default function App() {
               SYNCHRONIZING {siteConfig.logoPart1}{siteConfig.logoPart2} REPOSITORY
             </div>
           </div>
+        ) : currentPage === 'health' ? (
+          <SystemHealthView />
         ) : currentPage === 'cms' ? (
           <AdminStudioModal
             isOpen={true}

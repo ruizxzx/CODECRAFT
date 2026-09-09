@@ -43,7 +43,7 @@ export const AdminControlPanel:React.FC<Props>=({onSiteConfigRestored,isModerato
    if(failed.length) setMessage('Some cloud sections could not load: '+failed.join(', '));
    setBusy(false);
  };
- useEffect(()=>{load(); if(isModerator&&adminId)getModeratorPermissions(adminId).then(setPermissions).catch(()=>setPermissions({}));},[]);
+ useEffect(()=>{load(); if(isModerator&&adminId)getModeratorPermissions(adminId).then(setPermissions).catch((error)=>{console.warn('Moderator permissions load failed:',error);setPermissions({})});},[]);
  const filtered=(arr:any[], fields:string[])=>arr.filter(x=>{const q=search.trim().toLowerCase();return !q||fields.some(f=>String(x?.[f]??'').toLowerCase().includes(q));});
  const filteredUsers=useMemo(()=>filtered(users,['username','displayName']),[users,search]);
  const filteredPosts=useMemo(()=>filtered(posts,['title','content','authorUsername','communitySlug']),[posts,search]);

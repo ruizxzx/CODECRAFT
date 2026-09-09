@@ -50,7 +50,7 @@ export const SavedView: React.FC<SavedViewProps> = ({
       if (!active) return;
       setCloudItems(items);
       setCollections([{ id: 'general', name: 'General', createdAt: '', updatedAt: '' }, ...(cols as BookmarkCollection[]).filter(c => c.id !== 'general')]);
-    }).catch(() => {});
+    }).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
     return () => { active = false; };
   }, [userAuth?.uid]);
 
