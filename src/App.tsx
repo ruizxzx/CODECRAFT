@@ -27,6 +27,7 @@ import { RssModal } from './components/RssModal';
 import { CommunityView } from './components/CommunityView';
 import { CommunityPostView } from './components/CommunityPostView';
 import { CommunityProfileView } from './components/CommunityProfileView';
+import { backfillPublicProfilesForAllUsers } from './lib/community';
 import { SavedView } from './components/SavedView';
 import { NotificationsView } from './components/NotificationsView';
 import { AccountDashboardView } from './components/AccountDashboardView';
@@ -400,6 +401,22 @@ export default function App() {
     const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     if (themeMeta) themeMeta.content = siteConfig.themePrimaryColor || '#FFD600';
   }, [siteConfig.logoImageUrl, siteConfig.logoPart1, siteConfig.logoPart2, siteConfig.themePrimaryColor]);
+
+  // One-time master-admin repair keeps the public handle directory complete for
+  // existing accounts. New/updated profiles mirror themselves on login/edit.
+  useEffect(() => {
+    if (!userAuth?.uid || !checkIsAdmin(userAuth.email)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await backfillPublicProfilesForAllUsers();
+        if (!cancelled && result.mirrored > 0) console.info('Public profile directory repaired:', result);
+      } catch (error) {
+        if (!cancelled) console.warn('Public profile directory repair skipped:', error);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userAuth?.uid, userAuth?.email]);
 
   // URL Hash Sync for standard navigation & browser back button support
   useEffect(() => {

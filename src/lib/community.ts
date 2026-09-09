@@ -235,12 +235,22 @@ export async function getProfileByUsername(username: string): Promise<CommunityU
       return publicProfile;
     }
 
-    // Backward-compatible migration fallback for legacy profiles. Public users
-    // with no mirrored projection do not receive a private profile document.
+    // Legacy/repair fallback. The global handle registry is public so the route
+    // can determine whether a claimed handle exists, but the UID is only used
+    // internally when the viewer owns that account or is a master administrator.
     const handleSnap = await getDoc(doc(db, 'usernames', clean));
-    if (handleSnap.exists() && typeof handleSnap.data()?.uid === 'string') {
-      const legacy = await getCommunityProfile(String(handleSnap.data().uid));
-      if (legacy?.username) return legacy;
+    const handleUid = handleSnap.exists() ? String(handleSnap.data()?.uid || '') : '';
+    if (handleUid) {
+      const canReadPrivateIdentity = !!auth.currentUser && (
+        auth.currentUser.uid === handleUid || checkIsAdmin(auth.currentUser.email)
+      );
+      if (canReadPrivateIdentity) {
+        const legacy = await getCommunityProfile(handleUid);
+        if (legacy?.username) {
+          try { await upsertPublicProfile(legacy); } catch (e) { console.warn('Legacy public profile repair failed:', e); }
+          return legacy;
+        }
+      }
     }
     return null;
   } catch (error) {
@@ -384,6 +394,21 @@ export async function upsertPublicProfile(profile: CommunityUser): Promise<void>
     creatorPage: profile.creatorPage || null,
     updatedAt: serverTimestamp(),
   }, { merge: true });
+}
+
+/** Master-admin repair: mirror every claimed handle into the public-profile collection. */
+export async function backfillPublicProfilesForAllUsers(): Promise<{ scanned: number; mirrored: number; skipped: number }> {
+  const current = auth.currentUser;
+  if (!current || !checkIsAdmin(current.email)) throw new Error('Master administrator access required.');
+  const snap = await getDocs(collection(db, 'users'));
+  let mirrored = 0; let skipped = 0;
+  for (const d of snap.docs) {
+    const data = d.data() as CommunityUser;
+    if (!data.username) { skipped++; continue; }
+    try { await upsertPublicProfile({ ...data, uid: d.id } as CommunityUser); mirrored++; }
+    catch (error) { skipped++; console.warn('Public profile backfill failed for', d.id, error); }
+  }
+  return { scanned: snap.size, mirrored, skipped };
 }
 
 export async function createCommunityProfile(data: Omit<CommunityUser, 'createdAt' | 'updatedAt' | 'followersCount' | 'followingCount'>) {
