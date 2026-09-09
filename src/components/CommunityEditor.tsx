@@ -4,6 +4,7 @@ import { createPost, getCommunityDraft, saveCommunityDraft, clearCommunityDraft 
 import { X, Send, Loader2, BookOpen, MessageSquare, AtSign, Info, WifiOff } from 'lucide-react';
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { MentionTextarea } from './MentionAutocomplete';
+import { runSyncedOperation, type SyncState } from '../lib/sync';
 
 interface CommunityEditorProps {
   profile: CommunityUser;
@@ -25,6 +26,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
   const [isPublishing, setIsPublishing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [draftLoaded, setDraftLoaded] = useState(false);
+  const [syncState, setSyncState] = useState<SyncState>('idle');
   const localDraftKey = `offscrpt:draft:community:${profile.uid}`;
 
   useEffect(() => {
@@ -41,7 +43,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
           setContent(draft.content || '');
           setMediaInput(draft.mediaInput || (draft.mediaUrls || []).join('\n'));
         }
-      } catch {}
+      } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       finally { if (!cancelled) setDraftLoaded(true); }
     };
     void restore();
@@ -51,11 +53,16 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
   useEffect(() => {
     if (!draftLoaded || (!title.trim() && !content.trim())) return;
     const payload = { type, title, content, mediaInput, mediaUrls: mediaInput.split('\n').map(v => v.trim()).filter(Boolean).slice(0, 6) };
-    try { localStorage.setItem(localDraftKey, JSON.stringify(payload)); } catch {}
-    setSyncState(navigator.onLine?'saving':'offline');
+    try { localStorage.setItem(localDraftKey, JSON.stringify(payload)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
+    if (!navigator.onLine) setSyncState('offline');
     const timer = window.setTimeout(() => {
-      Promise.all([saveCommunityDraft(profile.uid, { type, title, content, mediaUrls: payload.mediaUrls }), saveDraftSnapshot('community-editor', payload)])
-        .then(()=>setSyncState('synced')).catch(()=>setSyncState('failed'));
+      void runSyncedOperation(
+        () => Promise.all([
+          saveCommunityDraft(profile.uid, { type, title, content, mediaUrls: payload.mediaUrls }),
+          saveDraftSnapshot('community-editor', payload),
+        ]),
+        setSyncState,
+      ).catch((error) => console.error('Community draft sync failed:', error));
     }, 700);
     return () => window.clearTimeout(timer);
   }, [draftLoaded, profile.uid, localDraftKey, type, title, content, mediaInput]);
@@ -84,7 +91,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
       });
       await clearCommunityDraft(profile.uid).catch(() => {});
       await deleteDraftSnapshot('community-editor').catch(() => {});
-      try { localStorage.removeItem(localDraftKey); } catch {}
+      try { localStorage.removeItem(localDraftKey); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       onPublished(post);
     } catch (error) {
       console.error(error);

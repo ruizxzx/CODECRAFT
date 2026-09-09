@@ -64,7 +64,7 @@ function getVideoEmbedUrl(url: string): string | null {
       const id = parsed.pathname.split('/').filter(Boolean)[0];
       return id ? `https://player.vimeo.com/video/${encodeURIComponent(id)}` : null;
     }
-  } catch {}
+  } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
   return null;
 }
 
@@ -165,12 +165,12 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
               const snap = await getDocs(query(collectionGroup(db, 'posts'), limit(500)));
               const match = snap.docs.find((d:any) => d.id === article.sourcePostId);
               if (match) post = { ...match.data(), id: match.id };
-            } catch {}
+            } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
           }
         }
         if (!post?.authorId) { if (active) setResolvedOriginalAuthor(fallback); return; }
         let profile:any = null;
-        try { profile = await getCommunityProfile(post.authorId); } catch {}
+        try { profile = await getCommunityProfile(post.authorId); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
         if (active) setResolvedOriginalAuthor({
           ...fallback,
           uid: post.authorId,
@@ -459,7 +459,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       await navigator.clipboard.writeText(url);
       setCopiedTocId(id);
       window.setTimeout(() => setCopiedTocId(null), 1600);
-    } catch {}
+    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
   };
 
   return (

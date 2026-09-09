@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const firebase = fs.readFileSync('src/lib/firebase.ts','utf8');
+const rules = fs.readFileSync('firestore.rules','utf8');
+const required = ['initializeApp','getAuth','getFirestore','ADMIN_EMAILS','checkIsAdmin'];
+const missing = required.filter(x=>!firebase.includes(x));
+if(!firebase.includes("from 'firebase/firestore'")) missing.push('firebase/firestore import');
+if(!rules.includes("match /databases/{database}/documents")) missing.push('Firestore rules root');
+if(missing.length){ console.error('FIREBASE CHECK FAILED:',missing.join(', ')); process.exit(1); }
+console.log('FIREBASE CHECK OK — client initialization and rules root detected.');

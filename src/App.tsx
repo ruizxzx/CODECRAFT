@@ -39,6 +39,7 @@ import { CreatorView } from './components/CreatorView';
 import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
 import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
+import { SystemHealthView } from './components/SystemHealthView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
@@ -48,6 +49,7 @@ import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } f
 import { Loader2 } from 'lucide-react';
 import { notifyToast } from './lib/toast';
 import { recordArticleAnalyticsEvent } from './lib/analytics';
+import { flushQueuedRuntimeErrors, reportRuntimeError } from './lib/runtime';
 
 const SAVED_SLUGS_KEY = 'krishficient_saved_slugs_v1';
 const SAVED_COMMUNITY_KEY = 'krishficient_saved_community_v1';
@@ -58,7 +60,7 @@ class PageErrorBoundary extends React.Component<{children: React.ReactNode}, {ha
   static getDerivedStateFromError(error: unknown) {
     return { hasError: true, message: error instanceof Error ? error.message : String(error || 'Unexpected error') };
   }
-  componentDidCatch(error: unknown) { console.error('OFFSCRPT page runtime error:', error); }
+  componentDidCatch(error: unknown) { console.error('OFFSCRPT page runtime error:', error); void reportRuntimeError(error, 'react.page-boundary'); }
   componentDidUpdate(prevProps: {children: React.ReactNode}) {
     if (prevProps.children !== this.props.children && this.state.hasError) this.setState({hasError:false, message:''});
   }
@@ -182,6 +184,7 @@ export default function App() {
     const unsub = auth.onAuthStateChanged(async (user) => {
       setUserAuth(user);
       if (user) {
+        void flushQueuedRuntimeErrors();
         // Load or automatically create the persistent cloud profile.
         // Existing handles are restored from Firestore; first-time accounts
         // receive a generated unique handle without showing the claim modal.
@@ -234,13 +237,13 @@ export default function App() {
 
             setSavedSlugs(prev => {
               const merged = Array.from(new Set([...prev, ...cloudArticleSlugs]));
-              try { localStorage.setItem(SAVED_SLUGS_KEY, JSON.stringify(merged)); } catch {}
+              try { localStorage.setItem(SAVED_SLUGS_KEY, JSON.stringify(merged)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
               return merged;
             });
 
             setSavedCommunityPostIds(prev => {
               const merged = Array.from(new Set([...prev, ...cloudCommunityIds]));
-              try { localStorage.setItem(SAVED_COMMUNITY_KEY, JSON.stringify(merged)); } catch {}
+              try { localStorage.setItem(SAVED_COMMUNITY_KEY, JSON.stringify(merged)); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
               return merged;
             });
           }
@@ -294,13 +297,13 @@ export default function App() {
       document.documentElement.classList.toggle('dark', theme === 'dark');
       document.documentElement.dataset.theme = theme;
       document.documentElement.style.colorScheme = theme;
-      try { localStorage.setItem('offscrpt:theme', theme); } catch {}
+      try { localStorage.setItem('offscrpt:theme', theme); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     };
     try {
       const cached = localStorage.getItem('offscrpt:theme');
       if (cached === 'dark' || cached === 'light') apply(cached as 'light'|'dark');
       else if (window.matchMedia('(prefers-color-scheme: dark)').matches) apply('dark');
-    } catch {}
+    } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     if (!userAuth?.uid) return;
     return subscribeThemePreference(apply);
   }, [userAuth?.uid]);
@@ -424,6 +427,10 @@ export default function App() {
         const username = hash.replace('@', '');
         setActiveArticleSlug(username);
         setCurrentPage('community_profile');
+      } else if (hash === 'health') {
+        if (checkIsAdmin(auth.currentUser?.email)) setCurrentPage('health');
+        else { setCurrentPage('home'); window.history.replaceState(null, '', window.location.pathname + window.location.search); }
+        setActiveArticleSlug(null);
       } else if (hash === 'cms' || hash === 'admin') {
         if (canAccessCms) setCurrentPage('cms');
         else { setCurrentPage('home'); window.history.replaceState(null, '', window.location.pathname + window.location.search); }
@@ -541,7 +548,7 @@ export default function App() {
 
   const handleToggleQueue = async (slug: string) => {
     if (!userAuth) {
-      try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch {}
+      try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       return;
     }
     const queued = readingQueueIds.includes(slug);
@@ -662,6 +669,8 @@ export default function App() {
               SYNCHRONIZING {siteConfig.logoPart1}{siteConfig.logoPart2} REPOSITORY
             </div>
           </div>
+        ) : currentPage === 'health' ? (
+          <SystemHealthView />
         ) : currentPage === 'cms' ? (
           <AdminStudioModal
             isOpen={true}

@@ -3,7 +3,7 @@ import { VerifiedBadge } from './VerifiedBadge';
 import React, { useState, useEffect } from 'react';
 import { CommunityUser, CommunityPost, PageView } from '../types';
 import { getProfileByUsername, getCommunityProfile, getUserPosts, updateCommunityProfile, checkIsFollowing, followUser, unfollowUser, deletePost, getUserUpvotedPosts, getUserRepostedPosts, getUserComments, getUserFollowers, getUserFollowing, ProfileListEntry, subscribeCommunityProfile } from '../lib/community';
-import { auth } from '../lib/firebase';
+import { auth, checkIsAdmin } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
 import { syncUserIdentityAcrossContent } from '../lib/community';
@@ -107,6 +107,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     return !q || user.username.toLowerCase().includes(q) || user.displayName.toLowerCase().includes(q);
   });
   const activeUser = auth.currentUser || userAuth;
+  const isAdmin = checkIsAdmin(activeUser?.email);
   // Profile Settings is strictly account-scoped. Publication author settings
   // are managed separately in Admin Studio and must never overwrite a user's
   // personal account display name.
@@ -237,7 +238,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
       console.error('Profile update failed:', e);
       const raw = String(e?.message || '');
       let detail = raw;
-      try { detail = JSON.parse(raw)?.error || raw; } catch {}
+      try { detail = JSON.parse(raw)?.error || raw; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
       notifyToast('Failed to update profile: ' + (detail || 'Permission denied.'));
     } finally { setIsSavingProfile(false); }
   };

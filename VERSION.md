@@ -1,13 +1,5 @@
-# OFFSCRPT V71
+# OFFSCRPT V71.5 — Stability / Infrastructure
 
-Article Version History / Revision System.
+Cumulative production release based on OFFSCRPT V71 Article Version History.
 
-- Firestore-backed `articleRevisions/{revisionId}` snapshots.
-- Automatic snapshot before admin edits.
-- Initial snapshot for newly created articles.
-- Manual revision snapshots via HISTORY workflow.
-- Two-revision field comparison.
-- Safe restore: current article is snapshotted before restore; restore result is recorded.
-- Duplicate revision into a new unpublished article with a unique slug.
-- Admin-only revision access enforced in client and Firestore rules.
-- Base source uses the authenticated MentionTextarea fix from V68.
+This milestone consolidates the active application under `src/` and adds build, type, import/export, Firebase/rules, runtime, sync, schema, and deployment health infrastructure without removing V71 functionality.

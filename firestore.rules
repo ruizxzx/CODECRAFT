@@ -31,6 +31,25 @@ service cloud.firestore {
     function topicsEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowTopics', true) == true; }
     function directMessagesEnabled() { return !siteConfigExists() || get(/databases/$(database)/documents/siteConfig/global).data.get('allowDirectMessages', true) == true; }
 
+    // Runtime diagnostics: authenticated clients may report only their own
+    // bounded error records; staff can review diagnostics. This is not a
+    // general-purpose writable collection.
+    match /runtimeErrors/{errorId} {
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 2000
+        && request.resource.data.path is string
+        && request.resource.data.path.size() <= 2000
+        && request.resource.data.version is string
+        && request.resource.data.version.size() <= 32
+        && request.resource.data.source is string
+        && request.resource.data.source.size() <= 200
+        && request.resource.data.createdAt is timestamp;
+      allow read: if isAdmin() || isPlatformModerator();
+      allow update, delete: if isAdmin();
+    }
+
     // USER VALIDATION
     function isValidUser(data) {
       return data.keys().hasAll(["uid", "username", "displayName", "createdAt", "updatedAt"])

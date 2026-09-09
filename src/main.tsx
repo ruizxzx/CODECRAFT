@@ -2,11 +2,15 @@ import {StrictMode, Component, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { installRuntimeErrorReporting, reportRuntimeError } from './lib/runtime';
+
+if (typeof window !== 'undefined') installRuntimeErrorReporting();
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((error) => {
       console.warn('PWA service worker registration failed:', error);
+      void reportRuntimeError(error, 'pwa.service-worker');
     });
   });
 }
@@ -16,6 +20,7 @@ class AppErrorBoundary extends Component<{children: ReactNode}, {hasError: boole
   static getDerivedStateFromError() { return {hasError: true}; }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('OFFSCRPT runtime error:', error, info);
+    void reportRuntimeError(error, 'react.root-boundary');
   }
   render() {
     if (this.state.hasError) {
