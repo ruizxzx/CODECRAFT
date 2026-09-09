@@ -77,6 +77,23 @@ service cloud.firestore {
     }
 
     // USER VALIDATION
+    function validProfileUpdate(next, prev) {
+      let changed = next.diff(prev).affectedKeys();
+      return
+        (!changed.hasAny(["username"]) || (next.get("username", "") is string && next.get("username", "").size() <= 32 && (next.get("username", "") == "" || next.get("username", "").matches("^[a-zA-Z0-9_]+$"))))
+        && (!changed.hasAny(["displayName"]) || (next.get("displayName", "") is string && next.get("displayName", "").size() <= 64))
+        && (!changed.hasAny(["photoURL"]) || (next.get("photoURL", "") is string && next.get("photoURL", "").size() <= 2048))
+        && (!changed.hasAny(["coverImageUrl"]) || (next.get("coverImageUrl", "") is string && next.get("coverImageUrl", "").size() <= 2048))
+        && (!changed.hasAny(["websiteUrl"]) || (next.get("websiteUrl", "") is string && next.get("websiteUrl", "").size() <= 512))
+        && (!changed.hasAny(["location"]) || (next.get("location", "") is string && next.get("location", "").size() <= 100))
+        && (!changed.hasAny(["socialX"]) || (next.get("socialX", "") is string && next.get("socialX", "").size() <= 512))
+        && (!changed.hasAny(["socialGithub"]) || (next.get("socialGithub", "") is string && next.get("socialGithub", "").size() <= 512))
+        && (!changed.hasAny(["socialTelegram"]) || (next.get("socialTelegram", "") is string && next.get("socialTelegram", "").size() <= 512))
+        && (!changed.hasAny(["socialInstagram"]) || (next.get("socialInstagram", "") is string && next.get("socialInstagram", "").size() <= 512))
+        && (!changed.hasAny(["bio"]) || (next.get("bio", "") is string && next.get("bio", "").size() <= 500))
+        && (!changed.hasAny(["themeColor"]) || (next.get("themeColor", "#000000") is string && next.get("themeColor", "#000000").matches("^#[0-9a-fA-F]{6}$")));
+    }
+
     function isValidUser(data) {
       return data.keys().hasAll(["uid", "username", "displayName", "createdAt", "updatedAt"])
         && data.uid is string && data.uid.size() <= 128
@@ -137,6 +154,21 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
 
+    // Allow a signed-in user to refresh only their own denormalized identity snapshots across nested collections.
+    // The queryable fields mirror the UID used by the document owners, so this cannot expose another user's identity records.
+    match /{path=**}/members/{memberId} {
+      allow read: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid && memberId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid && memberId == request.auth.uid
+        && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['username','updatedAt']);
+    }
+    match /{path=**}/following/{followingId} {
+      allow read: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid && followingId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.get('uid', '') == request.auth.uid && followingId == request.auth.uid
+        && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['username','updatedAt']);
+    }
+
     match /users/{userId} {
       allow read: if true;
       allow create: if isSignedIn() 
@@ -150,33 +182,21 @@ service cloud.firestore {
         && incoming().get('platformRole', 'member') == (isAdmin() ? 'master_admin' : 'member')
         && incoming().get('role', '') == (isAdmin() ? 'Master Admin' : '')
         && (incoming().username == '' || existsAfter(/databases/$(database)/documents/usernames/$(incoming().username)));
-      allow update: if (isSignedIn()
+      allow update: if isSignedIn()
         && request.auth.uid == userId
-        && isValidUser(incoming())
         && incoming().uid == existing().uid
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
-        && incoming().get('username', '') != existing().get('username', '')
-        && (incoming().get('username', '') == '' || existsAfter(/databases/$(database)/documents/usernames/$(incoming().get('username', ''))))
-        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'updatedAt']))
-        || (isSignedIn()
-        && request.auth.uid == userId
-        && isValidUser(incoming())
-        && incoming().uid == existing().uid
-        && incoming().username == existing().username
-        && incoming().createdAt == existing().createdAt
-        && incoming().updatedAt == request.time
-        && incoming().get('isBlocked', false) == existing().get('isBlocked', false)
-        && incoming().get('isVerified', false) == existing().get('isVerified', false)
-        && incoming().get('verificationColor', '#2196F3') == existing().get('verificationColor', '#2196F3')
-        && incoming().get('isAuthor', false) == existing().get('isAuthor', false)
-        && incoming().get('role', '') == existing().get('role', '')
-        && incoming().get('platformRole', 'member') == existing().get('platformRole', 'member')
-        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'updatedAt']))
+        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'updatedAt'])
+        && validProfileUpdate(incoming(), existing())
+        && (incoming().get('username', '') == existing().get('username', '')
+          || incoming().get('username', '') == ''
+          || existsAfter(/databases/$(database)/documents/usernames/$(incoming().get('username', ''))))
         || (isAdmin() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'updatedAt']))
         || (isAdmin() && existing().username == 'krishsarkar' && existing().get('isAuthor', false) == true && incoming().uid == existing().uid && incoming().username == existing().username && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'isSuspended', 'restrictCommenting', 'restrictPosting', 'restrictCommunities', 'restrictReactions', 'restrictFollowing', 'moderatorNote', 'warningCount', 'suspensionUntil', 'updatedAt']))
-        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])) || (isPlatformModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt']))
+        || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt']))
+        || (isPlatformModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt']))
         || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))
         || (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']))
         || (isAdmin() && isValidUser(incoming()));
