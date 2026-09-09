@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart3, BookOpen, MessageCircle, Users, UserRoundCheck, Heart, Clock, Share2, Bookmark, Eye, RotateCcw, Copy, RefreshCw } from 'lucide-react';
 import type { Article, CommunityUser, PageView, Series } from '../types';
-import { collection, getCountFromServer } from 'firebase/firestore';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { getArticleAnalyticsAggregate, type ArticleAnalyticsAggregate } from '../lib/analytics';
+import { getArticleAnalyticsAggregate, subscribeArticleAnalytics, type ArticleAnalyticsAggregate } from '../lib/analytics';
 import { getSeriesList } from '../lib/series';
 import { getSeriesArticles, createArticleRevision, getArticleRevisions, restoreArticleRevision } from '../lib/cms';
 import { notifyToast } from '../lib/toast';
@@ -31,6 +31,7 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
   const [series, setSeries] = useState<Series[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [seriesBusy, setSeriesBusy] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
   const [seriesData, setSeriesData] = useState<Array<{ article: Article; views: number; drop: number }>>([]);
   const [revisions, setRevisions] = useState<any[]>([]);
 
@@ -47,7 +48,7 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
 
   const rangeDays = range === 'all' ? 'all' : range;
 
-  const loadAnalytics = async () => {
+  useEffect(() => {
     if (!mine.length) {
       setStats({});
       setLoading(false);
@@ -57,32 +58,34 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
 
     setLoading(true);
     setAnalyticsError('');
-    const result = await Promise.all(
-      mine.map(async (article) => {
-        const aggregate = await getArticleAnalyticsAggregate(article.slug, Number(article.viewsCount || 0), rangeDays);
-        let comments = 0;
-        try {
-          comments = (await getCountFromServer(collection(db, 'articles', article.slug, 'comments'))).data().count;
-        } catch (error) {
-          console.warn('Article comment analytics unavailable:', error);
-        }
-        return [article.slug, { ...aggregate, comments }] as const;
-      }),
-    );
-    setStats(Object.fromEntries(result));
-    setLoading(false);
-  };
+    const unsubscribers: Array<() => void> = [];
+    let received = 0;
+    const markReceived = () => {
+      received += 1;
+      if (received >= mine.length) setLoading(false);
+    };
 
-  useEffect(() => {
-    void loadAnalytics().catch((error) => {
-      console.error('Creator analytics load failed:', error);
-      setStats({});
-      setAnalyticsError(error instanceof Error ? error.message : String(error));
-      setLoading(false);
-    });
-    // The article slug signature is intentionally stable for the effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mine.map((article) => article.slug).join('|'), range]);
+    for (const article of mine) {
+      const slug = article.slug;
+      unsubscribers.push(subscribeArticleAnalytics(slug, aggregate => {
+        setStats(prev => ({ ...prev, [slug]: { ...aggregate, comments: prev[slug]?.comments || 0 } }));
+        markReceived();
+      }, rangeDays));
+
+      unsubscribers.push(onSnapshot(
+        collection(db, 'articles', slug, 'comments'),
+        snap => {
+          setStats(prev => ({ ...prev, [slug]: { ...(prev[slug] || { views: 0, uniqueReaders: 0, averageReadingTimeMs: 0, completionRate: 0, scrollDepth: 0, reactions: 0, bookmarks: 0, comments: 0, shares: 0, returnReaders: 0, funnel: { opened: 0, p25: 0, p50: 0, p75: 0, completed: 0 } }), comments: snap.size } }));
+        },
+        error => {
+          console.warn(`Creator comments subscription failed for ${slug}:`, error);
+          setAnalyticsError(prev => prev || `Live comment analytics failed for ${slug}.`);
+        },
+      ));
+    }
+
+    return () => unsubscribers.forEach(unsub => unsub());
+  }, [mine.map((article) => article.slug).join('|'), range, refreshToken]);
 
   useEffect(() => {
     getSeriesList(100)
@@ -173,7 +176,7 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
         {[['7D', 7], ['30D', 30], ['90D', 90], ['ALL', 'all']].map(([label, value]) => (
           <button key={label as string} onClick={() => setRange(value as Range)} className={`border-2 border-black px-3 py-2 font-mono text-[10px] font-black ${range === value ? 'bg-[var(--color-primary)]' : 'bg-white'}`}>{label}</button>
         ))}
-        <button onClick={() => void loadAnalytics().catch((error) => { setAnalyticsError(error instanceof Error ? error.message : String(error)); })} className="ml-auto border-2 border-black px-3 py-2 font-mono text-[10px] font-black">
+        <button onClick={() => setRefreshToken(value => value + 1)} className="ml-auto border-2 border-black px-3 py-2 font-mono text-[10px] font-black">
           <RefreshCw className="inline w-3 h-3" /> REFRESH
         </button>
       </section>

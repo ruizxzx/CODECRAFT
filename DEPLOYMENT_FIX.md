@@ -35,3 +35,7 @@ repository-root `dist/` directory expected by Vercel.
 - Version bumped to `V72.1` / package version `0.72.1`.
 - Preserved the V72 `inputRef` runtime fix in the active `src/components/MentionAutocomplete.tsx`.
 - Relative import audit over the active source tree reports 0 missing local imports.
+
+## V72.2 Integrity Hardening
+
+Production data is cloud-only. Creator analytics use real-time Firestore listeners, and stateful bookmark/reaction analytics aggregate the latest reader state instead of counting every toggle as an active action. Client saved-state and CMS UI changes now roll back when cloud persistence fails.

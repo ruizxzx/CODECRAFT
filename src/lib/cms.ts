@@ -448,6 +448,9 @@ function normalizeArticleRecord(raw: any, fallbackId = ''): Article {
 }
 
 function mergeArticlesWithInitial(cloudArticles: Article[], deletedSlugs: Set<string>): Article[] {
+  // Production must remain cloud-backed. The local archive is only useful during
+  // development when explicitly opted in, never as a silent production data source.
+  if (import.meta.env.PROD) return cloudArticles.filter(a => !deletedSlugs.has(a.slug));
   const cloudSlugs = new Set(cloudArticles.map(a => a.slug));
   const fallbackOnly = INITIAL_ARTICLES.filter(a => !cloudSlugs.has(a.slug) && !deletedSlugs.has(a.slug));
   return [...cloudArticles, ...fallbackOnly];
@@ -472,7 +475,7 @@ async function hydrateArticleOriginalAuthor(article: Article): Promise<Article> 
       uid: post.authorId,
       username: profile?.username || post.authorUsername || fallback?.username,
       name: profile?.displayName || post.authorName || fallback?.name,
-      avatar: profile?.photoUrl || post.authorAvatar || fallback?.avatar,
+      avatar: profile?.photoURL || post.authorAvatar || fallback?.avatar,
       bio: profile?.bio || fallback?.bio || '',
       role: profile?.isVerified ? 'Verified Creator' : (fallback?.role || 'Creator'),
       isVerified: !!(profile?.isVerified ?? post.isVerified ?? fallback?.isVerified),
@@ -564,8 +567,9 @@ export function subscribeArticles(callback: (articles: Article[]) => void): () =
     resetSourceListeners(latestCloudArticles);
     await emit();
   }, err=>{
-    console.warn('Real-time articles subscription failed, using local archive:',err);
-    if(!disposed) callback(INITIAL_ARTICLES);
+    console.warn('Real-time articles subscription failed:',err);
+    // Never replace live CMS data with a synthetic/local archive in production.
+    if(!disposed) callback(import.meta.env.DEV ? INITIAL_ARTICLES : []);
   });
   return ()=>{ disposed=true; unsubArticles(); sourceUnsubs.forEach(u=>u()); sourceUnsubs=[]; };
 }
@@ -598,8 +602,8 @@ export async function fetchArticles(): Promise<{ articles: Article[]; source: 'f
     console.warn("Could not fetch articles from Firestore, using initial dataset:", error);
   }
   return {
-    articles: INITIAL_ARTICLES,
-    source: 'fallback'
+    articles: import.meta.env.DEV ? INITIAL_ARTICLES : [],
+    source: import.meta.env.DEV ? 'fallback' : 'firestore'
   };
 }
 
@@ -805,7 +809,7 @@ async function resolveOriginalCreatorForPromotion(post: CommunityPost) {
   try { profile = post.authorId ? await getCommunityProfile(post.authorId) : null; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
   const username = profile?.username || post.authorUsername || 'creator';
   const name = profile?.displayName || post.authorName || username;
-  const avatar = profile?.photoUrl || post.authorAvatar || '';
+  const avatar = profile?.photoURL || post.authorAvatar || '';
   return {
     uid: post.authorId,
     username,

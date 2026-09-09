@@ -202,24 +202,16 @@ function readerKey(row: Record<string, unknown>): string {
   return String(row.userId || row.visitorId || row.sessionId || '');
 }
 
-export async function getArticleAnalyticsAggregate(
-  slug: string,
+function aggregateAnalyticsRows(
+  rows: Array<Record<string, unknown>>,
   fallbackViews = 0,
   days: number | 'all' = 'all',
-): Promise<ArticleAnalyticsAggregate> {
-  if (!slug) return empty();
-
+): ArticleAnalyticsAggregate {
   const base = empty();
   const cutoff = days === 'all' ? 0 : Date.now() - days * 86_400_000;
-
-  // One bounded query protects the admin dashboard from unbounded historical reads.
-  const snap = await getDocs(query(collection(db, 'articles', slug, 'analytics'), limit(1500)));
-  const rows = snap.docs
-    .map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }))
-    .filter((row) => dateValue(row.lastSeenAt || row.createdAt || row.openedAt) >= cutoff);
-
-  const sessions = rows.filter((row) => row.type === 'session');
-  const events = rows.filter((row) => row.type !== 'session');
+  const inRange = rows.filter((row) => dateValue(row.lastSeenAt || row.createdAt || row.openedAt) >= cutoff);
+  const sessions = inRange.filter((row) => row.type === 'session');
+  const events = inRange.filter((row) => row.type !== 'session');
 
   base.hasSessionData = sessions.length > 0;
   base.views = Math.max(fallbackViews, sessions.length);
@@ -232,7 +224,6 @@ export async function getArticleAnalyticsAggregate(
     uniqueIds.add(key);
     sessionCounts.set(key, (sessionCounts.get(key) || 0) + 1);
   });
-
   base.uniqueReaders = uniqueIds.size;
   base.returnReaders = [...sessionCounts.values()].filter((count) => count > 1).length;
 
@@ -240,11 +231,9 @@ export async function getArticleAnalyticsAggregate(
     const totalDuration = sessions.reduce((sum, session) => sum + cleanDuration(session.durationMs), 0);
     const totalScroll = sessions.reduce((sum, session) => sum + cleanPercent(session.maxScrollPercent), 0);
     const completed = sessions.filter((session) => Boolean(session.completed) || cleanPercent(session.maxScrollPercent) >= 100).length;
-
     base.averageReadingTimeMs = Math.round(totalDuration / sessions.length);
     base.scrollDepth = Math.round(totalScroll / sessions.length);
     base.completionRate = Math.round((completed / sessions.length) * 100);
-
     base.funnel = {
       opened: sessions.length,
       p25: sessions.filter((session) => cleanPercent(session.maxScrollPercent) >= 25).length,
@@ -254,12 +243,33 @@ export async function getArticleAnalyticsAggregate(
     };
   }
 
+  // Shares are append-only events. Bookmark/reaction metrics are stateful: use the
+  // latest event from each reader rather than counting every toggle as a new active state.
   base.shares = events.filter((event) => event.type === 'share').length;
-  base.bookmarks = events.filter((event) => event.type === 'bookmark' && event.active !== false).length;
-  base.reactions = events.filter((event) => event.type === 'reaction' && event.active !== false).length;
-
-  base.lastUpdatedAt = rows.reduce((latest, row) => Math.max(latest, dateValue(row.lastSeenAt || row.createdAt || row.openedAt)), 0);
+  const latestState = new Map<string, Record<string, unknown>>();
+  events
+    .filter((event) => event.type === 'bookmark' || event.type === 'reaction')
+    .sort((a, b) => dateValue(a.createdAt) - dateValue(b.createdAt))
+    .forEach((event) => {
+      const identity = readerKey(event);
+      if (identity) latestState.set(`${event.type}:${identity}`, event);
+    });
+  base.bookmarks = [...latestState.values()].filter((event) => event.type === 'bookmark' && event.active !== false).length;
+  base.reactions = [...latestState.values()].filter((event) => event.type === 'reaction' && event.active !== false).length;
+  base.lastUpdatedAt = inRange.reduce((latest, row) => Math.max(latest, dateValue(row.lastSeenAt || row.createdAt || row.openedAt)), 0);
   return base;
+}
+
+export async function getArticleAnalyticsAggregate(
+  slug: string,
+  fallbackViews = 0,
+  days: number | 'all' = 'all',
+): Promise<ArticleAnalyticsAggregate> {
+  if (!slug) return empty();
+  // Read the authoritative Firestore analytics collection. No synthetic rows are generated.
+  const snap = await getDocs(query(collection(db, 'articles', slug, 'analytics')));
+  const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
+  return aggregateAnalyticsRows(rows, fallbackViews, days);
 }
 
 export function subscribeArticleAnalytics(
@@ -273,14 +283,10 @@ export function subscribeArticleAnalytics(
   }
 
   const unsubscribe = onSnapshot(
-    query(collection(db, 'articles', slug, 'analytics'), limit(1500)),
-    () => {
-      void getArticleAnalyticsAggregate(slug, 0, days)
-        .then(cb)
-        .catch((error) => {
-          console.error('Article analytics aggregation failed:', error);
-          cb(empty());
-        });
+    query(collection(db, 'articles', slug, 'analytics')),
+    (snap) => {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
+      cb(aggregateAnalyticsRows(rows, 0, days));
     },
     (error) => {
       console.error('Article analytics subscription failed:', error);

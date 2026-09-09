@@ -267,16 +267,17 @@ export async function getAllCommunityUsers(): Promise<CommunityUser[]> {
 export async function getAllCommentsForSearch(): Promise<Array<{ id: string; content: string; authorId: string; authorUsername: string; authorName: string; postId?: string; articleSlug?: string; createdAt: string }>> {
   try {
     const snap = await getDocs(collectionGroup(db, 'comments'));
-    return snap.docs.map(d => {
+    return snap.docs.flatMap(d => {
       const data: any = d.data();
+      if (data.isHidden === true || data.isDeleted === true) return [];
       const path = d.ref.path.split('/');
-      return {
+      return [{
         id: d.id, content: data.content || '', authorId: data.authorId || '',
         authorUsername: data.authorUsername || '', authorName: data.authorName || '',
         postId: path[0] === 'posts' ? path[1] : undefined,
         articleSlug: path[0] === 'articles' ? path[1] : undefined,
         createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString())
-      };
+      }];
     });
   } catch (error) {
     console.warn('Failed to load comments for search:', error);
@@ -1264,6 +1265,28 @@ export async function getUserSaves(userId: string): Promise<UserSavedItem[]> {
     console.warn("Could not fetch user saves from Firestore:", error);
     return [];
   }
+}
+
+/** Realtime per-account save subscription. Cloud state is authoritative for signed-in users. */
+export function subscribeUserSaves(userId: string, callback: (items: UserSavedItem[]) => void, onError?: (error: unknown) => void): () => void {
+  if (!userId) { callback([]); return () => {}; }
+  return onSnapshot(collection(db, 'users', userId, 'saves'), snap => {
+    callback(snap.docs.map(d => {
+      const data = d.data();
+      return {
+        id: d.id,
+        itemId: String(data.itemId || ''),
+        itemType: data.itemType,
+        title: String(data.title || ''),
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || ''),
+        collectionId: data.collectionId || undefined,
+        collectionName: data.collectionName || undefined,
+      } as UserSavedItem;
+    }));
+  }, error => {
+    console.warn(`Realtime saves subscription failed for ${userId}:`, error);
+    onError?.(error);
+  });
 }
 
 export interface ReadingProgress {

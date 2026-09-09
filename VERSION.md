@@ -1,40 +1,12 @@
-# OFFSCRPT V72.1
+# OFFSCRPT V72.2
 
-**Release:** OFFSCRPT V72.1 — Deployment + Runtime Stability Patch
+Production integrity hardening release.
 
-## Base
-- OFFSCRPT V71 article history
-- OFFSCRPT V71.5 Batch 2 feature set
+- Cloud-only article data in production; no silent local archive fallback.
+- Creator analytics use live Firestore listeners.
+- Stateful bookmark/reaction metrics are aggregated from latest reader state.
+- Saved-state UI rolls back when Firestore synchronization fails.
+- Site CMS UI rolls back when Firestore persistence fails.
+- User follower counter writes are tied to the corresponding follower relationship.
 
-## Batch 2 preserved
-- Creator analytics
-- Behavior-driven recommendations
-- Upgraded nested comments
-- Universal share/deep links
-- Granular moderator permissions
-- User reporting
-- Presence
-- Admin system health
-
-## V72 fixes
-- Connected article analytics sessions to ArticleView lifecycle
-- Added active reading duration and scroll/funnel milestones
-- Connected shares, bookmarks, reactions, and completions to analytics events
-- Reworked analytics aggregation to distinguish session/event records
-- Fixed analytics Firestore timestamp rule mismatch
-- Added runtime error reporting with local queue and Firestore persistence
-- Added cloud sync-state infrastructure
-- Added real health probes for Auth, Firestore, Storage initialization, PWA and Presence
-- Added active-tree syntax/import/export/identifier/Firebase/rules/schema/runtime audits
-- Preserved granular moderator permission rules
-- Removed empty silent catches in the active runtime tree
-- Added explicit loading/error handling around analytics loading
-- Version metadata standardized to 0.72.0
-
-## Active entrypoint
-`src/index.html` → `src/main.tsx` → `src/App.tsx`
-
-Vite is configured with `src/` as the active project root. V72 verification scripts scan this active source tree.
-
-## V72.1 deployment fix
-- Fixed Vite/Vercel output-directory mismatch: Vite uses `src/` as the source root and now emits the production bundle to the repository-root `dist/` directory expected by Vercel.
+Release: 72.2

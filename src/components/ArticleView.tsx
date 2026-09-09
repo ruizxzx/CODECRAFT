@@ -228,7 +228,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           uid: post.authorId,
           username: profile?.username || post.authorUsername || fallback.username,
           name: profile?.displayName || post.authorName || fallback.name,
-          avatar: profile?.photoUrl || post.authorAvatar || fallback.avatar,
+          avatar: profile?.photoURL || post.authorAvatar || fallback.avatar,
           bio: profile?.bio || fallback.bio,
           isVerified: !!(profile?.isVerified ?? post.isVerified ?? fallback.isVerified),
           verificationColor: profile?.verificationColor || post.verificationColor || fallback.verificationColor

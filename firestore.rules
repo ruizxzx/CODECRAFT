@@ -122,8 +122,15 @@ service cloud.firestore {
         || (isAdmin() && existing().username == 'krishsarkar' && existing().get('isAuthor', false) == true && incoming().uid == existing().uid && incoming().username == existing().username && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'coverImageUrl', 'websiteUrl', 'location', 'socialX', 'socialGithub', 'socialTelegram', 'socialInstagram', 'bio', 'themeColor', 'creatorPage', 'role', 'platformRole', 'isAuthor', 'isVerified', 'verificationColor', 'followersCount', 'followingCount', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isBlocked', 'updatedAt']))
         || (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['isVerified', 'verificationColor', 'updatedAt'])) || (isPlatformModerator() && incoming().diff(existing()).affectedKeys().hasOnly(['content','updatedAt']))
-        || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt']))
-        || (isSignedIn() && request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt']))
+        || (isSignedIn()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['followersCount', 'updatedAt'])
+            && (incoming().followersCount == existing().get('followersCount', 0) + 1 || incoming().followersCount == existing().get('followersCount', 0) - 1)
+            && ((incoming().followersCount == existing().get('followersCount', 0) + 1 && existsAfter(/databases/$(database)/documents/users/$(userId)/followers/$(request.auth.uid)))
+              || (incoming().followersCount == existing().get('followersCount', 0) - 1 && !existsAfter(/databases/$(database)/documents/users/$(userId)/followers/$(request.auth.uid)))))
+        || (isSignedIn()
+            && request.auth.uid == userId
+            && incoming().diff(existing()).affectedKeys().hasOnly(['followingCount', 'updatedAt'])
+            && (incoming().followingCount == existing().get('followingCount', 0) + 1 || incoming().followingCount == existing().get('followingCount', 0) - 1))
         || (isAdmin() && isValidUser(incoming()));
       allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
 
