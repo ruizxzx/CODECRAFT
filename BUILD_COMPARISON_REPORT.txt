@@ -1,4 +1,4 @@
-OFFSCRPT V72 — BUILD COMPARISON / CONSOLIDATION REPORT
+OFFSCRPT V72.1 — BUILD COMPARISON / CONSOLIDATION REPORT
 ======================================================
 
 SOURCE BUILDS
@@ -91,3 +91,11 @@ The release therefore does not claim a successful local Vite production build.
 RELEASE
 -------
 OFFSCRPT V72 — cumulative V71 + Batch 2 + Stability Infrastructure + analytics/rules fixes.
+
+
+DEPLOYMENT OUTPUT FIX
+----------------------
+Vite uses `src/` as its source root. Its default relative `dist` output therefore
+landed at `src/dist`, while Vercel was configured to collect repository-root
+`dist`. V72.1 explicitly sets Vite's output directory to the repository-root
+`dist/` and keeps Vercel's `outputDirectory` at `dist`, eliminating the mismatch.

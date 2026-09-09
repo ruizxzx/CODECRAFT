@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.72.0",
+  "version": "0.72.1",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -19,7 +19,8 @@
     "check:schema": "node scripts/check-schema.mjs",
     "check:runtime": "node scripts/check-runtime-patterns.mjs",
     "health:deployment": "node scripts/deployment-health.mjs",
-    "verify": "npm run typecheck && npm run build && npm run check:syntax && npm run check:imports && npm run check:exports && npm run check:identifiers && npm run check:firebase && npm run check:rules && npm run check:schema && npm run check:runtime"
+    "verify": "npm run check:deployment-config && npm run typecheck && npm run build && npm run check:syntax && npm run check:imports && npm run check:exports && npm run check:identifiers && npm run check:firebase && npm run check:rules && npm run check:schema && npm run check:runtime",
+    "check:deployment-config": "node scripts/check-deployment-config.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

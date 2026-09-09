@@ -1,6 +1,6 @@
-# OFFSCRPT V72
+# OFFSCRPT V72.1
 
-**Release:** OFFSCRPT V72 — Cumulative Production Stability Release
+**Release:** OFFSCRPT V72.1 — Deployment + Runtime Stability Patch
 
 ## Base
 - OFFSCRPT V71 article history
@@ -35,3 +35,6 @@
 `src/index.html` → `src/main.tsx` → `src/App.tsx`
 
 Vite is configured with `src/` as the active project root. V72 verification scripts scan this active source tree.
+
+## V72.1 deployment fix
+- Fixed Vite/Vercel output-directory mismatch: Vite uses `src/` as the source root and now emits the production bundle to the repository-root `dist/` directory expected by Vercel.

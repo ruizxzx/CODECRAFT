@@ -1,4 +1,4 @@
-OFFSCRPT V72 BUILD VALIDATION STATUS
+OFFSCRPT V72.1 BUILD VALIDATION STATUS
 ====================================
 
 SOURCE VALIDATION
@@ -27,3 +27,10 @@ RUNTIME / DATA VALIDATION
 - Aggregation errors are surfaced instead of silently becoming zero metrics.
 - Runtime errors are queued for signed-out clients and persisted after authentication.
 - Sync failures dispatch a health event for the admin observability layer.
+
+
+VERCEL DEPLOYMENT CONFIGURATION
+- Vite source root remains `src/`.
+- Production `outDir` is explicitly set to repository-root `dist/`.
+- `vercel.json.outputDirectory` is `dist`, now aligned with the generated bundle location.
+- This removes the deployment failure: `No Output Directory named "dist" found after the Build completed.`
