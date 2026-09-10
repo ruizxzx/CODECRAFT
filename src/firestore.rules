@@ -413,10 +413,10 @@ service cloud.firestore {
           && incoming().get('poll', {}).get('options',[]) == existing().get('poll', {}).get('options',[])
           && getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/pollVotes/$(request.auth.uid)).data.uid == request.auth.uid
           && getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/pollVotes/$(request.auth.uid)).data.optionIndex is number;
-        allow update: if !isSignedIn()
-          && incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
+        allow update: if incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
           && incoming().get('viewsCount', 0) == existing().get('viewsCount', 0) + 1
-          && incoming().updatedAt is timestamp;
+          && incoming().updatedAt is timestamp
+          && (!isSignedIn() || userMayWrite(request.auth.uid));
         allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || isCommunityModerator(communityId) || request.auth.uid == existing().authorId);
         match /views/{viewId} {
           allow read: if isAdmin();
@@ -606,9 +606,15 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Required for collectionGroup('posts') used by the all-community feed.
-    // Community post documents are public already; this enables the collection-group query.
+    // Collection-group reads used by public feeds and identity synchronization.
+    // These collections already expose their parent documents publicly in their canonical paths.
     match /{path=**}/posts/{postId} {
+      allow read: if true;
+    }
+    match /{path=**}/answers/{answerId} {
+      allow read: if true;
+    }
+    match /{path=**}/following/{followingId} {
       allow read: if true;
     }
 
@@ -797,6 +803,15 @@ service cloud.firestore {
         && (data.get('editReviewedBy', null) == null || (data.get('editReviewedBy', '') is string && data.get('editReviewedBy', '').size() <= 128))
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
+    }
+
+    match /posts/{postId}/views/{viewId} {
+      allow read: if isAdmin();
+      allow create: if incoming().postId == postId
+        && incoming().day is string
+        && incoming().createdAt is timestamp
+        && ((isSignedIn() && incoming().get('userId','') == request.auth.uid) || (!isSignedIn() && incoming().get('visitorId','') is string));
+      allow update, delete: if isAdmin();
     }
 
     match /posts/{postId} {

@@ -1,4 +1,4 @@
-import { generateOpenRouter, openRouterKey, openRouterModel } from './openrouter';
+import { generateOpenRouter, openRouterKey, openRouterModel } from './openrouter.js';
 
 const FIREBASE_API_KEY = process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY || 'AIzaSyC1_eau-5rsMTreEzCNMtns2FGcSa448ug';
 const FIREBASE_LOOKUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_API_KEY)}`;
@@ -43,20 +43,34 @@ async function verify(token:string){
 }
 function cacheKey(task:string,input:any,options:any){const raw=JSON.stringify({task,id:input?.contentId||'',title:input?.title||'',content:String(input?.content||'').slice(0,12000),revision:input?.sourceRevision||'',options});let h=2166136261;for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619);}return `${task}:${(h>>>0).toString(36)}`;}
 function consume(uid:string){ const day=new Date().toISOString().slice(0,10); const current=buckets.get(uid); const next=current?.day===day?current:{day,count:0}; if(next.count>=DAILY_LIMIT)return false; next.count+=1; buckets.set(uid,next); return true; }
+function parseAIJson(raw:string){ const clean=String(raw||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,''); try{return JSON.parse(clean);}catch{} const first=clean.indexOf('{'); const last=clean.lastIndexOf('}'); if(first>=0&&last>first)return JSON.parse(clean.slice(first,last+1)); throw Object.assign(new Error('AI_INVALID_JSON'),{status:502}); }
 
 export default async function handler(req:any,res:any){
  if(req.method!=='POST')return res.status(405).json({error:'Method not allowed.'});
  const key=openRouterKey(); if(!key)return res.status(503).json({error:'OFFSCRPT AI is not configured. Add OPENROUTER_API_KEY to Vercel.',code:'AI_NOT_CONFIGURED'});
  try{
-   const authorization=String(req.headers.authorization||''); const token=authorization.startsWith('Bearer ')?authorization.slice(7).trim():''; if(!token)return res.status(401).json({error:'Authentication required.',code:'AI_AUTH'});
-   const uid=await verify(token); if(!consume(uid))return res.status(429).json({error:'Daily AI limit reached. Try again tomorrow.',code:'AI_DAILY_LIMIT'});
-   const body=req.body||{}; const task=String(body.task||'summary'); const input=body.input||{}; const options=body.options||{}; const k=cacheKey(task,input,options); const existing=cache.get(k); if(existing&&existing.expiresAt>Date.now())return res.status(200).json(existing.value);
+   const authorization=String(req.headers.authorization||'');
+   const token=authorization.startsWith('Bearer ')?authorization.slice(7).trim():'';
+   if(!token)return res.status(401).json({error:'Authentication required.',code:'AI_AUTH'});
+   const uid=await verify(token);
+   const body=req.body||{};
+   const task=String(body.task||'summary');
+   const input=body.input||{};
+   const options=body.options||{};
+   const k=cacheKey(task,input,options);
+   const existing=cache.get(k);
+   if(existing&&existing.expiresAt>Date.now())return res.status(200).json(existing.value);
+   if(!consume(uid))return res.status(429).json({error:'Daily AI limit reached. Try again tomorrow.',code:'AI_DAILY_LIMIT'});
    const result=await generateOpenRouter({task,prompt:promptFor(task,input,options)});
-   let parsed:any; try{parsed=JSON.parse(result.text.replace(/^```json\s*/i,'').replace(/\s*```$/,''));}catch{throw Object.assign(new Error('AI_INVALID_JSON'),{status:502});}
-   const output=normalize(task,parsed,result.model); cache.set(k,{expiresAt:Date.now()+CACHE_TTL,value:output});
+   let parsed:any;
+   try{parsed=parseAIJson(result.text);}catch{throw Object.assign(new Error('AI_INVALID_JSON'),{status:502});}
+   const output=normalize(task,parsed,result.model);
+   cache.set(k,{expiresAt:Date.now()+CACHE_TTL,value:output});
    return res.status(200).json(output);
  }catch(error:any){
-   console.error('ai gateway failed',error); const status=Number(error?.status||0); const msg=String(error?.message||'');
+   console.error('ai gateway failed',error);
+   const status=Number(error?.status||0);
+   const msg=String(error?.message||'');
    if(msg==='INVALID_FIREBASE_TOKEN')return res.status(401).json({error:'Authentication expired. Please sign in again.',code:'AI_AUTH'});
    if(msg==='ACCOUNT_DISABLED')return res.status(403).json({error:'Account disabled.',code:'AI_AUTH'});
    if(msg==='OPENROUTER_NOT_CONFIGURED')return res.status(503).json({error:'OFFSCRPT AI is not configured. Add OPENROUTER_API_KEY to Vercel.',code:'AI_NOT_CONFIGURED'});

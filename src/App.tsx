@@ -380,7 +380,7 @@ export default function App() {
 
   // Keep the browser favicon synchronized with the cloud-managed site logo.
   useEffect(() => {
-    const fallbackFavicon = 'https://i.postimg.cc/kMf3D3cS/Screenshot-2026-09-07-142924.png';
+    const fallbackFavicon = '/offscrpt-icon.svg';
     const logoUrl = siteConfig.logoImageUrl?.trim() || fallbackFavicon;
     const brandName = `${siteConfig.logoPart1 || ''}${siteConfig.logoPart2 || ''}`.trim() || 'OFFSCRPT';
 

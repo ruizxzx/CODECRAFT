@@ -1,4 +1,4 @@
-import { generateOpenRouter, openRouterKey } from './openrouter';
+import { generateOpenRouter, openRouterKey } from './openrouter.js';
 
 const FIREBASE_API_KEY = process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY || 'AIzaSyC1_eau-5rsMTreEzCNMtns2FGcSa448ug';
 const FIREBASE_LOOKUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_API_KEY)}`;
