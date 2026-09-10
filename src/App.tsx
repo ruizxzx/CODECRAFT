@@ -87,9 +87,15 @@ function ToastHost(){
   React.useEffect(()=>{
     const onToast=(event:Event)=>{
       const detail=(event as CustomEvent).detail||{};
-      const id=Date.now()+Math.random();
-      const item={id,message:String(detail.message||''),kind:(detail.kind||'info') as 'success'|'error'|'info',duration:Number(detail.duration)||3200};
-      setToasts(prev=>[...prev.slice(-3),item]);
+      const message=String(detail.message||'');
+      const kind=(detail.kind||'info') as 'success'|'error'|'info';
+      const now=Date.now();
+      const id=now+Math.random();
+      const item={id,message,kind,duration:Number(detail.duration)||3200};
+      setToasts(prev=>{
+        const duplicate=prev.some(t=>t.message===message && t.kind===kind);
+        return duplicate?prev:[...prev.slice(-3),item];
+      });
       window.setTimeout(()=>setToasts(prev=>prev.filter(t=>t.id!==id)),item.duration);
     };
     window.addEventListener('offscrpt:toast',onToast);

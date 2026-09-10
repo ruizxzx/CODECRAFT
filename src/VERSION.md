@@ -1,1 +1,3 @@
-V79.0.0 — AI READING & LEARNING
+# OFFSCRPT VERSION
+
+**V79.1.0 — Gemini AI Gateway Reliability Fix**

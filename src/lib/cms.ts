@@ -646,44 +646,37 @@ function getStableVisitorId(): string {
 }
 export async function recordArticleView(slug:string, viewerId?:string):Promise<void>{
   if(!slug) return;
-  const authenticated = Boolean(viewerId);
   const identity = viewerId || getStableVisitorId();
   const day = new Date().toISOString().slice(0,10);
-  const safeSlug = encodeURIComponent(slug).slice(0,180);
-  const safeIdentity = encodeURIComponent(identity).slice(0,220);
-  const receiptId = `${safeSlug}_${safeIdentity}_${day}`;
-  const receiptRef = doc(db, 'articleViews', receiptId);
-  const articleRef = doc(db, 'articles', slug);
-
-  // Anonymous reads are deduplicated by a stable browser identifier + UTC day.
-  // The local marker prevents unnecessary writes; authenticated readers are additionally
-  // protected by the cloud receipt transaction below.
+  const articleRef = doc(db,'articles',slug);
   const localKey = `offscrpt:view:${slug}:${day}`;
-  if (!authenticated) {
-    try { if (localStorage.getItem(localKey) === '1') return; } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
-    try {
-      await setDoc(receiptRef, { slug, visitorId: identity, day, createdAt: serverTimestamp() }, { merge: false });
-      await runTransaction(db, async (tx) => {
-        const articleSnap = await tx.get(articleRef);
-        if (!articleSnap.exists()) return;
-        const current = Number(articleSnap.data()?.viewsCount || 0);
-        tx.update(articleRef, { viewsCount: current + 1, updatedAt: serverTimestamp() });
+  try { if(localStorage.getItem(localKey)==='1') return; } catch { /* local persistence is optional */ }
+
+  if(viewerId){
+    const receiptRef = doc(db,'users',viewerId,'articleViewReceipts',`${encodeURIComponent(slug).slice(0,180)}_${day}`);
+    try{
+      await runTransaction(db, async (tx)=>{
+        const receiptSnap=await tx.get(receiptRef);
+        if(receiptSnap.exists()) return;
+        const articleSnap=await tx.get(articleRef);
+        if(!articleSnap.exists()) return;
+        const current=Number(articleSnap.data()?.viewsCount||0);
+        tx.set(receiptRef,{slug,day,userId:viewerId,createdAt:serverTimestamp()},{merge:true});
+        tx.update(articleRef,{viewsCount:current+1,updatedAt:serverTimestamp()});
       });
-      try { localStorage.setItem(localKey, '1'); } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
-    } catch(e){ console.warn('Anonymous article view tracking failed:', e); }
+      try { localStorage.setItem(localKey,'1'); } catch { /* optional */ }
+    }catch(e){ console.warn('Article view tracking failed:',e); }
     return;
   }
 
-  try {
-    await runTransaction(db, async (tx) => {
-      const receiptSnap = await tx.get(receiptRef);
-      const articleSnap = await tx.get(articleRef);
-      if (receiptSnap.exists() || !articleSnap.exists()) return;
-      const current = Number(articleSnap.data()?.viewsCount || 0);
-      tx.set(receiptRef, { slug, userId: viewerId, day, createdAt: serverTimestamp() });
-      tx.update(articleRef, { viewsCount: current + 1, updatedAt: serverTimestamp() });
-    });
-  } catch(e){ console.warn('Article view tracking failed:', e); }
+  const visitorId = identity;
+  const receiptId = `${encodeURIComponent(slug).slice(0,180)}_${encodeURIComponent(visitorId).slice(0,220)}_${day}`;
+  const receiptRef = doc(db,'articleViews',receiptId);
+  try{
+    await setDoc(receiptRef,{slug,visitorId,day,createdAt:serverTimestamp()},{merge:false});
+    await runTransaction(db,async(tx)=>{const articleSnap=await tx.get(articleRef);if(!articleSnap.exists())return;const current=Number(articleSnap.data()?.viewsCount||0);tx.update(articleRef,{viewsCount:current+1,updatedAt:serverTimestamp()});});
+    try{localStorage.setItem(localKey,'1');}catch{/* optional */}
+  }catch(e){ console.warn('Anonymous article view tracking failed:',e); }
 }
 
 export async function getArticleViewCount(slug:string):Promise<number>{
