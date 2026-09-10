@@ -1,9 +1,7 @@
 import fs from 'node:fs';
-const files=['api/ai/gateway.ts','api/ai/discussion-summary.ts'];
-for (const file of files) {
-  const s=fs.readFileSync(file,'utf8');
-  for (const required of ['GEMINI_API_KEY','x-goog-api-key','generativelanguage.googleapis.com','generateContent','authorization']) if(!s.includes(required)) throw new Error(`${file}: missing ${required}`);
-}
 const gateway=fs.readFileSync('api/ai/gateway.ts','utf8');
-for (const banned of ["new GoogleGenAI", "?key=${encodeURIComponent(key)}"]) if(gateway.includes(banned)) throw new Error(`gateway still relies on legacy transport: ${banned}`);
-console.log('AI GATEWAY CHECK OK — AQ/auth-key compatible REST transport, token verification, model discovery and error mapping present.');
+const provider=fs.readFileSync('api/ai/openrouter.ts','utf8');
+const discussion=fs.readFileSync('api/ai/discussion-summary.ts','utf8');
+for (const [file,s,required] of [['api/ai/gateway.ts',gateway,['OPENROUTER_API_KEY','authorization','generateOpenRouter']],['api/ai/openrouter.ts',provider,['chat/completions','Bearer','response_format']],['api/ai/discussion-summary.ts',discussion,['OPENROUTER_API_KEY','generateOpenRouter','authorization']]]) { for(const x of required) if(!s.includes(x)) throw new Error(`${file}: missing ${x}`); }
+for (const banned of ['generativelanguage.googleapis.com','x-goog-api-key','@google/genai']) { if([gateway,provider,discussion].some(s=>s.includes(banned))) throw new Error(`OpenRouter migration incomplete: ${banned}`); }
+console.log('AI GATEWAY CHECK OK — OpenRouter server-side API, Firebase auth, structured output and retry/fallback routing present.');

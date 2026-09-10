@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.79.1",
+  "version": "0.79.2",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -33,7 +33,6 @@
     "check:ai": "node scripts/check-ai-gateway.mjs"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
     "@sanity/client": "^8.5.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",

@@ -32,3 +32,5 @@ User-facing V79 surfaces:
 - Community post AI assistant
 - Series AI assistant
 - /#learn AI learning dashboard
+
+V79.2.0 OpenRouter migration: implemented server-side provider gateway, structured JSON, retries, fallback routing, Firebase auth, daily limits, caching.

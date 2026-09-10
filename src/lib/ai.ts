@@ -29,7 +29,7 @@ export async function requestAI<T=any>(task:AITask,input:AIContentInput,options:
     response=await fetch('/api/ai/gateway',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body});
     data=await response.json().catch(()=>({}));
     if(response.ok) break;
-    if(data?.code!=='GEMINI_BUSY' || attempt===1) throw new Error(String(data?.error||'AI request failed.'));
+    if(!['AI_BUSY','AI_PROVIDER_RATE_LIMIT'].includes(data?.code) || attempt===1) throw new Error(String(data?.error||'AI request failed.'));
     const retryAfter=Number(response.headers.get('retry-after')||3);
     await new Promise<void>(resolve=>setTimeout(resolve,Math.min(5000,Math.max(1000,retryAfter*1000))));
   }
