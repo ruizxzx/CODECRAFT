@@ -510,6 +510,19 @@ service cloud.firestore {
       allow update, delete: if isAdmin() || hasModeratorPermission('moderatePosts') || (isSignedIn() && existing().actorId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['actorUsername','actorName','actorAvatar','updatedAt']));
     }
 
+    match /users/{userId}/feedPreferences/{prefId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create, update: if isSignedIn() && request.auth.uid == userId
+        && prefId == "default"
+        && incoming().get('mode', 'algorithmic') in ['algorithmic', 'chronological']
+        && incoming().get('hiddenContentIds', []).size() <= 100
+        && incoming().get('mutedCreators', []).size() <= 100
+        && incoming().get('mutedTopics', []).size() <= 100
+        && incoming().get('mutedCommunities', []).size() <= 100
+        && incoming().updatedAt == request.time;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
     match /users/{userId}/mutes/{targetUid} {
       allow read: if isSignedIn() && request.auth.uid == userId;
       allow create: if userMayFollow(request.auth.uid) && request.auth.uid == userId;

@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -11,7 +12,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { optimizedGetDocs, isFirestoreQuotaError } from './firestoreOptimization';
+import { optimizedGetDoc, optimizedGetDocs, isFirestoreQuotaError } from './firestoreOptimization';
 import type { Article, Series } from '../types';
 
 export type RecommendationSection = { title: string; reason?: string; articles: Article[] };
@@ -294,6 +295,64 @@ export function buildRecommendationSections(all: Article[], signals: Recommendat
     { title: 'CONTINUE FOLLOWED SERIES', articles: followedSeriesArticles },
     { title: 'TRENDING FOR YOU', articles: trending.filter(a => [...articleTokens(a)].some(t => followedTopics.has(t)) || recommended.some(r=>r.slug===a.slug)).slice(0,6) },
   ].filter(s => s.articles.length);
+}
+
+
+export interface FeedPreferences {
+  mode?: 'algorithmic' | 'chronological';
+  hiddenContentIds?: string[];
+  mutedCreators?: string[];
+  mutedTopics?: string[];
+  mutedCommunities?: string[];
+  updatedAt?: any;
+}
+
+const FEED_PREF_MAX = 100;
+
+export async function getFeedPreferences(uid: string): Promise<FeedPreferences> {
+  if (!uid) return {};
+  try {
+    const snap = await optimizedGetDoc(
+      doc(db, 'users', uid, 'feedPreferences', 'default'),
+      { ttlMs: 120_000, allowStaleOnQuota: true },
+    );
+    return snap.exists() ? (snap.data() as FeedPreferences) : {};
+  } catch {
+    return {};
+  }
+}
+
+export async function updateFeedPreferences(uid: string, patch: Partial<FeedPreferences>): Promise<void> {
+  if (!uid || auth.currentUser?.uid !== uid) throw new Error('Authentication required.');
+  const clean = { ...patch } as FeedPreferences;
+  if (clean.hiddenContentIds) clean.hiddenContentIds = unique(clean.hiddenContentIds.map(String).filter(Boolean)).slice(-FEED_PREF_MAX);
+  if (clean.mutedCreators) clean.mutedCreators = unique(clean.mutedCreators.map(norm).filter(Boolean)).slice(-FEED_PREF_MAX);
+  if (clean.mutedTopics) clean.mutedTopics = unique(clean.mutedTopics.map(norm).filter(Boolean)).slice(-FEED_PREF_MAX);
+  if (clean.mutedCommunities) clean.mutedCommunities = unique(clean.mutedCommunities.map(String).filter(Boolean)).slice(-FEED_PREF_MAX);
+  await setDoc(doc(db, 'users', uid, 'feedPreferences', 'default'), { ...clean, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+export function applyFeedPreferences(items: Article[], prefs: FeedPreferences): Article[] {
+  const hidden = new Set((prefs.hiddenContentIds || []).map(String));
+  const mutedCreators = new Set((prefs.mutedCreators || []).map(norm));
+  const mutedTopics = new Set((prefs.mutedTopics || []).map(norm));
+  const mutedCommunities = new Set((prefs.mutedCommunities || []).map(norm));
+  return items.filter(a => {
+    if (hidden.has(a.slug) || hidden.has(a.id)) return false;
+    const creatorKeys = [norm(a.author?.uid), norm(a.author?.username)].filter(Boolean);
+    if (creatorKeys.some(k => mutedCreators.has(k))) return false;
+    const topics = [...articleTokens(a)];
+    if (topics.some(t => mutedTopics.has(t))) return false;
+    const communityId = String((a as any).sourceCommunityId || (a as any).communityId || '').trim().toLowerCase();
+    if (communityId && mutedCommunities.has(communityId)) return false;
+    return true;
+  });
+}
+
+export function buildChronologicalArticles(all: Article[], maxItems = 12, prefs: FeedPreferences = {}): Article[] {
+  return applyFeedPreferences(all.filter(published), prefs)
+    .sort((a, b) => asDate(b.publishedAt) - asDate(a.publishedAt))
+    .slice(0, maxItems);
 }
 
 export async function saveColdStartTopics(topics: string[]): Promise<void> {

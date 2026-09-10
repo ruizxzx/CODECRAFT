@@ -1,3 +1,3 @@
-# OFFSCRPT V75.13
+# OFFSCRPT V76
 
-Site-wide media completion: Social Admin community branding uploads, Creator Page custom link logos, and carousel duplicate upload cleanup.
+Social Feed + Discovery Engine: unified adaptive home feed, feed modes, cloud-synced recommendation controls, improved recommendation scoring, cold-start personalization, dynamic discovery sections, and bounded discussion/community discovery.

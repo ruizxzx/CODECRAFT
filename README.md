@@ -320,3 +320,6 @@ V75.12 hardens Firestore usage without changing Firestore into a different data 
 - Social Admin community icon/banner uploads with crop/preview and cloud save.
 - Creator Page custom link logo/image uploads with R2 + public rendering.
 - Carousel new-slide image upload uses the crop/preview flow; duplicate upload control removed.
+
+## V76 — Social Feed + Discovery Engine
+The home experience now includes a unified discovery feed, algorithmic/chronological modes, cloud-synced recommendation controls, dynamic personalized sections, and bounded on-demand discovery for discussions and communities. Existing recommendation signals, Firestore quota protection, Firebase Auth, R2 media, and prior features are preserved.
