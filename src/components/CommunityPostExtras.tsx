@@ -5,12 +5,12 @@ import { Hash } from 'lucide-react';
 import { PostMediaPreview } from './PostMediaPreview';
 import { PollBlock } from './PollBlock';
 
-interface Props { post: CommunityPost; onHashtag?: (tag: string) => void; compact?: boolean; showMedia?: boolean; showPoll?: boolean; }
+interface Props { post: CommunityPost; onHashtag?: (tag: string) => void; compact?: boolean; showMedia?: boolean; showPoll?: boolean; showMediaCaption?: boolean; showAllMedia?: boolean; }
 
-export const CommunityPostExtras: React.FC<Props> = ({ post, onHashtag, compact = false, showMedia = true, showPoll = true }) => {
+export const CommunityPostExtras: React.FC<Props> = ({ post, onHashtag, compact = false, showMedia = true, showPoll = true, showMediaCaption = false, showAllMedia = false }) => {
   const tags = (post.hashtags || extractHashtags(`${post.title} ${post.content}`)).slice(0, 12);
   return <>
-    {showMedia && <PostMediaPreview post={post} />}
+    {showMedia && <><PostMediaPreview post={post} showAll={showAllMedia} />{showMediaCaption && post.coverImageCaption && <div className="font-mono text-[10px] text-neutral-500 mt-2">{post.coverImageCaption}</div>}</>}
     {showPoll && post.poll && <PollBlock poll={post.poll} postId={post.id} communityId={(post as any).communityId} compact={compact} />}
     {tags.length > 0 && (
       <div className="flex flex-wrap gap-1.5 mt-3">

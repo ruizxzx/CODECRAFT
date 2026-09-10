@@ -47,7 +47,7 @@ import { QuestionView } from './components/QuestionView';
 import { SiteAnnouncementPopup } from './components/SiteAnnouncementPopup';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
-import { getCommunityProfile, ensureCommunityProfileForUser, subscribeUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor, subscribeCommunityProfile } from './lib/community';
+import { getCommunityProfile, getProfileByUsername, ensureCommunityProfileForUser, subscribeUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor, subscribeCommunityProfile } from './lib/community';
 import { subscribeReadingQueue, toggleReadingQueue, subscribeThemePreference } from './lib/account';
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
@@ -229,23 +229,32 @@ export default function App() {
             try {
               const syncKey = `offscrpt:admin-author-sync:${user.uid}`;
               let recentlySynced = false;
-              try { recentlySynced = Number(sessionStorage.getItem(syncKey) || 0) > Date.now() - 1_800_000; } catch {}
+              try { recentlySynced = Number(sessionStorage.getItem(syncKey) || 0) > Date.now() - 1_800_000; } catch (error) { console.warn('Admin sync session marker unavailable:', error); }
               if (!recentlySynced) {
+                // The canonical publication author is the reserved @krishsarkar profile.
+                // Never let a stale siteConfig.authorAvatarUrl or a secondary admin
+                // Google account overwrite the live profile identity.
+                const canonical = await getProfileByUsername(cloudConfig.authorProfileUsername || 'krishsarkar');
+                const canonicalProfile = canonical?.uid ? canonical : (prof?.username === 'krishsarkar' ? prof : null);
+                const authorName = canonicalProfile?.displayName || cloudConfig.authorName || user.displayName || 'Krish Sarkar';
+                const authorAvatar = canonicalProfile?.photoURL || cloudConfig.authorAvatarUrl || user.photoURL || '';
+                const authorBio = cloudConfig.aboutMeBio || cloudConfig.manifestoText || canonicalProfile?.bio || '';
+                const authorRole = cloudConfig.authorRole || canonicalProfile?.role || 'Founder & Systems Architect';
                 const synced = await syncAdminAuthorProfile({
-                  name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
-                  role: cloudConfig.authorRole || 'Founder & Systems Architect',
-                  avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
-                  bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || ''
+                  name: authorName,
+                  role: authorRole,
+                  avatar: authorAvatar,
+                  bio: authorBio
                 });
                 await syncAuthorToAllCloudArticles({
-                  name: cloudConfig.authorName || user.displayName || 'Krish Sarkar',
-                  role: cloudConfig.authorRole || 'Founder & Systems Architect',
-                  avatar: cloudConfig.authorAvatarUrl || user.photoURL || '',
-                  bio: cloudConfig.aboutMeBio || cloudConfig.manifestoText || '',
+                  name: authorName,
+                  role: authorRole,
+                  avatar: authorAvatar,
+                  bio: authorBio,
                   uid: synced.uid, username: synced.username
                 });
-                try { sessionStorage.setItem(syncKey, String(Date.now())); } catch {}
-                prof = await getCommunityProfile(synced.uid) || prof;
+                try { sessionStorage.setItem(syncKey, String(Date.now())); } catch (error) { console.warn('Admin sync session marker write unavailable:', error); }
+                prof = await getCommunityProfile(synced.uid) || canonicalProfile || prof;
               }
             } catch (adminSyncError) {
               console.warn('Admin author sync skipped:', adminSyncError);

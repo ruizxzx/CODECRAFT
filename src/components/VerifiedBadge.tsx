@@ -16,6 +16,8 @@ export const VerifiedBadge: React.FC<VerifiedBadgeProps> = ({ verified, color = 
       title="Verified account"
       viewBox="0 0 24 24"
       role="img"
+      width="1em"
+      height="1em"
       className={`inline-block shrink-0 ${className}`}
       style={{ color: safeColor }}
     >

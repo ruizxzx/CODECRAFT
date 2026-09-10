@@ -1088,14 +1088,14 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
         <div className="p-8 bg-gray-50 neo-border neo-shadow">
           <button type="button" onClick={() => { const authorHandle = safeAuthor.username || siteConfig.authorProfileUsername; if (authorHandle && onOpenAuthorProfile) onOpenAuthorProfile(authorHandle); }} className="w-full flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6 text-left">
             <img
-              src={siteConfig?.authorAvatarUrl || safeAuthor.avatar}
-              alt={siteConfig?.authorName || safeAuthor.name}
+              src={resolvedOriginalAuthor?.avatar || safeAuthor.avatar || siteConfig?.authorAvatarUrl || ''}
+              alt={resolvedOriginalAuthor?.name || safeAuthor.name || siteConfig?.authorName || 'Author'}
               className="w-20 h-20 neo-border object-cover shrink-0 bg-white"
             />
             <div className="space-y-2">
               <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                 <h4 className="font-display font-black text-2xl text-black uppercase">
-                  WRITTEN BY {siteConfig?.authorName || safeAuthor.name}
+                  WRITTEN BY {resolvedOriginalAuthor?.name || safeAuthor.name || siteConfig?.authorName || 'Author'}
                 </h4>
                 <span className="font-mono text-[10px] font-bold bg-[var(--color-primary)] text-black px-2 py-0.5 border-2 border-black uppercase">
                   {siteConfig?.authorRole || 'FOUNDER'}

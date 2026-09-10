@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.78.5",
+  "version": "0.78.6",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -28,7 +28,8 @@
     "check:public-profile": "node scripts/check-public-profile-access.mjs",
     "check:message-identity": "node scripts/check-message-identity.mjs",
     "check:comments": "node scripts/check-comments.mjs",
-    "check:site-sync": "node scripts/check-site-sync.mjs"
+    "check:site-sync": "node scripts/check-site-sync.mjs",
+    "check:v78": "node scripts/check-v78-hardening.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

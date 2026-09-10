@@ -11,12 +11,27 @@ interface Props {
 const isVideo = (url: string) => /\.(mp4|webm|mov|m4v)(?:$|\?)/i.test(url);
 const isDocument = (url: string) => /\.(pdf|doc|docx|ppt|pptx|xls|xlsx)(?:$|\?)/i.test(url);
 const isImage = (url: string) => /\.(jpe?g|png|webp|gif|avif|bmp|svg)(?:$|\?)/i.test(url) || (!isDocument(url) && !isVideo(url));
+const mediaIdentity = (url: string) => {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '').toLowerCase();
+  } catch {
+    return String(url).split(/[?#]/)[0].replace(/\/+$/, '').toLowerCase();
+  }
+};
 
 export const PostMediaPreview: React.FC<Props> = ({ post, showAll = false, className = '' }) => {
-  const media = Array.from(new Set([
+  const seen = new Set<string>();
+  const media = [
     ...(post.coverImage ? [post.coverImage] : []),
     ...(post.mediaUrls || []),
-  ].filter(Boolean))).filter(url => isImage(url) || isVideo(url));
+  ].filter(Boolean).filter(url => {
+    if (!(isImage(url) || isVideo(url))) return false;
+    const key = mediaIdentity(url);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
   if (!media.length) return null;
   const items = showAll ? media.slice(0, 8) : media.slice(0, 1);

@@ -405,11 +405,11 @@ export async function ensureCommunityProfileForUser(user: import('firebase/auth'
     if (existing.username) {
       const syncKey = `offscrpt:public-profile-sync:${user.uid}`;
       let recentlySynced = false;
-      try { recentlySynced = Number(sessionStorage.getItem(syncKey) || 0) > Date.now() - 900_000; } catch {}
+      try { recentlySynced = Number(sessionStorage.getItem(syncKey) || 0) > Date.now() - 900_000; } catch (error) { console.warn('Public profile sync session marker unavailable:', error); }
       if (!recentlySynced) {
         try {
           await upsertPublicProfile(existing);
-          try { sessionStorage.setItem(syncKey, String(Date.now())); } catch {}
+          try { sessionStorage.setItem(syncKey, String(Date.now())); } catch (error) { console.warn('Public profile sync session marker write unavailable:', error); }
         } catch (error) { console.warn('Public profile projection refresh skipped:', error); }
       }
     }
@@ -920,8 +920,12 @@ export async function createPost(data: Omit<CommunityPost, 'id' | 'createdAt' | 
     const postId = generateId();
     const p = `posts/${postId}`;
     const now = new Date().toISOString();
+    const normalizedMediaUrls = Array.from(new Set((Array.isArray((data as any).mediaUrls) ? (data as any).mediaUrls : []).map((v:any) => String(v).trim()).filter(Boolean))).slice(0, 6);
+    const firstImage = normalizedMediaUrls.find((url:string) => /\.(jpe?g|png|webp|gif|avif|bmp|svg)(?:$|\?)/i.test(url));
     const postData = stripUndefined({
       ...data,
+      mediaUrls: normalizedMediaUrls,
+      coverImage: (data as any).coverImage || firstImage || undefined,
       title: cleanTitle,
       content: cleanContent,
       dedupeKey,
@@ -1360,7 +1364,7 @@ export async function followPost(postId: string, userId: string): Promise<boolea
   if ((await getDoc(ref)).exists()) return false;
   const actor = await getCommunityProfile(userId);
   await setDoc(ref, { userId, username: actor?.username || '', createdAt: serverTimestamp() });
-  try { await createNotification(p.authorId, { type: 'follow', actorId: userId, actorUsername: actor?.username || '', actorName: u.displayName || 'User', actorAvatar: u.photoURL || '', message: 'followed your discussion', targetType: 'post', targetId: postId }); } catch {}
+  try { await createNotification(p.authorId, { type: 'follow', actorId: userId, actorUsername: actor?.username || '', actorName: u.displayName || 'User', actorAvatar: u.photoURL || '', message: 'followed your discussion', targetType: 'post', targetId: postId }); } catch (error) { console.warn('Follow notification skipped:', error); }
   return true;
 }
 export async function unfollowPost(postId: string, userId: string): Promise<boolean> {
@@ -1647,123 +1651,172 @@ export async function syncUserIdentityAcrossContent(
   };
   if (profile.isVerified !== undefined) identity.isVerified = !!profile.isVerified;
   if (profile.verificationColor !== undefined) identity.verificationColor = profile.verificationColor || '#2196F3';
-  const actorIdentity = {
-    actorUsername: profile.username || '',
-    actorName: profile.displayName || '',
-    actorAvatar: profile.photoURL || '',
-    updatedAt: serverTimestamp()
-  };
+
   const writes: Array<{ ref: any; data: any }> = [];
+  const writePaths = new Set<string>();
+  const pushWrite = (ref: any, data: any) => {
+    const path = String(ref?.path || '');
+    if (!path || writePaths.has(path)) return false;
+    writePaths.add(path);
+    writes.push({ ref, data });
+    return true;
+  };
   const counters = { posts:0, comments:0, communityPosts:0, communities:0, memberships:0, relationships:0, questions:0, answers:0, articles:0, messages:0, notifications:0, reports:0, topics:0, series:0, moderators:0, adminNotifications:0 };
 
-  const collectByQuery = async (q: any, data: any, key: keyof typeof counters) => {
+  const collectByQuery = async (q: any, data: any, key: keyof typeof counters, filterRef?: (ref:any) => boolean) => {
     const snap = await getDocs(q);
-    counters[key] += snap.size;
-    snap.docs.forEach((d:any) => writes.push({ ref:d.ref, data }));
+    for (const d of snap.docs) {
+      if (filterRef && !filterRef(d.ref)) continue;
+      if (pushWrite(d.ref, data)) counters[key] += 1;
+    }
   };
 
-  // Canonical root posts.
+  // Canonical root posts. Collection-group /posts below is filtered to nested
+  // community paths so the same document is never scheduled twice.
   await collectByQuery(query(collection(db, 'posts'), where('authorId', '==', userId)), identity, 'posts');
 
-  // Community posts + article/community comments + question answers.
   try {
-    await collectByQuery(query(collectionGroup(db, 'posts'), where('authorId', '==', userId)), identity, 'communityPosts');
-  } catch (e) {
-    console.warn('Community-post identity query failed:', e);
-  }
+    await collectByQuery(
+      query(collectionGroup(db, 'posts'), where('authorId', '==', userId)),
+      identity,
+      'communityPosts',
+      (ref:any) => String(ref.path).startsWith('communities/')
+    );
+  } catch (e) { console.warn('Community-post identity query failed:', e); }
+
   try {
     await collectByQuery(query(collectionGroup(db, 'comments'), where('authorId', '==', userId)), identity, 'comments');
-  } catch (e) {
-    console.warn('Comment identity query failed:', e);
-  }
+  } catch (e) { console.warn('Comment identity query failed:', e); }
   await collectByQuery(query(collection(db, 'questions'), where('authorId', '==', userId)), identity, 'questions');
   try {
     await collectByQuery(query(collectionGroup(db, 'answers'), where('authorId', '==', userId)), identity, 'answers');
-  } catch (e) {
-    console.warn('Answer identity query failed:', e);
-  }
+  } catch (e) { console.warn('Answer identity query failed:', e); }
 
-  // Community ownership records.
   await collectByQuery(query(collection(db, 'communities'), where('ownerId', '==', userId)), {
     ownerUsername: profile.username || '', ownerName: profile.displayName || '', ownerAvatar: profile.photoURL || '', updatedAt: serverTimestamp()
   }, 'communities');
 
-  // Every community membership owned by this UID. This is safe because rules
-  // restrict the update to the matching member UID and username-only fields.
   try {
     await collectByQuery(query(collectionGroup(db, 'members'), where('uid', '==', userId)), {
       username: profile.username || '', updatedAt: serverTimestamp()
     }, 'memberships');
-  } catch (e) {
-    console.warn('Membership identity query failed:', e);
-  }
+  } catch (e) { console.warn('Membership identity query failed:', e); }
 
-  // Following records that cache this user's username.
   try {
     await collectByQuery(query(collectionGroup(db, 'following'), where('uid', '==', userId)), {
       username: profile.username || '', updatedAt: serverTimestamp()
     }, 'relationships');
-  } catch (e) {
-    console.warn('Following identity query failed:', e);
-  }
+  } catch (e) { console.warn('Following identity query failed:', e); }
 
-  // Topics/series created or owned by this user.
-  try { await collectByQuery(query(collection(db, 'topics'), where('createdBy', '==', userId)), { creatorUsername: profile.username || '', updatedAt: serverTimestamp() }, 'topics'); } catch (e) { console.warn('Topic identity query failed:', e); }
-  try { await collectByQuery(query(collection(db, 'series'), where('ownerId', '==', userId)), { ownerUsername: profile.username || '', updatedAt: serverTimestamp() }, 'series'); } catch (e) { console.warn('Series identity query failed:', e); }
+  try { await collectByQuery(query(collection(db, 'topics'), where('createdBy', '==', userId)), { creatorUsername: profile.username || '', updatedAt: serverTimestamp() }, 'topics'); }
+  catch (e) { console.warn('Topic identity query failed:', e); }
+  try { await collectByQuery(query(collection(db, 'series'), where('ownerId', '==', userId)), { ownerUsername: profile.username || '', updatedAt: serverTimestamp() }, 'series'); }
+  catch (e) { console.warn('Series identity query failed:', e); }
 
-  // Messages sent by this user.
   try {
     await collectByQuery(query(collection(db, 'messages'), where('senderId', '==', userId)), {
       senderUsername: profile.username || '', senderName: profile.displayName || '', senderAvatar: profile.photoURL || '', updatedAt: serverTimestamp()
     }, 'messages');
+    await collectByQuery(query(collection(db, 'messages'), where('recipientId', '==', userId)), {
+      recipientUsername: profile.username || '', recipientName: profile.displayName || '', recipientAvatar: profile.photoURL || '', updatedAt: serverTimestamp()
+    }, 'messages');
   } catch (e) { console.warn('Message identity query failed:', e); }
 
-  // Notification documents belong to recipients and are private. Do not query every recipient's
-  // notification collection from the actor's browser. Their actorId remains the stable link.
-  // Notification UI resolves the actor profile when rendering, so handle changes stay current without
-  // widening notification read permissions.
-
-  // Reports authored by this user.
+  // Notification documents are recipient-private. The notification UI resolves the
+  // current actor profile by actorId instead of rewriting every recipient's inbox.
   try {
-    await collectByQuery(query(collection(db, 'reports'), where('reporterId', '==', userId)), { reporterUsername: profile.username || '', updatedAt: serverTimestamp() }, 'reports');
+    await collectByQuery(query(collection(db, 'reports'), where('reporterId', '==', userId)), {
+      reporterUsername: profile.username || '', updatedAt: serverTimestamp()
+    }, 'reports');
   } catch (e) { console.warn('Report identity query failed:', e); }
 
-  // Admin notifications may contain moderation metadata and remain staff-private. Resolve actor identity
-  // from actorId instead of scanning all recipients' admin notifications.
-
-  // Site moderator registry entry, when the user is a moderator.
   try {
     const moderatorRef = doc(db, 'siteModerators', userId);
     const moderatorSnap = await getDoc(moderatorRef);
-    if (moderatorSnap.exists()) {
-      counters.moderators = 1;
-      writes.push({ ref: moderatorRef, data: { username: profile.username || '', displayName: profile.displayName || '', updatedAt: serverTimestamp() } });
-    }
+    if (moderatorSnap.exists() && pushWrite(moderatorRef, {
+      username: profile.username || '', displayName: profile.displayName || '', updatedAt: serverTimestamp()
+    })) counters.moderators = 1;
   } catch (e) { console.warn('Moderator identity query failed:', e); }
 
-  // Main publication articles use a nested author object. Writers/admins are
-  // allowed to update identity-only fields on articles they own; the rules
-  // prevent any content or publication-state changes through this path.
+  // Main-publication articles use a nested author object. Never overwrite verification
+  // metadata when this invocation is only a display-name/avatar change.
   try {
     const articles = await getDocs(collection(db, 'articles'));
-    articles.docs.forEach((d:any) => {
-      const a:any = d.data()?.author || {};
-      const topAuthorId = d.data()?.authorId || '';
-      if (a.uid === userId || topAuthorId === userId) {
-        counters.articles += 1;
-        writes.push({ ref:d.ref, data:{
-          author: { ...a, uid:userId, username:profile.username || '', name:profile.displayName || '', avatar:profile.photoURL || '', isVerified:!!profile.isVerified, verificationColor:profile.verificationColor || '#2196F3' },
-          authorUsername: profile.username || '',
-          authorName: profile.displayName || '',
-          authorAvatar: profile.photoURL || '',
-          updatedAt: serverTimestamp()
-        }});
+    for (const d of articles.docs) {
+      const data:any = d.data();
+      const a:any = data?.author || {};
+      const topAuthorId = data?.authorId || '';
+      if (a.uid !== userId && topAuthorId !== userId) continue;
+      const authorPatch:any = {
+        ...a,
+        uid: userId,
+        username: profile.username || '',
+        name: profile.displayName || '',
+        avatar: profile.photoURL || ''
+      };
+      if (profile.isVerified !== undefined) authorPatch.isVerified = !!profile.isVerified;
+      if (profile.verificationColor !== undefined) authorPatch.verificationColor = profile.verificationColor || '#2196F3';
+      const articlePatch:any = {
+        author: authorPatch,
+        authorUsername: profile.username || '',
+        authorName: profile.displayName || '',
+        authorAvatar: profile.photoURL || '',
+        ...(profile.isVerified !== undefined ? { isVerified: !!profile.isVerified } : {}),
+        ...(profile.verificationColor !== undefined ? { verificationColor: profile.verificationColor || '#2196F3' } : {}),
+        updatedAt: serverTimestamp()
+      };
+      if (data?.republishedBy?.uid === userId) {
+        articlePatch.republishedBy = { ...data.republishedBy, uid:userId, username:profile.username || '', name:profile.displayName || '', avatar:profile.photoURL || '' };
       }
-    });
+      if (pushWrite(d.ref, articlePatch)) counters.articles += 1;
+    }
   } catch (e) { console.warn('Article identity scan failed:', e); }
 
-  // Commit in safe Firestore batch sizes. Reads are intentionally scoped by UID
-  // wherever possible so username changes do not rewrite unrelated documents.
+  // Public profile is the read-side canonical identity for unauthenticated/profile surfaces.
+  // Refresh it on avatar/name changes so the next lookup cannot resurrect an older snapshot.
+  const publicUsername = String(profile.username || '').trim().toLowerCase();
+  if (publicUsername) {
+    try {
+      const publicRef = doc(db, 'publicProfiles', publicUsername);
+      const publicSnap = await getDoc(publicRef);
+      if (publicSnap.exists()) {
+        await setDoc(publicRef, {
+          username: publicUsername,
+          displayName: profile.displayName || publicSnap.data()?.displayName || '',
+          photoURL: profile.photoURL || publicSnap.data()?.photoURL || '',
+          ...(profile.isVerified !== undefined ? { isVerified: !!profile.isVerified } : {}),
+          ...(profile.verificationColor !== undefined ? { verificationColor: profile.verificationColor || '#2196F3' } : {}),
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+    } catch (e) { console.warn('Public profile identity sync failed:', e); }
+  }
+
+  // Keep the publication-level author identity canonical, but only when a trusted
+  // admin is performing the sync. Normal profile edits must never gain write access
+  // to siteConfig/global.
+  if (checkIsAdmin(auth.currentUser?.email) && auth.currentUser?.uid) {
+    try {
+      const siteRef = doc(db, 'siteConfig', 'global');
+      const siteSnap = await getDoc(siteRef);
+      if (siteSnap.exists()) {
+        const site:any = siteSnap.data();
+        const siteUid = String(site.authorProfileUid || '');
+        const siteUsername = String(site.authorProfileUsername || '').toLowerCase();
+        const nextUsername = String(profile.username || '').toLowerCase();
+        if (siteUid === userId || (siteUsername === 'krishsarkar' && nextUsername === 'krishsarkar')) {
+          pushWrite(siteRef, {
+            authorProfileUid: userId,
+            authorProfileUsername: profile.username || 'krishsarkar',
+            authorName: profile.displayName || '',
+            authorAvatarUrl: profile.photoURL || '',
+            updatedAt: serverTimestamp()
+          });
+        }
+      }
+    } catch (e) { console.warn('SiteConfig author identity sync failed:', e); }
+  }
+
   for (let i=0; i<writes.length; i+=450) {
     const batch = writeBatch(db);
     writes.slice(i, i+450).forEach(w => batch.update(w.ref, w.data));

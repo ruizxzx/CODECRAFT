@@ -16,8 +16,6 @@ import { RichText } from './RichText';
 import { MentionTextarea } from './MentionAutocomplete';
 import { DiscussionPanel } from './DiscussionPanel';
 import { DiscussionComposer, DiscussionComposerMode } from './DiscussionComposer';
-import { PostMediaPreview } from './PostMediaPreview';
-import { PollBlock } from './PollBlock';
 
 interface CommunityPostViewProps {
   postId: string;
@@ -373,8 +371,18 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
             )}
           </div>
         )}
-        {(post.coverImage || (post.mediaUrls||[]).length>0) && <figure className="mb-8"><PostMediaPreview post={post} showAll />{post.coverImageCaption && <figcaption className="font-mono text-[10px] text-neutral-500 mt-2">{post.coverImageCaption}</figcaption>}</figure>}
-        {post.poll && <PollBlock poll={post.poll} postId={post.id} communityId={(post as any).communityId} userId={userAuth?.uid || undefined} />}
+        {(post.coverImage || (post.mediaUrls||[]).length>0 || !!post.poll) && (
+          <div className="mb-8">
+            <CommunityPostExtras
+              post={post}
+              compact={false}
+              showMedia={Boolean(post.coverImage || (post.mediaUrls||[]).length)}
+              showPoll={Boolean(post.poll)}
+              showMediaCaption
+              showAllMedia
+            />
+          </div>
+        )}
         {Array.isArray(post.contentBlocks) && post.contentBlocks.length ? (
           <div className="space-y-6 mb-12 min-w-0">
             {post.contentBlocks.map((block:any, idx:number) => {

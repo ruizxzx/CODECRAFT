@@ -286,7 +286,7 @@ export async function syncAdminAuthorProfile(author: {
   const profileData: any = {
     uid, username,
     displayName: author.name || 'Krish Sarkar',
-    photoURL: author.avatar || admin.photoURL || '',
+    photoURL: author.avatar || (existingUser.exists() ? String(existingUser.data()?.photoURL || '') : '') || admin.photoURL || '',
     bio: author.bio || '',
     themeColor: '#FFD600',
     role: author.role || 'Founder & Systems Architect',
@@ -310,32 +310,44 @@ export async function syncAdminAuthorProfile(author: {
   else batch.set(userRef, profileData);
   await batch.commit();
 
-  const contentWrites: Array<{ ref: any; data: any }> = [];
-  const postsSnap = await getDocs(query(collection(db, 'posts'), where('authorId', '==', uid)));
-  postsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: {
-    authorName: profileData.displayName, authorAvatar: profileData.photoURL,
-    authorUsername: username, isVerified: !!profileData.isVerified,
-    verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp()
-  }}));
-  // Avoid making critical admin saves depend on a collection-group index. The
-  // filtered query is preferred, but older deployments may not have the index yet.
-  let commentsSnap;
   try {
-    commentsSnap = await getDocs(query(collectionGroup(db, 'comments'), where('authorId', '==', uid)));
-  } catch (indexError) {
-    console.warn('Comments author index unavailable; falling back to a cloud scan:', indexError);
-    const allComments = await getDocs(collectionGroup(db, 'comments'));
-    commentsSnap = { docs: allComments.docs.filter(d => d.data()?.authorId === uid) } as any;
+    await setDoc(doc(db, 'publicProfiles', username), {
+      username,
+      displayName: profileData.displayName,
+      photoURL: profileData.photoURL,
+      bio: profileData.bio,
+      isVerified: !!profileData.isVerified,
+      verificationColor: profileData.verificationColor || '#2196F3',
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  } catch (projectionError) {
+    console.warn('Canonical public profile projection refresh failed:', projectionError);
   }
-  commentsSnap.docs.forEach(d => contentWrites.push({ ref: d.ref, data: {
-    authorName: profileData.displayName, authorAvatar: profileData.photoURL,
-    authorUsername: username, isVerified: !!profileData.isVerified,
-    verificationColor: profileData.verificationColor || '#2196F3', updatedAt: serverTimestamp()
-  }}));
-  for (let i = 0; i < contentWrites.length; i += 450) {
-    const contentBatch = writeBatch(db);
-    contentWrites.slice(i, i + 450).forEach(w => contentBatch.update(w.ref, w.data));
-    await contentBatch.commit();
+
+  // Canonical content propagation is centralized in the identity sync helper.
+  // This keeps root posts, community posts, comments, answers, questions, articles,
+  // messages and publication config on the same identity path.
+  try {
+    const { syncUserIdentityAcrossContent } = await import('./community');
+    await syncUserIdentityAcrossContent(uid, {
+      displayName: profileData.displayName,
+      photoURL: profileData.photoURL,
+      username,
+      isVerified: existingUser.exists() ? existingUser.data()?.isVerified : true,
+      verificationColor: existingUser.exists() ? existingUser.data()?.verificationColor : '#2196F3'
+    });
+  } catch (identityError) {
+    console.warn('Canonical author saved but some denormalized identity snapshots could not be refreshed:', identityError);
+  }
+
+  // Keep Firebase Auth aligned when the canonical author is the current admin.
+  if (admin.uid === uid && (author.avatar || author.name)) {
+    try {
+      const { updateProfile } = await import('firebase/auth');
+      await updateProfile(admin, { displayName: profileData.displayName, photoURL: profileData.photoURL || null });
+    } catch (authError) {
+      console.warn('Canonical Firebase Auth author identity refresh failed:', authError);
+    }
   }
 
   return { uid, username };
