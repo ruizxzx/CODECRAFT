@@ -30,7 +30,8 @@
     "check:comments": "node scripts/check-comments.mjs",
     "check:site-sync": "node scripts/check-site-sync.mjs",
     "check:v78": "node scripts/check-v78-hardening.mjs",
-    "check:ai": "node scripts/check-ai-gateway.mjs"
+    "check:ai": "node scripts/check-ai-gateway.mjs",
+    "check:path-conflicts": "node scripts/check-path-conflicts.mjs"
   },
   "dependencies": {
     "@sanity/client": "^8.5.0",
