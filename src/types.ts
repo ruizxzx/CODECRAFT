@@ -244,7 +244,7 @@ export interface SiteConfig {
     audience?: 'everyone' | 'signed_in' | 'guests' | 'creators' | 'moderators' | 'master_admin';
     startAt?: string;
     endAt?: string;
-    targetPage?: 'all' | 'home' | 'blog' | 'article' | 'social' | 'explore' | 'series' | 'creator' | 'changelog';
+    targetPage?: 'all' | 'home' | 'blog' | 'article' | 'social' | 'explore' | 'series' | 'creator' | 'changelog' | 'learn';
     targetRoute?: string;
     linkLabel?: string;
     linkTarget?: string;
@@ -265,7 +265,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'question' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'activity' | 'creator_studio' | 'creators' | 'preferences' | 'health' | 'changelog';
+export type PageView = 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'question' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'activity' | 'creator_studio' | 'creators' | 'preferences' | 'health' | 'changelog' | 'learn';
 
 export interface CommunityUser {
   uid: string;

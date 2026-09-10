@@ -56,6 +56,7 @@ import { recordArticleAnalyticsEvent } from './lib/analytics';
 import { runSyncedOperation } from './lib/sync';
 import { resolveMasterAccess } from './lib/masterControl';
 import { reportRuntimeError } from './lib/runtime';
+import { LearnView } from './components/LearnView';
 
 const SAVED_SLUGS_GUEST_KEY = 'offscrpt_saved_slugs_guest_v1';
 const SAVED_COMMUNITY_GUEST_KEY = 'offscrpt_saved_community_guest_v1';
@@ -477,6 +478,9 @@ export default function App() {
       } else if (hash === 'contact') {
         setCurrentPage('contact');
         setActiveArticleSlug(null);
+      } else if (hash === 'learn' || hash === 'ai' || hash === 'study') {
+        setCurrentPage('learn');
+        setActiveArticleSlug(null);
       } else if (hash === 'changelog') {
         setCurrentPage('changelog');
         setActiveArticleSlug(null);
@@ -577,6 +581,8 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('creator');
       window.location.hash = `creator/${param}`;
+    } else if (page === 'learn') {
+      setActiveArticleSlug(null); setCurrentPage('learn'); window.location.hash='learn';
     } else if (page === 'changelog') {
       setActiveArticleSlug(null); setCurrentPage('changelog'); window.location.hash='changelog';
     } else if (page === 'creators') {
@@ -908,6 +914,7 @@ export default function App() {
             {currentPage === 'social' && (
               <SocialHubView userProfile={userProfile} onNavigate={navigateTo} siteConfig={siteConfig} />
             )}
+            {currentPage === 'learn' && <LearnView />}
             {currentPage === 'question' && activeArticleSlug && (
               <QuestionView questionId={activeArticleSlug} userProfile={userProfile} onNavigate={navigateTo} />
             )}

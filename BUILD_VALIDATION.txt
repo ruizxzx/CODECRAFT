@@ -1,36 +1,34 @@
-OFFSCRPT V72.1 BUILD VALIDATION STATUS
-====================================
+OFFSCRPT V79.0.0 — AI READING & LEARNING
+VALIDATION REPORT
 
-SOURCE VALIDATION
-- Active Vite root: src/
-- Active entrypoint: src/index.html -> src/main.tsx -> src/App.tsx
-- TS/TSX parser validation: PASS (77 files)
-- Undeclared identifier diagnostics (2304/2552): PASS (0)
-- Local relative import validation: PASS (77 files)
-- Local named-export validation: PASS (77 files)
-- Firestore rules structural validation: PASS (173 opening / 173 closing braces)
-- Firebase initialization/rules presence checks: PASS
-- Schema audit: PASS
-- Runtime-pattern audit: PASS
+Source tree: V78.0.8 base + V79 AI layer
 
-PRODUCTION BUILD
-- npm run build: NOT EXECUTED SUCCESSFULLY IN THIS ISOLATED ENVIRONMENT.
-- npm dependency installation could not complete; offline cache does not contain
-  @vitejs/plugin-react, and the local Vite package was incomplete.
-- No claim of a successful Vite production bundle is made from this environment.
+PASS — targeted TypeScript transpilation: 11 modified/AI files, 0 syntax diagnostics
+PASS — import check: 97 active source files
+PASS — Firebase initialization check
+PASS — Firestore rules structural check
+PASS — schema check
+PASS — recommendation check
+PASS — runtime pattern check
+PASS — ZIP archive integrity check (after packaging)
 
-RUNTIME / DATA VALIDATION
-- Analytics session writes are now connected to ArticleView and no longer require
-  a reader-side analytics read.
-- Firestore analytics create/update timestamp rules match the client writer.
-- Share/reaction/completion analytics events are wired.
-- Aggregation errors are surfaced instead of silently becoming zero metrics.
-- Runtime errors are queued for signed-out clients and persisted after authentication.
-- Sync failures dispatch a health event for the admin observability layer.
+Full Vite production compilation was not run in this sandbox because project npm dependencies are not installed locally. No claim of a full production build is made.
 
+AI architecture:
+- Central /api/ai/gateway endpoint
+- Firebase ID-token verification before Gemini calls
+- Task-aware Gemini model routing
+- Structured JSON output
+- Grounded source-only prompts
+- Client cache + server in-memory cache
+- Per-user daily request guard
+- AI failures return recoverable errors and do not replace core content
+- Gemini V78 discussion compatibility endpoint preserved
 
-VERCEL DEPLOYMENT CONFIGURATION
-- Vite source root remains `src/`.
-- Production `outDir` is explicitly set to repository-root `dist/`.
-- `vercel.json.outputDirectory` is `dist`, now aligned with the generated bundle location.
-- This removes the deployment failure: `No Output Directory named "dist" found after the Build completed.`
+User-facing V79 surfaces:
+- Article AI Reading Assistant
+- Discussion AI assistant + discussion intelligence via central gateway
+- Question AI assistant
+- Community post AI assistant
+- Series AI assistant
+- /#learn AI learning dashboard

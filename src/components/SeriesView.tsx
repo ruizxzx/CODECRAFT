@@ -13,6 +13,7 @@ import {
   RotateCcw, SlidersHorizontal, Users, Zap, CalendarDays
 } from 'lucide-react';
 import { MediaUploadButton } from './MediaUploadButton';
+import { AIAssistantPanel } from './AIAssistantPanel';
 
 interface Props { articles: Article[]; onNavigate: (page: any, param?: string) => void; selectedSeriesId?: string | null; }
 type SortMode = 'order' | 'newest' | 'shortest' | 'longest';
@@ -159,6 +160,8 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
           {active.tags?.length?<div className="mt-5 flex flex-wrap gap-2">{active.tags.map(tag=><span key={tag} className="border border-white/60 px-2 py-1 font-mono text-[9px] uppercase">#{tag}</span>)}</div>:null}
         </div>
       </section>
+
+      <AIAssistantPanel input={{contentType:'series',contentId:active.id||active.slug,title:active.title,content:[active.description||'',...active.items.map((a:any)=>`${a.title}\n${a.excerpt||''}`)].join('\n\n'),metadata:{articleCount:active.items.length,tags:active.tags||[],owner:creatorName},sourceRevision:active.updatedAt||active.createdAt}}/>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
         <Metric icon={<Layers/>} label="PARTS" value={String(stats.parts)} />

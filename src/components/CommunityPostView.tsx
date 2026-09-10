@@ -12,6 +12,7 @@ import { promoteCommunityBlogToMain, fetchAllArticlesForAdmin, unpublishMainArti
 import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2, Quote, Share2, Pencil, X } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { CommunityPostExtras } from './CommunityPostExtras';
+import { AIAssistantPanel } from './AIAssistantPanel';
 import { RichText } from './RichText';
 import { MentionTextarea } from './MentionAutocomplete';
 import { DiscussionPanel } from './DiscussionPanel';
@@ -383,6 +384,8 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
             />
           </div>
         )}
+        <AIAssistantPanel input={{contentType:post.type==='blog'?'community-blog':'discussion',contentId:post.id,title:post.title,content:post.content,metadata:{author:post.authorName,topics:post.hashtags||[],views:post.viewsCount||0},sourceRevision:post.editedAt||post.updatedAt||post.createdAt}}/>
+
         {Array.isArray(post.contentBlocks) && post.contentBlocks.length ? (
           <div className="space-y-6 mb-12 min-w-0">
             {post.contentBlocks.map((block:any, idx:number) => {

@@ -39,7 +39,9 @@ import { getSeriesList } from '../lib/series';
 import { calculateArticleReadingTime, getArticleReadingProgress, saveArticleReadingProgress, resetArticleReadingProgress, recordArticleHistory, ArticleEngagementStats, subscribeArticleEngagementStats } from '../lib/reading';
 import { UserIdentity } from './UserIdentity';
 import { DiscussionComposer } from './DiscussionComposer';
+import { AIAssistantPanel } from './AIAssistantPanel';
 import type { ArticleReaction } from '../lib/cms';
+import { notifyToast } from '../lib/toast';
 
 function slugifyHeading(value: string): string {
   return String(value || 'section')
@@ -258,7 +260,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           isVerified: !!(profile?.isVerified ?? post.isVerified ?? fallback.isVerified),
           verificationColor: profile?.verificationColor || post.verificationColor || fallback.verificationColor
         });
-      } catch { if (active) setResolvedOriginalAuthor(fallback); }
+      } catch (error) { console.warn('Article author resolution skipped:', error); if (active) setResolvedOriginalAuthor(fallback); }
     };
     void resolve();
     return () => { active = false; };
@@ -445,7 +447,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const handleMarkComplete = async () => {
     let currentUser = user;
     if (!currentUser) {
-      try { currentUser = await loginWithGoogle(); } catch { return; }
+      try { currentUser = await loginWithGoogle(); } catch (error) { console.warn('Google login cancelled:', error); return; }
     }
     if (!currentUser) return;
     setCompleteBusy(true);
@@ -789,6 +791,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           </div>
           {selectionQuoteVisible && discussionProfile && <button type="button" onClick={() => { const text = window.getSelection()?.toString().trim() || ''; setDiscussionComposer({ selectedText:text, initialTitle:`Discussion: ${article.title}`, initialSource:{ sourceType:'article', sourceId:article.slug, sourceTitle:article.title, sourceUrl:window.location.origin+`/article/${encodeURIComponent(article.slug)}`, sourceAuthorId:article.author?.uid, sourceAuthorUsername:article.author?.username, sourceAuthorName:article.author?.name, selectedText:text } }); setSelectionQuoteVisible(false); }} className="border-2 border-black bg-black text-white px-4 py-2 font-mono text-[10px] font-black uppercase">QUOTE SELECTED TEXT → DISCUSSION</button>}
         </section>
+
+        <AIAssistantPanel input={{contentType:'article',contentId:article.slug,title:article.title,content:safeContent.map(b=>[b.content,b.calloutTitle,b.codeBlock?.code,b.items?.join(' ')].filter(Boolean).join(' ')).join(' '),metadata:{tags:safeTags,category:article.category,author:resolvedOriginalAuthor?.name||safeAuthor.name},sourceRevision:article.editedAt||article.publishedAt}} selectedText={selectionQuoteVisible ? (window.getSelection()?.toString().trim()||'') : undefined} onCreateNote={(text)=>{try{const k='offscrpt:ai:notes:v1';const old=JSON.parse(localStorage.getItem(k)||'[]');localStorage.setItem(k,JSON.stringify([...old,{id:Date.now().toString(),title:article.title,text,createdAt:new Date().toISOString()}].slice(-100)));notifyToast('AI note saved locally.','success')}catch(error){console.warn('AI note save skipped:',error);}}}/>
 
         {/* Article Body - Rich Medium/Editorial Typography */}
         <div ref={articleContentRef} className={`space-y-7 ${fontSize === 'large' ? 'text-xl leading-relaxed' : 'text-lg leading-relaxed'} font-serif text-neutral-900`}>
