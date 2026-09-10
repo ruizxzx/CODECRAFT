@@ -53,7 +53,15 @@ export async function createDiscussion(input: {
     communityId: input.communityId || '',
     discussionStatus: 'active', allowQuotes: true, allowRemixes: true, allowReplies: 'everyone',
   };
-  if (input.poll) payload.poll = { question: clean(input.poll.question || title, 256), options: unique(input.poll.options.map(x => clean(x, 160)).filter(Boolean)).slice(0, 8), votes: {} };
+  if (input.poll) {
+    const options = unique(input.poll.options.map(x => clean(x, 160)).filter(Boolean)).slice(0, 8);
+    if (options.length < 2) throw new Error('A poll needs at least two options.');
+    payload.poll = { question: clean(input.poll.question || title, 256), options, votes: {} };
+  }
+  if (!payload.coverImage) {
+    const firstImage = payload.mediaUrls.find((url: string) => /\.(jpe?g|png|webp|gif|avif|bmp|svg)(?:$|\?)/i.test(url));
+    if (firstImage) payload.coverImage = firstImage;
+  }
   if (input.communityId) {
     const { createCommunityPost } = await import('./social');
     const p = await createCommunityPost(input.communityId, input.user, title, content, {

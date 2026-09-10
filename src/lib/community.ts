@@ -1150,6 +1150,37 @@ export async function updatePost(postId: string, data: Partial<CommunityPost>) {
   }
 }
 
+export async function voteRootPoll(postId: string, userId: string, optionIndex: number): Promise<void> {
+  if (!auth.currentUser || auth.currentUser.uid !== userId) throw new Error('Authentication required.');
+  if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > 7) throw new Error('Invalid poll option.');
+  const postRef = await resolvePostLocation(postId);
+  if (!postRef) throw new Error('Post not found.');
+  if (postRef.path.split('/')[0] !== 'posts') throw new Error('Use the community poll flow for this poll.');
+  const voteRef = doc(postRef, 'pollVotes', userId);
+  const [postSnap, existing] = await Promise.all([getDoc(postRef), getDoc(voteRef)]);
+  if (!postSnap.exists()) throw new Error('Post not found.');
+  const data = postSnap.data() as any;
+  if (data.type !== 'discussion' || !data.poll?.options?.[optionIndex]) throw new Error('Poll not found.');
+  const batch = writeBatch(db);
+  if (existing.exists()) {
+    const old = Number(existing.data()?.optionIndex);
+    if (old === optionIndex) return;
+    batch.update(postRef, { [`poll.votes.${old}`]: increment(-1), [`poll.votes.${optionIndex}`]: increment(1), updatedAt: serverTimestamp() });
+    batch.update(voteRef, { optionIndex, updatedAt: serverTimestamp() });
+  } else {
+    batch.set(voteRef, { uid: userId, optionIndex, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+    batch.update(postRef, { [`poll.votes.${optionIndex}`]: increment(1), updatedAt: serverTimestamp() });
+  }
+  await batch.commit();
+}
+
+export async function getRootPollVote(postId: string, userId?: string): Promise<number|null> {
+  if (!userId) return null;
+  const postRef = doc(db, 'posts', postId);
+  const snap = await getDoc(doc(postRef, 'pollVotes', userId));
+  return snap.exists() && Number.isInteger(Number(snap.data()?.optionIndex)) ? Number(snap.data()?.optionIndex) : null;
+}
+
 export function subscribeCommunityComments(postId: string, callback: (comments: CommunityComment[]) => void): () => void {
   let unsub: (() => void) | null = null;
   let active = true;

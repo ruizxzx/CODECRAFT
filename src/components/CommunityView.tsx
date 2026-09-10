@@ -25,6 +25,8 @@ import { CommunityEditor } from './CommunityEditor';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { UniqueHandleModal } from './UniqueHandleModal';
 import { CommunityPostExtras } from './CommunityPostExtras';
+import { PostMediaPreview } from './PostMediaPreview';
+import { PollBlock } from './PollBlock';
 
 interface CommunityViewProps {
   onNavigate: (page: PageView, param?: string) => void;

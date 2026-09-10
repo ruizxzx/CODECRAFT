@@ -228,6 +228,7 @@ export async function createCommunityPost(cid:string,user:CommunityUser,title:st
   const data:any={communityId:cid,parentPostId:options.parentPostId||'',postType,flair:options.flair?.trim().slice(0,30)||'',linkUrl:options.linkUrl?.trim().slice(0,2000)||'',mediaUrls:Array.isArray(options.mediaUrls)?options.mediaUrls.filter(Boolean).slice(0,6):[],dedupeKey,title:cleanTitle,content:cleanContent,authorId:user.uid,authorUsername:user.username,authorName:user.displayName,authorAvatar:user.photoURL||'',authorPlatformRole:staffRole(user),score:0,commentsCount:0,isFeatured:false,isPinned:false,isLocked:false,isArchived:false,viewsCount:0,createdAt:serverTimestamp(),updatedAt:serverTimestamp(),visibility:options.visibility||'community',discussionStatus:options.discussionStatus||'active',discussionType:options.discussionType||undefined,source:options.source||undefined,allowQuotes:options.allowQuotes!==false,allowRemixes:options.allowRemixes!==false,allowReplies:options.allowReplies||'community'};
   if (Array.isArray(options.contentBlocks) && options.contentBlocks.length) data.contentBlocks=options.contentBlocks;
   for (const [k,v] of Object.entries({excerpt:options.excerpt,coverImage:options.coverImage,coverImageAlt:options.coverImageAlt,coverImageCaption:options.coverImageCaption,category:options.category,readingTimeMinutes:options.readingTimeMinutes,tags:options.tags,seriesId:options.seriesId,seriesName:options.seriesName,seriesOrder:options.seriesOrder})) if(v!==undefined) data[k]=v;
+  if (!data.coverImage) { const firstImage = data.mediaUrls.find((url:string) => /\.(jpe?g|png|webp|gif|avif|bmp|svg)(?:$|\?)/i.test(url)); if (firstImage) data.coverImage = firstImage; }
   if(options.poll && ['poll','discussion'].includes(postType)){
     const pollOptions=options.poll.options.map(x=>String(x).trim()).filter(Boolean).slice(0,8);
     if(pollOptions.length<2) throw new Error('A poll needs at least two options.');
@@ -271,7 +272,7 @@ export async function voteCommunityPoll(cid:string,pid:string,uid:string,optionI
   const postRef=doc(db,'communities',cid,'posts',pid); const voteRef=doc(db,'communities',cid,'posts',pid,'pollVotes',uid);
   const [postSnap,existing]=await Promise.all([getDoc(postRef),getDoc(voteRef)]);
   if(!postSnap.exists()) throw new Error('Post not found.');
-  const data=postSnap.data() as any; if(data.postType!=='poll' || !data.poll?.options?.[optionIndex]) throw new Error('Poll not found.');
+  const data=postSnap.data() as any; if(!['poll','discussion'].includes(data.postType) || !data.poll?.options?.[optionIndex]) throw new Error('Poll not found.');
   const b=writeBatch(db);
   if(existing.exists()){
     const old=Number(existing.data().optionIndex);
@@ -283,6 +284,12 @@ export async function voteCommunityPoll(cid:string,pid:string,uid:string,optionI
     b.update(postRef,{[`poll.votes.${optionIndex}`]:increment(1),updatedAt:serverTimestamp()});
   }
   await b.commit();
+}
+
+export async function getCommunityPollVote(cid:string,pid:string,uid?:string): Promise<number|null> {
+  if (!uid) return null;
+  const snap = await getDoc(doc(db,'communities',cid,'posts',pid,'pollVotes',uid));
+  return snap.exists() && Number.isInteger(Number(snap.data()?.optionIndex)) ? Number(snap.data()?.optionIndex) : null;
 }
 
 export async function voteCommunityPost(cid:string,pid:string,uid:string,type:'up'|'down'){ const ref=doc(db,'communities',cid,'posts',pid,'votes',uid); const existing=await getDoc(ref); const post=doc(db,'communities',cid,'posts',pid); const b=writeBatch(db); if(existing.exists()&&existing.data().type===type){b.delete(ref);b.update(post,{score:increment(type==='up'?-1:1),updatedAt:serverTimestamp()});}else{const prev=existing.exists()?existing.data().type:null; const delta=prev ? (prev==='up' ? (type==='up'?0:-2) : (type==='down' ? 0 : 2)) : (type==='up'?1:-1); b.set(ref,{type,uid,createdAt:serverTimestamp()}); b.update(post,{score:increment(delta),updatedAt:serverTimestamp()});}await b.commit();}

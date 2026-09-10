@@ -7,6 +7,8 @@ import { auth, checkIsAdmin } from '../lib/firebase';
 import { updateProfile } from 'firebase/auth';
 import { fetchArticles } from '../lib/cms';
 import { formatDisplayDate } from '../lib/dateUtils';
+import { PostMediaPreview } from './PostMediaPreview';
+import { PollBlock } from './PollBlock';
 import { getSeriesList } from '../lib/series';
 import { CreatorPageBuilder } from './CreatorPageBuilder';
 import type { CreatorPageConfig } from '../types';
@@ -306,7 +308,7 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
         <span className="font-mono text-[10px] font-bold uppercase inline-flex items-center gap-1">@{post.authorUsername}{((post as any).platformRole==='moderator' || (post as any).platformRole==='master_admin') && <span className="px-1 border border-black bg-[var(--color-primary)]"><Shield className="inline w-3 h-3"/>{(post as any).platformRole==='master_admin' ? 'MASTER' : 'MOD'}</span>}<VerifiedBadge verified={post.authorId === profile.uid ? !!profile.isVerified : !!post.isVerified} color={post.authorId === profile.uid ? profile.verificationColor : post.verificationColor} className="w-3.5 h-3.5" /></span>
       </div>
       <div className="flex flex-wrap gap-1.5 mb-1 font-mono text-[9px] font-black uppercase">{(post as any).editedAt && <span className="px-1.5 py-0.5 border border-black bg-neutral-100">EDITED</span>}{(post as any).editReviewStatus==='pending' && <span className="px-1.5 py-0.5 border border-black bg-yellow-200">EDIT PENDING REVIEW</span>}</div>
-      <h3 className="font-display font-black text-xl group-hover:text-[var(--color-primary)] transition-colors">{post.title}</h3>
+      <h3 className="font-display font-black text-xl group-hover:text-[var(--color-primary)] transition-colors">{post.title}</h3><PostMediaPreview post={post} />{post.poll&&<PollBlock poll={post.poll} postId={post.id} communityId={(post as any).communityId} userId={activeUser?.uid} compact/>}
       <p className="mt-2 text-sm text-neutral-600 line-clamp-2">{post.content}</p>
       <div className="mt-4 pt-4 border-t-2 border-neutral-100 flex justify-between font-mono text-xs text-neutral-500">
         <span>{formatDisplayDate(post.createdAt)}{(post as any).communityId ? ` · c/${(post as any).communitySlug || ''}` : ''}</span>
@@ -425,3 +427,4 @@ export const CommunityProfileView: React.FC<CommunityProfileViewProps> = ({ user
     </div>
   );
 };
+

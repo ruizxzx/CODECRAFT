@@ -356,6 +356,7 @@ export interface CommunityPost {
   mentionedUsernames?: string[];
   hashtags?: string[];
   mediaUrls?: string[];
+  poll?: { question: string; options: string[]; votes?: Record<string, number>; allowMultiple?: boolean; endsAt?: string | null };
   parentPostId?: string;
   threadId?: string;
   threadIndex?: number;

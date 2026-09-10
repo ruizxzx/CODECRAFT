@@ -407,6 +407,12 @@ service cloud.firestore {
           ))
           || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName','authorAvatar','authorUsername','isVerified','verificationColor','updatedAt']))
         );
+        allow update: if isSignedIn()
+          && incoming().diff(existing()).affectedKeys().hasOnly(['poll','updatedAt'])
+          && incoming().get('poll', {}).get('question','') == existing().get('poll', {}).get('question','')
+          && incoming().get('poll', {}).get('options',[]) == existing().get('poll', {}).get('options',[])
+          && getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/pollVotes/$(request.auth.uid)).data.uid == request.auth.uid
+          && getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/pollVotes/$(request.auth.uid)).data.optionIndex is number;
         allow update: if !isSignedIn()
           && incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
           && incoming().get('viewsCount', 0) == existing().get('viewsCount', 0) + 1
@@ -831,11 +837,24 @@ service cloud.firestore {
           || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['repostsCount', 'updatedAt']))
         ));
+      // Poll voting is an atomic user-scoped write: the vote document must be
+      // created/updated in the same batch as the post counter update.
+      allow update: if isSignedIn()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['poll','updatedAt'])
+        && incoming().get('poll', {}).get('question','') == existing().get('poll', {}).get('question','')
+        && incoming().get('poll', {}).get('options',[]) == existing().get('poll', {}).get('options',[])
+        && getAfter(/databases/$(database)/documents/posts/$(postId)/pollVotes/$(request.auth.uid)).data.uid == request.auth.uid
+        && getAfter(/databases/$(database)/documents/posts/$(postId)/pollVotes/$(request.auth.uid)).data.optionIndex is number;
       allow update: if !isSignedIn()
         && incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
         && incoming().get('viewsCount', 0) == existing().get('viewsCount', 0) + 1
         && incoming().updatedAt is timestamp;
       allow delete: if isSignedIn() && (request.auth.uid == existing().authorId || isAdmin() || hasModeratorPermission('moderatePosts'));
+      match /pollVotes/{userId} {
+        allow read: if true;
+        allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().uid == request.auth.uid && incoming().optionIndex is number;
+        allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin() || hasModeratorPermission('moderatePosts'));
+      }
       
       match /comments/{commentId} {
         function isValidComment(data) {

@@ -1,5 +1,5 @@
-# OFFSCRPT V78.0.1
+# OFFSCRPT V78.0.2
 
-## Discussion 2.0 runtime hardening
+## Discussion 2.0 media + polls
 
-Fixed DiscussionPanel runtime crash, hardened discussion metadata persistence, community discussion interactions, Firebase public feed aggregation, and Gemini authentication.
+Upgraded discussion media propagation and poll rendering across discovery surfaces, added reusable post media previews, automatic thumbnail promotion from uploaded images, root/community poll voting support, and Firebase rules for atomic poll writes. Gemini Discussion Intelligence remains included.
