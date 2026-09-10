@@ -351,9 +351,24 @@ export interface CommunityPost {
   updatedAt: string;
   quoteText?: string;
   quotedPostId?: string;
+  quoteSourceSnapshot?: Record<string, any>;
+  quoteSourceContent?: string;
   mentionedUsernames?: string[];
   hashtags?: string[];
   mediaUrls?: string[];
+  parentPostId?: string;
+  threadId?: string;
+  threadIndex?: number;
+  threadTotal?: number;
+  threadTopic?: string;
+  threadCoverImage?: string;
+  discussionStatus?: 'active' | 'locked' | 'archived' | 'removed';
+  visibility?: 'public' | 'followers' | 'community' | 'restricted';
+  discussionType?: string;
+  source?: Record<string, any> | null;
+  allowQuotes?: boolean;
+  allowRemixes?: boolean;
+  allowReplies?: 'everyone' | 'followers' | 'mentioned' | 'community' | 'nobody';
 }
 
 export interface CommunityComment {
@@ -367,6 +382,19 @@ export interface CommunityComment {
   parentId?: string;
   createdAt: string;
   updatedAt: string;
+  editedAt?: string;
+  mentionedUsernames?: string[];
+  isVerified?: boolean;
+  verificationColor?: string;
+  platformRole?: 'member' | 'moderator' | 'master_admin';
+  likeCount?: number;
+  isHidden?: boolean;
+  isDeleted?: boolean;
+  isAuthorResponse?: boolean;
+  quotedText?: string;
+  quoteSource?: Record<string, any>;
+  mediaUrls?: string[];
+  poll?: { question: string; options: string[]; votes?: Record<string, string[]>; allowMultiple?: boolean; endsAt?: string | null };
 }
 
 export type CarouselElementType = 'text' | 'badge' | 'button' | 'link';

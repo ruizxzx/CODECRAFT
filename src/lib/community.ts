@@ -13,6 +13,7 @@ function mapDocDates(data: any) {
   const res = { ...data };
   if (res.createdAt?.toDate) res.createdAt = res.createdAt.toDate().toISOString();
   if (res.updatedAt?.toDate) res.updatedAt = res.updatedAt.toDate().toISOString();
+  if (res.readAt?.toDate) res.readAt = res.readAt.toDate().toISOString();
   return res;
 }
 export enum OperationType {
@@ -1270,6 +1271,63 @@ export async function deletePost(postId: string) {
     handleFirestoreError(error, OperationType.DELETE, `posts/${postId}`);
     throw error;
   }
+}
+
+export async function updateComment(postId: string, commentId: string, content: string) {
+  const u = auth.currentUser;
+  if (!u) throw new Error('Authentication required.');
+  const postRef = await resolvePostLocation(postId);
+  if (!postRef) throw new Error('Post no longer exists.');
+  const ref = doc(postRef, 'comments', commentId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) throw new Error('Comment not found.');
+  if (snap.data()?.authorId !== u.uid && !checkIsAdmin(u.email) && !(await isPlatformModerator(u.uid))) throw new Error('You can only edit your own reply.');
+  const clean = String(content || '').trim();
+  if (!clean || clean.length > 5000) throw new Error('Reply must contain 1–5000 characters.');
+  await updateDoc(ref, { content: clean, mentionedUsernames: extractMentions(clean), editedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  const confirmed = await getDoc(ref);
+  if (!confirmed.exists()) throw new Error('Reply edit was not confirmed in Firebase.');
+  return { ...confirmed.data(), id: confirmed.id, createdAt: mapDocDates(confirmed.data()).createdAt, updatedAt: mapDocDates(confirmed.data()).updatedAt } as CommunityComment;
+}
+
+export async function toggleCommentReaction(postId: string, commentId: string): Promise<boolean> {
+  const u = auth.currentUser; if (!u) throw new Error('Authentication required.');
+  const postRef = await resolvePostLocation(postId); if (!postRef) throw new Error('Post no longer exists.');
+  const commentRef = doc(postRef, 'comments', commentId);
+  const reactionRef = doc(commentRef, 'reactions', u.uid);
+  return runTransaction(db, async tx => {
+    const commentSnap = await tx.get(commentRef); const reactionSnap = await tx.get(reactionRef);
+    if (!commentSnap.exists()) throw new Error('Reply not found.');
+    const active = !reactionSnap.exists(); const n = Math.max(0, Number(commentSnap.data()?.likeCount || 0) + (active ? 1 : -1));
+    if (active) tx.set(reactionRef, { userId: u.uid, createdAt: serverTimestamp() }); else tx.delete(reactionRef);
+    tx.update(commentRef, { likeCount: n, updatedAt: serverTimestamp() });
+    return active;
+  });
+}
+
+export async function isFollowingPost(postId: string, userId?: string): Promise<boolean> {
+  if (!userId) return false;
+  const ref = doc(db, 'posts', postId, 'followers', userId);
+  try { return (await getDoc(ref)).exists(); } catch { return false; }
+}
+export async function followPost(postId: string, userId: string): Promise<boolean> {
+  const u = auth.currentUser; if (!u || u.uid !== userId) throw new Error('Authentication required.');
+  const ref = doc(db, 'posts', postId, 'followers', userId); const p = await getPost(postId); if (!p) throw new Error('Discussion no longer exists.');
+  if ((await getDoc(ref)).exists()) return false;
+  await setDoc(ref, { userId, username: u.displayName ? (await getCommunityProfile(userId))?.username || '' : '', createdAt: serverTimestamp() });
+  try { await createNotification(p.authorId, { type: 'follow', actorId: userId, actorUsername: (await getCommunityProfile(userId))?.username || '', actorName: u.displayName || 'User', actorAvatar: u.photoURL || '', message: 'followed your discussion', targetType: 'post', targetId: postId }); } catch {}
+  return true;
+}
+export async function unfollowPost(postId: string, userId: string): Promise<boolean> {
+  const u = auth.currentUser; if (!u || u.uid !== userId) throw new Error('Authentication required.');
+  const ref = doc(db, 'posts', postId, 'followers', userId); if (!(await getDoc(ref)).exists()) return false; await deleteDoc(ref); return true;
+}
+export async function markPostDiscussionRead(postId: string, userId?: string, commentId?: string) {
+  if (!userId || auth.currentUser?.uid !== userId) return;
+  await setDoc(doc(db, 'users', userId, 'discussionRead', postId), { postId, lastReadReplyId: commentId || '', readAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+}
+export async function getPostDiscussionReadState(postId: string, userId?: string): Promise<{lastReadReplyId?: string; readAt?: string} | null> {
+  if (!userId) return null; const s = await getDoc(doc(db, 'users', userId, 'discussionRead', postId)); if (!s.exists()) return null; return { lastReadReplyId: s.data()?.lastReadReplyId, readAt: mapDocDates(s.data()).readAt };
 }
 
 export async function deleteComment(postId: string, commentId: string) {

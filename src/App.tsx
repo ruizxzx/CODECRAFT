@@ -441,12 +441,14 @@ export default function App() {
       const seriesMatch = pathname.match(/^\/series\/([^/]+)(?:\/part-(\d+))?$/);
       const profileMatch = pathname.match(/^\/@([^/]+)$/);
       const postMatch = pathname.match(/^\/post\/([^/]+)$/);
+      const discussionMatch = pathname.match(/^\/discussion\/([^/]+)$/);
       const questionMatch = pathname.match(/^\/question\/([^/]+)$/);
       const topicMatch = pathname.match(/^\/topic\/([^/]+)$/);
       if(pathMatch){setActiveArticleSlug(decodeURIComponent(pathMatch[1]));setCurrentPage('article');return;}
       if(seriesMatch){setActiveArticleSlug(decodeURIComponent(seriesMatch[1]));setCurrentPage('series');return;}
       if(profileMatch){setActiveArticleSlug(decodeURIComponent(profileMatch[1]));setCurrentPage('community_profile');return;}
       if(postMatch){setActiveArticleSlug(decodeURIComponent(postMatch[1]));setCurrentPage('community_post');return;}
+      if(discussionMatch){setActiveArticleSlug(decodeURIComponent(discussionMatch[1]));setCurrentPage('community_post');return;}
       if(questionMatch){setActiveArticleSlug(decodeURIComponent(questionMatch[1]));setCurrentPage('question');return;}
       if(topicMatch){setActiveArticleSlug(decodeURIComponent(topicMatch[1]));setCurrentPage('topic');return;}
       const hash = window.location.hash.replace('#', '');
@@ -842,6 +844,7 @@ export default function App() {
                   onOpenSeries={(seriesId) => navigateTo('series', seriesId)}
                   onViewAllSeries={() => navigateTo('series')}
                   onOpenAuthorProfile={(username) => navigateTo('community_profile', username)}
+                  onOpenDiscussion={(id) => navigateTo('community_post', id)}
                   isSaved={savedSlugs.includes(activeArticle.slug)}
                   onToggleSave={handleToggleSave}
                   isQueued={readingQueueIds.includes(activeArticle.slug)}

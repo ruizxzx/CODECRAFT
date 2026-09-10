@@ -14,6 +14,8 @@ import { formatDisplayDate } from '../lib/dateUtils';
 import { CommunityPostExtras } from './CommunityPostExtras';
 import { RichText } from './RichText';
 import { MentionTextarea } from './MentionAutocomplete';
+import { DiscussionPanel } from './DiscussionPanel';
+import { DiscussionComposer, DiscussionComposerMode } from './DiscussionComposer';
 
 interface CommunityPostViewProps {
   postId: string;
@@ -46,6 +48,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   const [isQuoteOpen, setIsQuoteOpen] = useState(false);
   const [quoteText, setQuoteText] = useState('');
   const [mainArticleStatus, setMainArticleStatus] = useState<'published'|'unpublished'|null>(null);
+  const [discussionComposer, setDiscussionComposer] = useState<{mode: DiscussionComposerMode; selectedText?: string} | null>(null);
   
   const [commentInput, setCommentInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -420,7 +423,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
             </button>
           </div>
           <button onClick={handleToggleRepost} disabled={isReposting} className={`px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 sm:gap-2 shrink-0 ${isReposted ? 'bg-[var(--color-primary)] shadow-[3px_3px_0_#000]' : 'bg-white hover:bg-[var(--color-primary)]'}`}><Repeat2 className="w-4 h-4" />{isReposted ? 'REPOSTED' : 'REPOST'} ({post.repostsCount || 0})</button>
-          <button onClick={() => setIsQuoteOpen(true)} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100"><Repeat2 className="w-4 h-4" />QUOTE</button>
+          <button onClick={() => setDiscussionComposer({mode:'quote'})} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100"><Repeat2 className="w-4 h-4" />QUOTE</button>
           <ShareMenu target={{type:'post',slug:(post as any)?.slug || postId}} title={(post as any)?.title || 'OFFSCRPT post'} />
           <ReportButton targetType="post" targetId={postId} />
 
@@ -448,68 +451,13 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
         </div>
       </div>
 
-      <div className="mt-12 bg-white border-4 border-black neo-shadow p-6 sm:p-10">
-        <h3 className="font-display font-black text-2xl uppercase mb-6">Discussion</h3>
-        
-        {!profile ? (
-          <div className="bg-neutral-100 p-6 border-2 border-black text-center mb-8">
-            <p className="font-mono text-sm mb-4">Join the community to participate in this discussion.</p>
-            <button 
-              onClick={() => loginWithGoogle()}
-              className="px-6 py-2 bg-black text-white font-display font-bold uppercase text-xs"
-            >
-              Log in to Comment
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmitComment} className="mb-8 space-y-4">
-            <textarea 
-              value={commentInput}
-              onChange={(e) => setCommentInput(e.target.value)}
-              placeholder="Add to the discussion... (use @handle to mention someone)"
-              className="w-full px-4 py-3 border-2 border-black font-sans text-sm min-h-[100px] focus:outline-none focus:bg-neutral-50"
-              required
-            />
-            <button 
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2 bg-[var(--color-secondary)] border-2 border-black font-display font-black text-sm uppercase neo-shadow-sm hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none transition-all disabled:opacity-50"
-            >
-              {isSubmitting ? 'Posting...' : 'Post Comment'}
-            </button>
-          </form>
-        )}
+      <DiscussionPanel
+        post={post}
+        user={profile}
+        onNavigate={onNavigate}
+        onQuote={(target, selectedText) => setDiscussionComposer({ mode: selectedText ? 'quote' : 'quote', selectedText })}
+      />
 
-        <div className="space-y-6">
-          {comments.map(c => (
-            <div key={c.id} className="pb-6 border-b-2 border-neutral-100 last:border-0 last:pb-0">
-              <div className="flex items-center space-x-3 mb-2">
-                <button onClick={() => onNavigate('community_profile', c.authorUsername)}>
-                  {c.authorAvatar ? (
-                    <img src={c.authorAvatar} alt="" className="w-8 h-8 rounded-full border border-black" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-neutral-200 border border-black" />
-                  )}
-                </button>
-                <div className="font-mono text-xs">
-                  <button onClick={() => onNavigate('community_profile', c.authorUsername)} className="font-bold hover:underline text-black">
-                    <span className="inline-flex items-center gap-1">{c.authorName || `@${c.authorUsername}`} {((c as any).platformRole === 'master_admin' || (c as any).platformRole === 'moderator') && <span className="px-1 border border-black bg-[var(--color-primary)] font-mono text-[9px] font-black">{(c as any).platformRole === 'master_admin' ? 'MASTER' : 'MOD'}</span>}<VerifiedBadge verified={c.isVerified} color={c.verificationColor} className="w-3.5 h-3.5" /></span>
-                  </button>
-                  <span className="text-neutral-500 ml-2">{formatDisplayDate(c.createdAt)}</span>
-                </div>
-                {(isAdmin || (userAuth && userAuth.uid === c.authorId)) && (
-                  <button onClick={() => handleDeleteComment(c.id, c.authorId)} className="ml-auto text-red-500 hover:text-red-700" title="Delete comment">
-                    <Trash className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-              <div className="font-sans text-sm text-neutral-800 whitespace-pre-wrap ml-11">
-                {renderTextWithMentions(c.content)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
       {isEditing && (
         <div className="fixed inset-0 z-[80] bg-black/70 flex items-center justify-center p-4">
           <div className="w-full max-w-2xl bg-white border-4 border-black neo-shadow-lg p-6">
@@ -520,16 +468,14 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
           </div>
         </div>
       )}
-      {isQuoteOpen && (
-        <div className="fixed inset-0 z-[80] bg-black/70 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-white border-4 border-black neo-shadow-lg p-6">
-            <div className="flex justify-between items-center mb-5"><h3 className="font-display font-black text-xl uppercase">Quote Repost</h3><button onClick={() => setIsQuoteOpen(false)}><X /></button></div>
-            <textarea value={quoteText} onChange={e => setQuoteText(e.target.value)} placeholder="Add your take..." className="w-full border-2 border-black p-3 min-h-[150px]" maxLength={2000}/>
-            <div className="mt-3 border-2 border-neutral-300 p-3 text-sm"><b>{post.title}</b><div className="text-neutral-600 mt-1 line-clamp-3">{String(post.content || '')}</div></div>
-            <button disabled={!quoteText.trim()} onClick={handleQuoteRepost} className="mt-4 px-5 py-3 bg-[var(--color-secondary)] border-2 border-black font-black uppercase disabled:opacity-50">Publish Quote</button>
-          </div>
-        </div>
-      )}
+      {discussionComposer && <DiscussionComposer
+        user={profile}
+        mode={discussionComposer.mode}
+        original={post}
+        initialSelectedText={discussionComposer.selectedText || ''}
+        onClose={() => setDiscussionComposer(null)}
+        onCreated={(id) => onNavigate('community_post', id)}
+      />}
     </div>
   );
 };

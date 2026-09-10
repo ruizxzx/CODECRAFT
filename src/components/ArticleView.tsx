@@ -38,6 +38,8 @@ import { upsertArticleAnalyticsSession, recordArticleAnalyticsEvent } from '../l
 import { getSeriesList } from '../lib/series';
 import { calculateArticleReadingTime, getArticleReadingProgress, saveArticleReadingProgress, resetArticleReadingProgress, recordArticleHistory, ArticleEngagementStats, subscribeArticleEngagementStats } from '../lib/reading';
 import { UserIdentity } from './UserIdentity';
+import { DiscussionComposer } from './DiscussionComposer';
+import { getCommunityProfile } from '../lib/community';
 import type { ArticleReaction } from '../lib/cms';
 
 function slugifyHeading(value: string): string {
@@ -79,6 +81,7 @@ interface ArticleViewProps {
   onOpenSeries?: (seriesId: string) => void;
   onViewAllSeries?: () => void;
   onOpenAuthorProfile?: (username: string) => void;
+  onOpenDiscussion?: (id: string) => void;
   isSaved: boolean;
   onToggleSave: (slug: string) => void;
   isQueued?: boolean;
@@ -94,6 +97,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   onOpenSeries,
   onViewAllSeries,
   onOpenAuthorProfile,
+  onOpenDiscussion,
   isSaved,
   onToggleSave,
   isQueued = false,
@@ -131,6 +135,9 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [seriesArticles, setSeriesArticles] = useState<Article[]>([]);
   const [allSeries, setAllSeries] = useState<import('../types').Series[]>([]);
   const [resolvedOriginalAuthor, setResolvedOriginalAuthor] = useState<any>(article.originalAuthor || article.author);
+  const [discussionProfile, setDiscussionProfile] = useState<any>(null);
+  const [discussionComposer, setDiscussionComposer] = useState<{selectedText?: string; initialTitle?: string; initialContent?: string; initialSource?: any} | null>(null);
+  const [selectionQuoteVisible, setSelectionQuoteVisible] = useState(false);
 
   const safeContent = Array.isArray(article.content) ? article.content : [];
   const safeTags = Array.isArray(article.tags) ? article.tags : [];
@@ -143,6 +150,25 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   useEffect(() => { activeTocIdRef.current = activeTocId; }, [activeTocId]);
   const [tocOpen, setTocOpen] = useState(true);
   const [copiedTocId, setCopiedTocId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (user) void getCommunityProfile(user.uid).then(p => { if (active) setDiscussionProfile(p); }).catch(() => setDiscussionProfile(null));
+    else setDiscussionProfile(null);
+    return () => { active = false; };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    const handler = () => {
+      const sel = window.getSelection();
+      const root = articleContentRef.current;
+      if (!sel || !root || !sel.rangeCount || !sel.toString().trim()) { setSelectionQuoteVisible(false); return; }
+      const range = sel.getRangeAt(0);
+      if (root.contains(range.commonAncestorContainer)) setSelectionQuoteVisible(sel.toString().trim().length >= 8); else setSelectionQuoteVisible(false);
+    };
+    document.addEventListener('selectionchange', handler);
+    return () => document.removeEventListener('selectionchange', handler);
+  }, []);
 
   useEffect(() => {
     void recordArticleView(article.slug, user?.uid);
@@ -757,6 +783,14 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           )}
         </div>
 
+        <section className="mb-8 border-4 border-black bg-[var(--color-primary)] p-4 sm:p-5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><div className="font-mono text-[9px] font-black uppercase">DISCUSSION LAYER</div><h3 className="font-display font-black text-2xl uppercase">Talk about this dispatch</h3><p className="font-mono text-[10px] mt-1">Start a public conversation or select a passage below to quote it.</p></div>
+            {discussionProfile && <button type="button" onClick={() => setDiscussionComposer({ initialTitle: `Discussion: ${article.title}`, initialSource: { sourceType:'article', sourceId:article.slug, sourceTitle:article.title, sourceUrl:window.location.origin+`/article/${encodeURIComponent(article.slug)}`, sourceAuthorId:article.author?.uid, sourceAuthorUsername:article.author?.username, sourceAuthorName:article.author?.name } })} className="border-2 border-black bg-white px-4 py-3 font-mono text-xs font-black uppercase shadow-[3px_3px_0_#000]">START A DISCUSSION</button>}
+          </div>
+          {selectionQuoteVisible && discussionProfile && <button type="button" onClick={() => { const text = window.getSelection()?.toString().trim() || ''; setDiscussionComposer({ selectedText:text, initialTitle:`Discussion: ${article.title}`, initialSource:{ sourceType:'article', sourceId:article.slug, sourceTitle:article.title, sourceUrl:window.location.origin+`/article/${encodeURIComponent(article.slug)}`, sourceAuthorId:article.author?.uid, sourceAuthorUsername:article.author?.username, sourceAuthorName:article.author?.name, selectedText:text } }); setSelectionQuoteVisible(false); }} className="border-2 border-black bg-black text-white px-4 py-2 font-mono text-[10px] font-black uppercase">QUOTE SELECTED TEXT → DISCUSSION</button>}
+        </section>
+
         {/* Article Body - Rich Medium/Editorial Typography */}
         <div ref={articleContentRef} className={`space-y-7 ${fontSize === 'large' ? 'text-xl leading-relaxed' : 'text-lg leading-relaxed'} font-serif text-neutral-900`}>
           {safeContent.map((block, index) => {
@@ -1077,6 +1111,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
 
         {/* Comments Section */}
         <CommentsSection articleSlug={article.slug} authorId={article.author?.uid} onOpenProfile={onOpenAuthorProfile} />
+
+        {discussionComposer && discussionProfile && <DiscussionComposer user={discussionProfile} mode="discussion" initialSelectedText={discussionComposer.selectedText || ''} initialTitle={discussionComposer.initialTitle || `Discussion: ${article.title}`} initialContent={discussionComposer.initialContent || ''} initialSource={discussionComposer.initialSource} onClose={() => setDiscussionComposer(null)} onCreated={(id) => { setDiscussionComposer(null); onOpenDiscussion?.(id); }} />}
 
         {/* Related Posts Section */}
         {relatedArticles.length > 0 && (
