@@ -355,3 +355,8 @@ Removed a duplicate `getQuestionForModeration` export from the Questions + Answe
 - Fixed public answer creation by safely allowing atomic answer-count/reply-count updates using Firestore getAfter validation.
 - Improved question answer media layout and replaced raw uploaded URLs in the composer with visual previews and remove controls.
 - Preserved new-visitor light theme behavior.
+
+
+## V77.0.5
+
+Question-page runtime hardening: fixed React hook ordering for the QuestionView and retained guest-first-visit light theme behavior.
