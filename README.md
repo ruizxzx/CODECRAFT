@@ -329,3 +329,12 @@ The home experience now includes a unified discovery feed, algorithmic/chronolog
 - Fixed home-page temporal-dead-zone crash (`Cannot access 'Ce' before initialization`).
 - Reordered derived feed values so memoized sections never reference `displayedArticles` before initialization.
 - No existing features removed.
+
+
+## V77 — Questions + Answers Engine
+
+V77 adds first-class Questions with deep-link pages, follow/notifications, answer voting, accepted answers, rich answer media, search, related questions, anonymous presentation and Master moderation while retaining the full V76 feed/discovery and existing R2 media stack.
+
+
+## V77 — Questions + Answers
+V77 upgrades the existing discussion/question foundation into a first-class Q&A layer without removing prior V76 functionality.

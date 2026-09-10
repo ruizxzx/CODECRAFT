@@ -43,6 +43,7 @@ import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
 import { SystemHealthView } from './components/SystemHealthView';
 import { ChangelogView } from './components/ChangelogView';
+import { QuestionView } from './components/QuestionView';
 import { SiteAnnouncementPopup } from './components/SiteAnnouncementPopup';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
@@ -434,11 +435,13 @@ export default function App() {
       const seriesMatch = pathname.match(/^\/series\/([^/]+)(?:\/part-(\d+))?$/);
       const profileMatch = pathname.match(/^\/@([^/]+)$/);
       const postMatch = pathname.match(/^\/post\/([^/]+)$/);
+      const questionMatch = pathname.match(/^\/question\/([^/]+)$/);
       const topicMatch = pathname.match(/^\/topic\/([^/]+)$/);
       if(pathMatch){setActiveArticleSlug(decodeURIComponent(pathMatch[1]));setCurrentPage('article');return;}
       if(seriesMatch){setActiveArticleSlug(decodeURIComponent(seriesMatch[1]));setCurrentPage('series');return;}
       if(profileMatch){setActiveArticleSlug(decodeURIComponent(profileMatch[1]));setCurrentPage('community_profile');return;}
       if(postMatch){setActiveArticleSlug(decodeURIComponent(postMatch[1]));setCurrentPage('community_post');return;}
+      if(questionMatch){setActiveArticleSlug(decodeURIComponent(questionMatch[1]));setCurrentPage('question');return;}
       if(topicMatch){setActiveArticleSlug(decodeURIComponent(topicMatch[1]));setCurrentPage('topic');return;}
       const hash = window.location.hash.replace('#', '');
       if (!hash || hash === 'home') {
@@ -502,6 +505,9 @@ export default function App() {
       } else if (hash === 'social' || hash === 'community' || hash === 'community/new') {
         setCurrentPage('social');
         setActiveArticleSlug(hash === 'community/new' ? 'new' : null);
+      } else if (hash.startsWith('question/')) {
+        setActiveArticleSlug(hash.replace('question/', ''));
+        setCurrentPage('question');
       } else if (hash.startsWith('community/post/')) {
         const id = hash.replace('community/post/', '');
         setActiveArticleSlug(id); // reusing activeArticleSlug state to hold param
@@ -534,6 +540,10 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('article');
       window.location.hash = `article/${param}`;
+    } else if (page === 'question' && param) {
+      setActiveArticleSlug(param);
+      setCurrentPage('question');
+      window.location.hash = `question/${param}`;
     } else if (page === 'community_post' && param) {
       setActiveArticleSlug(param);
       setCurrentPage('community_post');
@@ -879,6 +889,9 @@ export default function App() {
 
             {currentPage === 'social' && (
               <SocialHubView userProfile={userProfile} onNavigate={navigateTo} siteConfig={siteConfig} />
+            )}
+            {currentPage === 'question' && activeArticleSlug && (
+              <QuestionView questionId={activeArticleSlug} userProfile={userProfile} onNavigate={navigateTo} />
             )}
             {currentPage === 'creators' && (
               <CreatorDiscoveryView articles={articles} onNavigate={navigateTo} />

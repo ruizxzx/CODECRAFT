@@ -5,7 +5,7 @@ import { ImageCropperModal } from './ImageCropperModal';
 import type { CropAspectPreset, CropShape, ImageCropResult } from './ImageCropperModal';
 
 interface MediaUploadButtonProps {
-  folder: 'profile' | 'articles' | 'posts' | 'videos' | 'attachments' | 'carousel' | 'users' | 'site';
+  folder: 'profile' | 'articles' | 'posts' | 'videos' | 'attachments' | 'answers' | 'carousel' | 'users' | 'site';
   accept: string;
   label?: string;
   onUploaded: (url: string, meta: { objectKey: string; kind: 'image' | 'video' | 'file'; contentType: string; size: number; width?: number; height?: number; originalFileName?: string }) => void;

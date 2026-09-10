@@ -1,3 +1,5 @@
-# OFFSCRPT V76.0.1
+# OFFSCRPT V77
 
-Social Feed + Discovery Engine: unified adaptive home feed, feed modes, cloud-synced recommendation controls, improved recommendation scoring, cold-start personalization, dynamic discovery sections, and bounded discussion/community discovery.
+## Questions + Answers Engine
+
+First-class Questions and Answers with rich answer media, voting, accepted answers, follows, related questions, search and moderation.
