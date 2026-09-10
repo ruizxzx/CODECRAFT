@@ -13,8 +13,14 @@ export function inferToastKind(message: string): ToastKind {
   return 'info';
 }
 
+let lastToastKey = '';
+let lastToastAt = 0;
 export function notifyToast(message: string, kind: ToastKind = inferToastKind(message), duration = 3200) {
   if (typeof window === 'undefined') return;
+  const key = `${kind}:${String(message || '').trim()}`;
+  const now = Date.now();
+  if (key === lastToastKey && now - lastToastAt < 1800) return;
+  lastToastKey = key; lastToastAt = now;
   window.dispatchEvent(new CustomEvent('offscrpt:toast', { detail: { message, kind, duration } satisfies ToastPayload }));
 }
 

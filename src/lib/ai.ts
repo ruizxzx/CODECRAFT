@@ -23,8 +23,16 @@ export async function requestAI<T=any>(task:AITask,input:AIContentInput,options:
   const key=localCacheKey(task,input,options); const cached=readCache<T>(key); if(cached!==null)return cached;
   const user=auth.currentUser; if(!user) throw new Error('Sign in to use OFFSCRPT AI.');
   const token=await user.getIdToken();
-  const response=await fetch('/api/ai/gateway',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({task,input,options})});
-  const data=await response.json().catch(()=>({})); if(!response.ok) throw new Error(String(data?.error||'AI request failed.'));
+  const body=JSON.stringify({task,input,options});
+  let response:Response; let data:any={};
+  for(let attempt=0;attempt<2;attempt++){
+    response=await fetch('/api/ai/gateway',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body});
+    data=await response.json().catch(()=>({}));
+    if(response.ok) break;
+    if(data?.code!=='GEMINI_BUSY' || attempt===1) throw new Error(String(data?.error||'AI request failed.'));
+    const retryAfter=Number(response.headers.get('retry-after')||3);
+    await new Promise<void>(resolve=>setTimeout(resolve,Math.min(5000,Math.max(1000,retryAfter*1000))));
+  }
   writeCache(key,data,task==='ask'?6*60*60*1000:7*24*60*60*1000); return data as T;
 }
 

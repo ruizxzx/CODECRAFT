@@ -54,52 +54,83 @@ async function verify(token:string){
   if(!r.ok)throw new Error('INVALID_FIREBASE_TOKEN');
   const d=await r.json() as any; const u=d.users?.[0]; if(!u?.localId)throw new Error('INVALID_FIREBASE_TOKEN'); if(u.disabled)throw new Error('ACCOUNT_DISABLED'); return String(u.localId);
 }
-async function listModels(key:string){
-  if(modelCache.expiresAt>Date.now() && modelCache.names.size)return modelCache.names;
-  const r=await fetch(`${GEMINI_BASE}/models?pageSize=1000`,{headers:{'x-goog-api-key':key}});
-  const raw=await r.text();
-  if(!r.ok) throw geminiHttpError(r.status,raw,'model-list');
-  const data=JSON.parse(raw); const names=new Set<string>();
-  for(const m of Array.isArray(data.models)?data.models:[]){
-    const name=String(m?.name||'').replace(/^models\//,'');
-    const methods=Array.isArray(m?.supportedGenerationMethods)?m.supportedGenerationMethods:[];
-    if(name && methods.includes('generateContent')) names.add(name);
-  }
-  modelCache.expiresAt=Date.now()+10*60*1000; modelCache.names=names; return names;
+const sleep=(ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms));
+const MAX_RETRIES_PER_MODEL=Math.min(3,Math.max(0,Number(process.env.GEMINI_MAX_RETRIES||2)));
+const RETRY_BASE_MS=Math.min(2500,Math.max(250,Number(process.env.GEMINI_RETRY_BASE_MS||700)));
+const MAX_RETRY_DELAY_MS=Math.min(6000,Math.max(RETRY_BASE_MS,Number(process.env.GEMINI_MAX_RETRY_DELAY_MS||4500)));
+function retryableStatus(status:number,detail=''){
+  if(status===408)return true;
+  if(status>=500 && status<=599)return true;
+  if(status===429 && !/quota|daily/i.test(detail))return true;
+  return false;
 }
-function selectAvailableModel(requested:string,available:Set<string>){
-  if(available.has(requested))return requested;
-  const candidates=[requested,'gemini-3.7-flash','gemini-3.5-flash','gemini-3.1-flash-lite','gemini-2.5-flash','gemini-2.5-flash-lite'];
-  return candidates.find(x=>available.has(x)) || [...available].find(x=>/flash/i.test(x)) || [...available][0];
+function retryDelay(headers:Headers,attempt:number){
+  const retryAfter=headers.get('retry-after');
+  const parsed=retryAfter?Number(retryAfter):NaN;
+  if(Number.isFinite(parsed)&&parsed>=0) return Math.min(MAX_RETRY_DELAY_MS,parsed*1000);
+  const exponential=Math.min(MAX_RETRY_DELAY_MS,RETRY_BASE_MS*Math.pow(2,attempt));
+  return Math.min(MAX_RETRY_DELAY_MS,exponential+Math.floor(Math.random()*350));
 }
 function geminiHttpError(status:number,body:string,stage:string){
   let detail=''; try { const p=JSON.parse(body); detail=String(p?.error?.message||p?.error?.status||''); } catch { detail=body.slice(0,240); }
-  const e=new Error(`GEMINI_HTTP_${status}:${stage}:${detail}`); (e as any).status=status; return e;
+  const e=new Error(`GEMINI_HTTP_${status}:${stage}:${detail}`); (e as any).status=status; (e as any).detail=detail; return e;
+}
+async function listModels(key:string){
+  if(modelCache.expiresAt>Date.now() && modelCache.names.size)return modelCache.names;
+  let lastError:any;
+  for(let attempt=0;attempt<=MAX_RETRIES_PER_MODEL;attempt++){
+    const r=await fetch(`${GEMINI_BASE}/models?pageSize=1000`,{headers:{'x-goog-api-key':key}});
+    const raw=await r.text();
+    if(r.ok){
+      const data=JSON.parse(raw); const names=new Set<string>();
+      for(const m of Array.isArray(data.models)?data.models:[]){
+        const name=String(m?.name||'').replace(/^models\//,'');
+        const methods=Array.isArray(m?.supportedGenerationMethods)?m.supportedGenerationMethods:[];
+        if(name && methods.includes('generateContent')) names.add(name);
+      }
+      modelCache.expiresAt=Date.now()+10*60*1000; modelCache.names=names; return names;
+    }
+    const err=geminiHttpError(r.status,raw,'model-list'); lastError=err;
+    if(!retryableStatus(r.status,(err as any).detail)||attempt>=MAX_RETRIES_PER_MODEL) throw err;
+    await sleep(retryDelay(r.headers,attempt));
+  }
+  throw lastError || new Error('GEMINI_MODEL_LIST_FAILED');
+}
+function selectAvailableModel(requested:string,available:Set<string>){
+  if(available.has(requested))return requested;
+  const candidates=[requested,'gemini-3.7-flash','gemini-3.6-flash','gemini-3.5-flash','gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-2.5-flash','gemini-2.5-flash-lite'];
+  return candidates.find(x=>available.has(x)) || [...available].find(x=>/flash/i.test(x)) || [...available][0];
+}
+async function generateModelRequest(key:string,model:string,prompt:string){
+  const endpoint=`${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`;
+  const payload={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.2,responseMimeType:'application/json'}};
+  let lastError:any;
+  for(let attempt=0;attempt<=MAX_RETRIES_PER_MODEL;attempt++){
+    const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(payload)});
+    const raw=await r.text();
+    if(r.ok)return {model,text:extractText(JSON.parse(raw))};
+    const err=geminiHttpError(r.status,raw,'generate'); lastError=err;
+    if(!retryableStatus(r.status,(err as any).detail)||attempt>=MAX_RETRIES_PER_MODEL)throw err;
+    await sleep(retryDelay(r.headers,attempt));
+  }
+  throw lastError || new Error('GEMINI_GENERATION_FAILED');
 }
 async function generateWithGemini(key:string,model:string,prompt:string){
   const available=await listModels(key);
-  const chosen=selectAvailableModel(model,available);
-  if(!chosen) throw new Error('NO_GEMINI_GENERATE_MODEL');
-  const endpoint=`${GEMINI_BASE}/models/${encodeURIComponent(chosen)}:generateContent`;
-  const payload={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.2,responseMimeType:'application/json'}};
-  const r=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(payload)});
-  const raw=await r.text();
-  if(!r.ok){
-    // A model may be listed but not yet callable for this project. Refresh once and retry with another available flash model.
-    if(r.status===404 || r.status===400){
-      modelCache.expiresAt=0;
-      const refreshed=await listModels(key);
-      const alt=selectAvailableModel('gemini-3.7-flash',refreshed);
-      if(alt && alt!==chosen){
-        const rr=await fetch(`${GEMINI_BASE}/models/${encodeURIComponent(alt)}:generateContent`,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},body:JSON.stringify(payload)});
-        const raw2=await rr.text();
-        if(rr.ok) return {model:alt,text:extractText(JSON.parse(raw2))};
-        throw geminiHttpError(rr.status,raw2,'generate-retry');
-      }
+  const preferred=String(process.env.GEMINI_FALLBACK_MODELS||'gemini-3.6-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite,gemini-2.5-flash-lite').split(',').map(x=>x.trim()).filter(Boolean);
+  const pool=[selectAvailableModel(model,available),...preferred.filter(x=>available.has(x)),...['gemini-3.7-flash','gemini-3.6-flash','gemini-3.5-flash','gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-2.5-flash','gemini-2.5-flash-lite'].filter(x=>available.has(x))].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).slice(0,3) as string[];
+  let lastError:any;
+  for(const candidate of pool){
+    try { return await generateModelRequest(key,candidate,prompt); }
+    catch(error:any){
+      lastError=error;
+      const status=Number(error?.status||0);
+      const detail=String(error?.detail||error?.message||'');
+      // Permanent/auth/model/schema errors should surface immediately; transient capacity errors can move to the next model.
+      if(!retryableStatus(status,detail)) throw error;
     }
-    throw geminiHttpError(r.status,raw,'generate');
   }
-  return {model:chosen,text:extractText(JSON.parse(raw))};
+  throw lastError || new Error('NO_GEMINI_GENERATE_MODEL');
 }
 function extractText(data:any){
   const parts=data?.candidates?.[0]?.content?.parts;
@@ -130,6 +161,7 @@ export default async function handler(req:any,res:any){
   if(status===429||/RESOURCE_EXHAUSTED|quota/i.test(msg)) return res.status(429).json({error:'Gemini rate or quota limit reached. Try again later.',code:'GEMINI_QUOTA'});
   if(status===404||/NOT_FOUND/i.test(msg)) return res.status(502).json({error:'No compatible Gemini model is available for this project.',code:'GEMINI_MODEL'});
   if(msg==='GEMINI_INVALID_JSON') return res.status(502).json({error:'Gemini returned an invalid structured response. Please retry.',code:'GEMINI_RESPONSE'});
+  if(status===408||status===500||status===502||status===503||status===504||/GEMINI_HTTP_5\d\d/.test(msg)){ res.setHeader('Retry-After','3'); return res.status(503).json({error:'Gemini is temporarily busy. OFFSCRPT retried available models; please retry in a moment.',code:'GEMINI_BUSY'}); }
   return res.status(500).json({error:'AI gateway failed. Check the Vercel function log for the upstream Gemini error.',code:'AI_GATEWAY'});
  }
 }

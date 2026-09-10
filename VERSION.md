@@ -1,3 +1,1 @@
-# OFFSCRPT VERSION
-
-**V79.1.0 — Gemini AI Gateway Reliability Fix**
+V79.1.1 — AI TRANSIENT-FAILURE HARDENING
