@@ -349,3 +349,9 @@ Removed a duplicate `getQuestionForModeration` export from the Questions + Answe
 - Explicit local theme preference remains respected.
 - Signed-in theme remains cloud-synced.
 - Dynamic manifest routes use absolute origin URLs.
+
+
+## V77.0.4 — Question Answer Runtime/Permissions Fix
+- Fixed public answer creation by safely allowing atomic answer-count/reply-count updates using Firestore getAfter validation.
+- Improved question answer media layout and replaced raw uploaded URLs in the composer with visual previews and remove controls.
+- Preserved new-visitor light theme behavior.

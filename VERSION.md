@@ -1,4 +1,4 @@
-# OFFSCRPT V77.0.3
+# OFFSCRPT V77.0.4
 
 ## Theme + Runtime Hardening
 

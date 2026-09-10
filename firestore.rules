@@ -446,6 +446,24 @@ service cloud.firestore {
         && incoming().isAnonymous is bool
         && incoming().topics.size() <= 10;
       allow update: if isStaff();
+      // Answer creation/deletion counter update: authenticated author of the atomic answer write.
+      allow update: if isSignedIn()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['answersCount','lastAnswerId','lastDeletedAnswerId','updatedAt'])
+        && (
+          (
+            incoming().get('answersCount',0) == existing().get('answersCount',0) + 1
+            && incoming().get('lastAnswerId','') != ''
+            && getAfter(/databases/$(database)/documents/questions/$(questionId)/answers/$(incoming().get('lastAnswerId',''))).data.authorId == request.auth.uid
+            && getAfter(/databases/$(database)/documents/questions/$(questionId)/answers/$(incoming().get('lastAnswerId',''))).data.questionId == questionId
+          )
+          ||
+          (
+            incoming().get('answersCount',0) == existing().get('answersCount',0) - 1
+            && incoming().get('lastDeletedAnswerId','') != ''
+            && get(/databases/$(database)/documents/questions/$(questionId)/answers/$(incoming().get('lastDeletedAnswerId',''))).data.authorId == request.auth.uid
+            && !existsAfter(/databases/$(database)/documents/questions/$(questionId)/answers/$(incoming().get('lastDeletedAnswerId','')))
+          )
+        );
       allow update: if isSignedIn() && request.auth.uid == existing().authorId
         && incoming().diff(existing()).affectedKeys().hasOnly(['title','details','topics','attachments','relatedArticleSlug','relatedCommunityId','updatedAt']);
       allow update: if isSignedIn() && request.auth.uid == existing().authorId
@@ -454,7 +472,28 @@ service cloud.firestore {
       match /answers/{answerId} {
         allow read: if get(/databases/$(database)/documents/questions/$(questionId)).data.get('moderationState','VISIBLE') == 'VISIBLE' || isStaff();
         allow create: if userMayWrite(request.auth.uid) && incoming().authorId == request.auth.uid && validText(incoming().content,100000) && incoming().questionId == questionId && get(/databases/$(database)/documents/questions/$(questionId)).data.get('moderationState','VISIBLE') == 'VISIBLE';
-        allow update: if isStaff() || (isSignedIn() && (request.auth.uid == existing().authorId || request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId) && incoming().diff(existing()).affectedKeys().hasOnly(['content','contentBlocks','mediaUrls','updatedAt']));
+        allow update: if isStaff() || (isSignedIn() && (
+          (request.auth.uid == existing().authorId || request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['content','contentBlocks','mediaUrls','parentAnswerId','updatedAt'])
+        ));
+        // Reply count update paired atomically with creation/deletion of this user's answer.
+        allow update: if isSignedIn()
+          && incoming().diff(existing()).affectedKeys().hasOnly(['repliesCount','lastReplyId','lastDeletedReplyId','updatedAt'])
+          && (
+            (
+              incoming().get('repliesCount',0) == existing().get('repliesCount',0) + 1
+              && incoming().get('lastReplyId','') != ''
+              && getAfter(/databases/$(database)/documents/questions/$(questionId)/answers/$(incoming().get('lastReplyId',''))).data.authorId == request.auth.uid
+              && getAfter(/databases/$(database)/documents/questions/$(questionId)/answers/$(incoming().get('lastReplyId',''))).data.parentAnswerId == answerId
+            )
+            ||
+            (
+              incoming().get('repliesCount',0) == existing().get('repliesCount',0) - 1
+              && incoming().get('lastDeletedReplyId','') != ''
+              && get(/databases/$(database)/documents/questions/$(questionId)/answers/$(incoming().get('lastDeletedReplyId',''))).data.authorId == request.auth.uid
+              && !existsAfter(/databases/$(database)/documents/questions/$(questionId)/answers/$(incoming().get('lastDeletedReplyId','')))
+            )
+          );
         allow update: if isSignedIn() && request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorUsername','authorName','authorAvatar','updatedAt']);
         allow delete: if isStaff() || (isSignedIn() && (request.auth.uid == existing().authorId || request.auth.uid == get(/databases/$(database)/documents/questions/$(questionId)).data.authorId));
         match /votes/{userId} {
