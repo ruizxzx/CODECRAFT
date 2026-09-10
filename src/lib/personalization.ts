@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { collectionGroup } from 'firebase/firestore';
 import { optimizedGetDocs, isFirestoreQuotaError } from './firestoreOptimization';

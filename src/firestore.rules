@@ -425,6 +425,11 @@ service cloud.firestore {
           allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().uid == request.auth.uid && incoming().type in ['up','down'];
           allow delete: if isSignedIn() && (request.auth.uid == userId || isStaff() || isCommunityModerator(communityId));
         }
+        match /followers/{userId} {
+          allow read: if true;
+          allow create: if userMayFollow(request.auth.uid) && request.auth.uid == userId && incoming().userId == userId && incoming().createdAt is timestamp;
+          allow delete: if isSignedIn() && request.auth.uid == userId;
+        }
         match /pollVotes/{userId} {
           allow read: if true;
           allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().uid == request.auth.uid && incoming().optionIndex is number;
@@ -591,6 +596,12 @@ service cloud.firestore {
       allow read: if isAdmin() || (isSignedIn() && resource.data.reporterId == request.auth.uid);
       allow update: if isAdmin();
       allow delete: if isAdmin();
+    }
+
+    // Required for collectionGroup('posts') used by the all-community feed.
+    // Community post documents are public already; this enables the collection-group query.
+    match /{path=**}/posts/{postId} {
+      allow read: if true;
     }
 
     match /admin_notifications/{notificationId} {

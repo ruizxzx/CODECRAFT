@@ -1307,20 +1307,31 @@ export async function toggleCommentReaction(postId: string, commentId: string): 
 
 export async function isFollowingPost(postId: string, userId?: string): Promise<boolean> {
   if (!userId) return false;
-  const ref = doc(db, 'posts', postId, 'followers', userId);
-  try { return (await getDoc(ref)).exists(); } catch { return false; }
+  try {
+    const postRef = await resolvePostLocation(postId);
+    if (!postRef) return false;
+    return (await getDoc(doc(postRef, 'followers', userId))).exists();
+  } catch { return false; }
 }
 export async function followPost(postId: string, userId: string): Promise<boolean> {
   const u = auth.currentUser; if (!u || u.uid !== userId) throw new Error('Authentication required.');
-  const ref = doc(db, 'posts', postId, 'followers', userId); const p = await getPost(postId); if (!p) throw new Error('Discussion no longer exists.');
+  const postRef = await resolvePostLocation(postId);
+  const p = await getPost(postId);
+  if (!postRef || !p) throw new Error('Discussion no longer exists.');
+  const ref = doc(postRef, 'followers', userId);
   if ((await getDoc(ref)).exists()) return false;
-  await setDoc(ref, { userId, username: u.displayName ? (await getCommunityProfile(userId))?.username || '' : '', createdAt: serverTimestamp() });
-  try { await createNotification(p.authorId, { type: 'follow', actorId: userId, actorUsername: (await getCommunityProfile(userId))?.username || '', actorName: u.displayName || 'User', actorAvatar: u.photoURL || '', message: 'followed your discussion', targetType: 'post', targetId: postId }); } catch {}
+  const actor = await getCommunityProfile(userId);
+  await setDoc(ref, { userId, username: actor?.username || '', createdAt: serverTimestamp() });
+  try { await createNotification(p.authorId, { type: 'follow', actorId: userId, actorUsername: actor?.username || '', actorName: u.displayName || 'User', actorAvatar: u.photoURL || '', message: 'followed your discussion', targetType: 'post', targetId: postId }); } catch {}
   return true;
 }
 export async function unfollowPost(postId: string, userId: string): Promise<boolean> {
   const u = auth.currentUser; if (!u || u.uid !== userId) throw new Error('Authentication required.');
-  const ref = doc(db, 'posts', postId, 'followers', userId); if (!(await getDoc(ref)).exists()) return false; await deleteDoc(ref); return true;
+  const postRef = await resolvePostLocation(postId);
+  if (!postRef) return false;
+  const ref = doc(postRef, 'followers', userId);
+  if (!(await getDoc(ref)).exists()) return false;
+  await deleteDoc(ref); return true;
 }
 export async function markPostDiscussionRead(postId: string, userId?: string, commentId?: string) {
   if (!userId || auth.currentUser?.uid !== userId) return;

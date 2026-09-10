@@ -16,6 +16,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db, checkIsAdmin } from './firebase';
+import { optimizedGetDocs, optimizedGetCount } from './firestoreOptimization';
 
 export type EmergencyKey =
   | 'maintenanceMode' | 'readOnlyMode' | 'registrationsEnabled' | 'commentsEnabled'

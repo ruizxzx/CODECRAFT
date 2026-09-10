@@ -9,6 +9,7 @@ import { RichText } from './RichText';
 import { UserIdentity } from './UserIdentity';
 import { ReportButton } from './ReportButton';
 import { MediaUploadButton } from './MediaUploadButton';
+import { MentionTextarea } from './MentionAutocomplete';
 
 interface Props {
   post: CommunityPost;
@@ -63,7 +64,7 @@ export const DiscussionPanel: React.FC<Props> = ({ post, user, onNavigate, onQuo
   useEffect(() => subscribeCommunityComments(post.id, setComments), [post.id]);
   useEffect(() => { let active=true; void isFollowingDiscussion(post.id,user?.uid).then(v=>active&&setFollowing(v)); return()=>{active=false}; },[post.id,user?.uid]);
   useEffect(() => { let active=true; if(!user){setReadId('');return()=>{active=false}} void getDiscussionReadState(post.id,user.uid).then(v=>active&&setReadId(v?.lastReadReplyId||'')); return()=>{active=false}; },[post.id,user?.uid]);
-  useEffect(() => { let active=true; if(!post.threadId){setThreadParts([]);return()=>{active=false}} void getThread(post.threadId).then(v=>active&&setThreadParts(v)).catch(()=>active&&setThreadParts([])); return()=>{active=false}; },[post.threadId,post.id]);
+  useEffect(() => { let active=true; if(!post.threadId){setThreadParts([]);return()=>{active=false}} void getThread(post.threadId, post.communityId).then(v=>active&&setThreadParts(v)).catch(()=>active&&setThreadParts([])); return()=>{active=false}; },[post.threadId,post.id]);
   useEffect(() => { let active=true; void getDiscussionParticipants(comments,post).then(v=>active&&setParticipants(v)); return()=>{active=false}; },[comments,post]);
   useEffect(() => { const raw=new URLSearchParams(window.location.search).get('reply')||''; if(raw){setExpanded(prev=>new Set(prev).add(raw)); setTimeout(()=>document.getElementById(`discussion-reply-${raw}`)?.scrollIntoView({behavior:'smooth',block:'center'}),120); void saveDiscussionReadState(post.id,user?.uid,raw).catch(()=>{});} },[post.id,user?.uid]);
 

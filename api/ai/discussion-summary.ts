@@ -1,12 +1,33 @@
 import { GoogleGenAI } from '@google/genai';
 
+const FIREBASE_API_KEY = process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY || 'AIzaSyC1_eau-5rsMTreEzCNMtns2FGcSa448ug';
+const FIREBASE_LOOKUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_API_KEY)}`;
+
 function text(value: unknown, max: number) { return String(value ?? '').slice(0, max); }
+
+async function verifyFirebaseIdToken(token: string) {
+  const response = await fetch(FIREBASE_LOOKUP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken: token }),
+  });
+  if (!response.ok) throw new Error('INVALID_FIREBASE_TOKEN');
+  const data = await response.json() as { users?: Array<Record<string, unknown>> };
+  const authUser = data.users?.[0];
+  if (!authUser?.localId) throw new Error('INVALID_FIREBASE_TOKEN');
+  return { uid: String(authUser.localId), disabled: Boolean(authUser.disabled) };
+}
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed.' });
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_GEMINI_API_KEY;
   if (!key) return res.status(503).json({ error: 'Discussion AI is not configured.' });
   try {
+    const authorization = String(req.headers.authorization || '');
+    const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+    if (!token) return res.status(401).json({ error: 'Authentication required.' });
+    const verified = await verifyFirebaseIdToken(token);
+    if (verified.disabled) return res.status(403).json({ error: 'Account disabled.' });
     const body = req.body || {};
     const title = text(body.title, 500);
     const content = text(body.content, 12000);

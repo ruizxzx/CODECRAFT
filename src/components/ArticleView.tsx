@@ -39,7 +39,6 @@ import { getSeriesList } from '../lib/series';
 import { calculateArticleReadingTime, getArticleReadingProgress, saveArticleReadingProgress, resetArticleReadingProgress, recordArticleHistory, ArticleEngagementStats, subscribeArticleEngagementStats } from '../lib/reading';
 import { UserIdentity } from './UserIdentity';
 import { DiscussionComposer } from './DiscussionComposer';
-import { getCommunityProfile } from '../lib/community';
 import type { ArticleReaction } from '../lib/cms';
 
 function slugifyHeading(value: string): string {

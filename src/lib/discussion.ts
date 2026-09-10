@@ -57,8 +57,20 @@ export async function createDiscussion(input: {
   if (input.communityId) {
     const { createCommunityPost } = await import('./social');
     const p = await createCommunityPost(input.communityId, input.user, title, content, {
-      postType: 'discussion', mediaUrls: payload.mediaUrls, poll: input.poll, excerpt: content.slice(0, 240),
-      tags, flair: '', linkUrl: '',
+      postType: 'discussion',
+      mediaUrls: payload.mediaUrls,
+      poll: input.poll,
+      excerpt: content.slice(0, 240),
+      tags,
+      flair: '',
+      linkUrl: '',
+      visibility: input.visibility || 'community',
+      discussionStatus: 'active',
+      discussionType: 'discussion',
+      source: input.source || undefined,
+      allowQuotes: true,
+      allowRemixes: true,
+      allowReplies: 'everyone',
     });
     return { ...(p as any), ...(input.source ? { source: input.source } : {}), discussionStatus: 'active', visibility: input.visibility || 'community' } as any;
   }
@@ -140,11 +152,18 @@ export async function createThread(input: { user: CommunityUser; parts: Array<{ 
   return created;
 }
 
-export async function getThread(threadId: string): Promise<DiscussionThreadPart[]> {
+export async function getThread(threadId: string, communityId?: string): Promise<DiscussionThreadPart[]> {
   if (!threadId) return [];
-  const snap = await getDocs(query(collection(db, 'posts'), where('threadId', '==', threadId), limit(60)));
-  return snap.docs.map(d => ({ ...d.data(), id: d.id, createdAt: d.data().createdAt?.toDate?.()?.toISOString?.() || d.data().createdAt || new Date().toISOString(), updatedAt: d.data().updatedAt?.toDate?.()?.toISOString?.() || d.data().updatedAt || new Date().toISOString() } as DiscussionThreadPart))
-    .sort((a,b) => Number(a.threadIndex || 0) - Number(b.threadIndex || 0));
+  const reads = [getDocs(query(collection(db, 'posts'), where('threadId', '==', threadId), limit(60)))];
+  if (communityId) reads.push(getDocs(query(collection(db, 'communities', communityId, 'posts'), where('threadId', '==', threadId), limit(60))));
+  const snapshots = await Promise.all(reads);
+  const merged = new Map<string, DiscussionThreadPart>();
+  snapshots.flatMap(snap => snap.docs).forEach(d => merged.set(d.id, ({
+    ...d.data(), id: d.id,
+    createdAt: d.data().createdAt?.toDate?.()?.toISOString?.() || d.data().createdAt || new Date().toISOString(),
+    updatedAt: d.data().updatedAt?.toDate?.()?.toISOString?.() || d.data().updatedAt || new Date().toISOString(),
+  } as DiscussionThreadPart)));
+  return Array.from(merged.values()).sort((a,b) => Number(a.threadIndex || 0) - Number(b.threadIndex || 0));
 }
 
 export async function getDiscussionReplies(postId: string) { return getComments(postId); }

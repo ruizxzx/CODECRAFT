@@ -1,6 +1,5 @@
-# OFFSCRPT V78.0.0
+# OFFSCRPT V78.0.1
 
-## Discussion 2.0
+## Discussion 2.0 runtime hardening
 
-Unified discussion graph, quote/remix, thread composer, contextual replies, article/question discussion bridges, rich reply composer, realtime discussion state, analytics foundations, moderation-compatible rules, and grounded discussion intelligence.
-
+Fixed DiscussionPanel runtime crash, hardened discussion metadata persistence, community discussion interactions, Firebase public feed aggregation, and Gemini authentication.

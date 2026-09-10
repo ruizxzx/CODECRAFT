@@ -9,7 +9,7 @@ import { recordCommunityPostView, getPost, getComments, subscribeCommunityCommen
 import { auth, loginWithGoogle, checkIsAdmin } from '../lib/firebase';
 import { isPlatformModerator } from '../lib/social';
 import { promoteCommunityBlogToMain, fetchAllArticlesForAdmin, unpublishMainArticle } from '../lib/cms';
-import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2, Share2, Pencil, X } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Sparkles, Loader2, User, Star, ArrowUp, ArrowDown, Bookmark, Trash, Repeat2, Quote, Share2, Pencil, X } from 'lucide-react';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { CommunityPostExtras } from './CommunityPostExtras';
 import { RichText } from './RichText';
@@ -423,7 +423,8 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
             </button>
           </div>
           <button onClick={handleToggleRepost} disabled={isReposting} className={`px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 sm:gap-2 shrink-0 ${isReposted ? 'bg-[var(--color-primary)] shadow-[3px_3px_0_#000]' : 'bg-white hover:bg-[var(--color-primary)]'}`}><Repeat2 className="w-4 h-4" />{isReposted ? 'REPOSTED' : 'REPOST'} ({post.repostsCount || 0})</button>
-          <button onClick={() => setDiscussionComposer({mode:'quote'})} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100"><Repeat2 className="w-4 h-4" />QUOTE</button>
+          <button onClick={() => setDiscussionComposer({mode:'quote'})} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100"><Quote className="w-4 h-4" />QUOTE</button>
+          <button onClick={() => setDiscussionComposer({mode:'remix'})} disabled={(post as any).allowRemixes === false} className="px-2 sm:px-3 py-2 border-2 border-black font-mono text-[10px] sm:text-xs font-black uppercase flex items-center gap-1.5 shrink-0 hover:bg-neutral-100 disabled:opacity-40"><Repeat2 className="w-4 h-4" />REMIX</button>
           <ShareMenu target={{type:'post',slug:(post as any)?.slug || postId}} title={(post as any)?.title || 'OFFSCRPT post'} />
           <ReportButton targetType="post" targetId={postId} />
 
