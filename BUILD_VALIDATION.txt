@@ -1,36 +1,47 @@
-OFFSCRPT V79.0.0 — AI READING & LEARNING
-VALIDATION REPORT
+OFFSCRPT V79.10.0 — USEFUL AI COMPLETE
 
-Source tree: V78.0.8 base + V79 AI layer
+Implemented:
+- OpenRouter centralized AI gateway
+- ASK AI on major content surfaces
+- Site-wide ASK OFFSCRPT AI (all content / current page / my saved)
+- Free-form grounded content Q&A with follow-up conversations
+- Source citations and current-source links
+- Copy / retry / regenerate / clear conversation
+- Article summaries: TL;DR, Quick, Standard, Deep, Expert
+- Explain + beginner/study/revision/deep-dive modes
+- Key concepts / intelligence / tags / prerequisites
+- Learning objectives / practice / quizzes / flashcards
+- Interactive quiz answer state and flashcard review state
+- Related semantic search phrases / synthesis / comparison
+- AI content quality assistance
+- Creator AI inside the public article writer
+- AI title, excerpt, tags, outline, clarity, repetition, examples, FAQ, summary
+- Saved-content AI scope
+- Legacy Gemini cache cleanup and OpenRouter cache isolation
+- OpenRouter retries/fallback + structured output resilience
+- Firebase auth and AI error isolation
+- Existing OFFSCRPT/V78 features preserved
 
-PASS — targeted TypeScript transpilation: 11 modified/AI files, 0 syntax diagnostics
-PASS — import check: 97 active source files
-PASS — Firebase initialization check
-PASS — Firestore rules structural check
-PASS — schema check
-PASS — recommendation check
-PASS — runtime pattern check
-PASS — ZIP archive integrity check (after packaging)
+Validation:
+- TS/TSX syntax transpile: PASS — 173 files, 0 errors
+- API TypeScript parse: PASS — 2 files, 0 errors
+- JS syntax: PASS — openrouter-provider.js
+- Syntax checker: PASS — 98 active TS/TSX files
+- Imports: PASS — 98 active source files
+- Exports: PASS — 98 active source files
+- Identifiers: PASS — 98 active TS/TSX files
+- AI gateway: PASS
+- Firebase: PASS
+- Firestore rules: PASS
+- Schema: PASS
+- Runtime patterns: PASS
+- Recommendations: PASS
+- Identity sync: PASS
+- Public profile access: PASS
+- Comments: PASS
+- Site sync: PASS
+- Path/name conflicts: PASS
+- V78 hardening: PASS
+- Deployment config: PASS
 
-Full Vite production compilation was not run in this sandbox because project npm dependencies are not installed locally. No claim of a full production build is made.
-
-AI architecture:
-- Central /api/ai/gateway endpoint
-- Firebase ID-token verification before Gemini calls
-- Task-aware Gemini model routing
-- Structured JSON output
-- Grounded source-only prompts
-- Client cache + server in-memory cache
-- Per-user daily request guard
-- AI failures return recoverable errors and do not replace core content
-- Gemini V78 discussion compatibility endpoint preserved
-
-User-facing V79 surfaces:
-- Article AI Reading Assistant
-- Discussion AI assistant + discussion intelligence via central gateway
-- Question AI assistant
-- Community post AI assistant
-- Series AI assistant
-- /#learn AI learning dashboard
-
-V79.2.0 OpenRouter migration: implemented server-side provider gateway, structured JSON, retries, fallback routing, Firebase auth, daily limits, caching.
+Full Vite production compilation: NOT RUN — npm dependency installation timed out in the sandbox.

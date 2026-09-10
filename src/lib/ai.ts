@@ -1,6 +1,6 @@
 import { auth } from './firebase';
 
-type AITask = 'summary'|'explain'|'ask'|'analyze'|'concepts'|'semantic'|'tags'|'related'|'compare'|'learning'|'quiz'|'flashcards'|'prerequisites'|'recap'|'quality'|'synthesize'|'creator';
+export type AITask = 'summary'|'explain'|'ask'|'analyze'|'concepts'|'semantic'|'tags'|'related'|'compare'|'learning'|'quiz'|'flashcards'|'prerequisites'|'recap'|'quality'|'synthesize'|'creator';
 
 export interface AIContentInput {
   contentType: string;
@@ -36,6 +36,51 @@ const localCacheKey = (task:AITask,input:AIContentInput,options:Record<string,un
 function readCache<T>(key:string):T|null { try { const raw=localStorage.getItem(key); if(!raw)return null; const parsed=JSON.parse(raw); if(parsed?.expiresAt && parsed.expiresAt<Date.now()){localStorage.removeItem(key);return null;} return parsed?.value ?? null; } catch (error) { console.warn('AI cache read skipped:', error); return null; } }
 function writeCache(key:string,value:unknown,ttlMs=24*60*60*1000){ try { localStorage.setItem(key,JSON.stringify({value,expiresAt:Date.now()+ttlMs})); } catch (error) { console.warn('AI cache clear skipped:', error); } }
 
+export type AIChatMessage = { role: 'user' | 'assistant'; content: string; createdAt?: string };
+
+const AI_HISTORY_NAMESPACE = 'offscrpt:ai:conversations:v1';
+
+function safeStorageKey(input: AIContentInput) {
+  const id = `${auth.currentUser?.uid || 'guest'}:${input.contentType}:${input.contentId || input.title}`;
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) { h ^= id.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return `${AI_HISTORY_NAMESPACE}:${(h >>> 0).toString(36)}`;
+}
+
+export function loadAIConversation(input: AIContentInput): AIChatMessage[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(safeStorageKey(input));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.slice(-30) : [];
+  } catch { return []; }
+}
+
+export function saveAIConversation(input: AIContentInput, messages: AIChatMessage[]) {
+  if (typeof localStorage === 'undefined') return;
+  try { localStorage.setItem(safeStorageKey(input), JSON.stringify(messages.slice(-30))); } catch { /* optional local persistence */ }
+}
+
+export function clearAIConversation(input: AIContentInput) {
+  if (typeof localStorage === 'undefined') return;
+  try { localStorage.removeItem(safeStorageKey(input)); } catch { /* optional local persistence */ }
+}
+
+export function listAIConversationSummaries(): Array<{ key: string; count: number; updatedAt: string }> {
+  if (typeof localStorage === 'undefined') return [];
+  const out: Array<{ key: string; count: number; updatedAt: string }> = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(`${AI_HISTORY_NAMESPACE}:`)) continue;
+      const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+      if (!Array.isArray(parsed) || !parsed.length) continue;
+      out.push({ key, count: parsed.length, updatedAt: String(parsed.at(-1)?.createdAt || '') });
+    }
+  } catch { /* optional */ }
+  return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 export async function requestAI<T=any>(task:AITask,input:AIContentInput,options:Record<string,unknown>={}):Promise<T>{
   const key=localCacheKey(task,input,options); const cached=readCache<T>(key); if(cached!==null)return cached;
   const user=auth.currentUser; if(!user) throw new Error('Sign in to use OFFSCRPT AI.');
@@ -48,7 +93,7 @@ export async function requestAI<T=any>(task:AITask,input:AIContentInput,options:
     if(response.ok) break;
     if(!['AI_BUSY','AI_PROVIDER_RATE_LIMIT'].includes(data?.code) || attempt===1) throw new Error(String(data?.error||'AI request failed.'));
     const retryAfter=Number(response.headers.get('retry-after')||3);
-    await new Promise<void>(resolve=>setTimeout(resolve,Math.min(5000,Math.max(1000,retryAfter*1000))));
+    await new Promise<void>(resolve=>setTimeout(resolve,Math.min(6000,Math.max(1000,retryAfter*1000))));
   }
   writeCache(key,data,task==='ask'?6*60*60*1000:7*24*60*60*1000); return data as T;
 }

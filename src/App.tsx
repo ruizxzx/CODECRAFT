@@ -38,6 +38,7 @@ import { ExploreView } from './components/ExploreView';
 import { SeriesView } from './components/SeriesView';
 import { CreatorView } from './components/CreatorView';
 import { TopicView } from './components/TopicView';
+import { SiteAIAssistant } from './components/SiteAIAssistant';
 import { SocialHubView } from './components/SocialHubView';
 import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
 import { UniqueHandleModal } from './components/UniqueHandleModal';
@@ -155,6 +156,7 @@ export default function App() {
   // Modals state
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isSiteAIOpen, setIsSiteAIOpen] = useState(false);
   const [isCmsOpen, setIsCmsOpen] = useState(false);
   const [canAccessCms, setCanAccessCms] = useState(false);
   const [cloudMasterAdmin, setCloudMasterAdmin] = useState(false);
@@ -749,6 +751,7 @@ export default function App() {
         onNavigate={navigateTo}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+        onOpenSiteAI={() => setIsSiteAIOpen(true)}
         onOpenCms={canAccessCms ? () => navigateTo('cms') : undefined}
         savedCount={savedSlugs.length + savedCommunityPostIds.length}
         siteConfig={siteConfig}
@@ -993,11 +996,21 @@ export default function App() {
       </main>
 
       {/* Global Modals */}
+      <SiteAIAssistant
+        open={isSiteAIOpen}
+        onClose={() => setIsSiteAIOpen(false)}
+        articles={articles}
+        currentPage={currentPage}
+        currentContent={activeArticle ? {contentType:'article',contentId:activeArticle.slug,title:activeArticle.title,content:(activeArticle.content||[]).map((b:any)=>b.content||b.codeBlock?.code||b.items?.join(' ')||'').join(' '),metadata:{tags:activeArticle.tags||[],category:activeArticle.category},sourceRevision:activeArticle.editedAt||activeArticle.publishedAt} : undefined}
+        onNavigate={navigateTo}
+      />
+
       <CommandPalette
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
         onOpenSearch={() => setIsSearchOpen(true)}
         onNavigate={navigateTo}
+        onOpenSiteAI={() => setIsSiteAIOpen(true)}
         onCreatePost={async () => {
           if (!userAuth) { try { await import('./lib/firebase').then(({ loginWithGoogle }) => loginWithGoogle()); } catch { return; } }
           navigateTo('community', 'new');

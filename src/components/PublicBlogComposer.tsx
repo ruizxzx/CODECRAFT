@@ -6,6 +6,8 @@ import { createCommunityPost, updateCommunityPost, SocialCommunity } from '../li
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { Plus, Trash2, ArrowUp, ArrowDown, BookOpen, Image as ImageIcon, Video, Code2, Quote, Lightbulb, List, CheckCircle2, Eye, Save, Link2, MousePointer2 } from 'lucide-react';
 import { MediaUploadButton } from './MediaUploadButton';
+import { requestAI } from '../lib/ai';
+import { Wand2, Loader2 } from 'lucide-react';
 
 type Props = {
   userProfile: CommunityUser;
@@ -62,6 +64,9 @@ export const PublicBlogComposer: React.FC<Props> = ({
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiTask, setAiTask] = useState('');
+  const [aiData, setAiData] = useState<any>(null);
 
   useEffect(() => {
     if (!initialPost) return;
@@ -117,6 +122,30 @@ export const PublicBlogComposer: React.FC<Props> = ({
     const timer = window.setTimeout(() => { void saveDraftSnapshot('public-blog', payload).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error)); }, 900);
     return () => window.clearTimeout(timer);
   }, [initialPost, localDraftKey, title, excerpt, category, tags, coverImage, coverImageAlt, coverImageCaption, seriesName, seriesOrder, blocks]);
+
+  const runCreatorAI = async (creatorAction: string) => {
+    if (aiBusy) return;
+    const body = textFromBlocks(blocks);
+    if (!title.trim() && !body.trim()) { setError('Write some draft content before using Creator AI.'); return; }
+    setAiBusy(true); setAiTask(creatorAction); setError('');
+    try {
+      const result = await requestAI('creator', {
+        contentType: 'article-draft', contentId: initialPost?.id || `draft:${userProfile.uid}`,
+        title: title || 'Untitled draft', content: body.slice(0, 20000),
+        metadata: { excerpt, tags, category }
+      }, { creatorAction, mode: 'standard' });
+      setAiData(result);
+      if (creatorAction === 'improve-title' && result.improvedTitle) setTitle(String(result.improvedTitle).slice(0, 180));
+      if (creatorAction === 'write-excerpt' && result.excerpt) setExcerpt(String(result.excerpt).slice(0, 500));
+      if (creatorAction === 'suggest-tags' && Array.isArray(result.tags)) setTags(result.tags.map((x:any)=>String(x).replace(/^#/,'')).join(', '));
+      if (creatorAction === 'generate-outline' && Array.isArray(result.outline) && result.outline.length) {
+        const outlineBlocks: ArticleContentBlock[] = result.outline.slice(0, 12).map((x:any)=>({type:'heading2',content:String(x)} as ArticleContentBlock));
+        setBlocks(prev => [...prev, ...outlineBlocks]);
+      }
+      setStatus(`Creator AI: ${creatorAction.replace(/-/g,' ')} ready. Review before publishing.`);
+    } catch (e:any) { setError(e?.message || 'Creator AI unavailable.'); }
+    finally { setAiBusy(false); }
+  };
 
   const readingTime = useMemo(() => {
     const words = textFromBlocks(blocks).split(/\s+/).filter(Boolean).length;
@@ -383,6 +412,12 @@ export const PublicBlogComposer: React.FC<Props> = ({
             <input value={coverImageAlt} onChange={(e) => setCoverImageAlt(e.target.value)} placeholder="Cover image alt" className="border-2 border-black p-3" />
             <input value={coverImageCaption} onChange={(e) => setCoverImageCaption(e.target.value)} placeholder="Cover caption" className="border-2 border-black p-3 lg:col-span-2" />
           </div>
+
+          <section className="border-4 border-black bg-[var(--color-primary)] p-4 neo-shadow-sm space-y-3">
+            <div className="flex items-center justify-between gap-3"><div><div className="font-mono text-[9px] font-black uppercase">V79 CREATOR AI</div><h3 className="font-display font-black text-xl uppercase">AI WHILE WRITING</h3><p className="text-xs mt-1">Use AI on this draft. Nothing is published automatically.</p></div><Wand2 className="w-5 h-5"/></div>
+            <div className="flex flex-wrap gap-2">{[['improve-title','IMPROVE TITLE'],['write-excerpt','WRITE EXCERPT'],['suggest-tags','SUGGEST TAGS'],['generate-outline','GENERATE OUTLINE'],['check-clarity','CHECK CLARITY'],['find-repetition','FIND REPETITION'],['suggest-example','SUGGEST EXAMPLE'],['generate-faq','GENERATE FAQ'],['create-summary','CREATE SUMMARY']].map(([k,l])=><button key={k} type="button" onClick={()=>void runCreatorAI(k)} disabled={aiBusy} className="border-2 border-black bg-white px-2 py-2 font-mono text-[9px] font-black uppercase inline-flex items-center gap-1">{aiBusy&&aiTask===k?<Loader2 className="w-3 h-3 animate-spin"/>:null}{l}</button>)}</div>
+            {aiData&&<div className="border-2 border-black bg-white p-3 text-sm space-y-2">{aiData.summary&&<p><b>SUMMARY:</b> {aiData.summary}</p>}{aiData.improvedTitle&&<p><b>TITLE:</b> {aiData.improvedTitle}</p>}{aiData.excerpt&&<p><b>EXCERPT:</b> {aiData.excerpt}</p>}{Array.isArray(aiData.tags)&&<p><b>TAGS:</b> {aiData.tags.map((x:any)=>`#${String(x).replace(/^#/,'')}`).join(' ')}</p>}{Array.isArray(aiData.outline)&&<div><b>OUTLINE:</b>{aiData.outline.slice(0,12).map((x:any,i:number)=><div key={i} className="font-mono text-[10px] mt-1">{i+1}. {x}</div>)}</div>}{Array.isArray(aiData.clarityNotes)&&<div><b>CLARITY:</b> {aiData.clarityNotes.map((x:any)=>String(x)).join(' · ')}</div>}{Array.isArray(aiData.repetitions)&&<div><b>REPETITION:</b> {aiData.repetitions.map((x:any)=>String(x)).join(' · ')}</div>}{Array.isArray(aiData.examples)&&<div><b>EXAMPLES:</b> {aiData.examples.map((x:any)=>String(x)).join(' · ')}</div>}{Array.isArray(aiData.faq)&&<div><b>FAQ:</b>{aiData.faq.slice(0,6).map((x:any,i:number)=><div key={i} className="mt-1">Q: {x.question||x.q||''}<br/>A: {x.answer||x.a||''}</div>)}</div>}</div>}
+          </section>
 
           <div className="border-2 border-black p-4 bg-neutral-50 space-y-3">
             <div className="flex justify-between items-center">

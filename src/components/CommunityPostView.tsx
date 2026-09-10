@@ -384,7 +384,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
             />
           </div>
         )}
-        <AIAssistantPanel input={{contentType:post.type==='blog'?'community-blog':'discussion',contentId:post.id,title:post.title,content:post.content,metadata:{author:post.authorName,topics:post.hashtags||[],views:post.viewsCount||0},sourceRevision:post.editedAt||post.updatedAt||post.createdAt}}/>
+        <AIAssistantPanel input={{contentType:post.type==='blog'?'community-blog':'discussion',contentId:post.id,title:post.title,content:post.content,metadata:{author:post.authorName,topics:post.hashtags||[],views:post.viewsCount||0,sourceUrl:`${window.location.origin}/#community/post/${encodeURIComponent(post.id)}`,sourceType:'post'},sourceRevision:post.editedAt||post.updatedAt||post.createdAt}}/>
 
         {Array.isArray(post.contentBlocks) && post.contentBlocks.length ? (
           <div className="space-y-6 mb-12 min-w-0">

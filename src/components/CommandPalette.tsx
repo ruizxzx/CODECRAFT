@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Home, BookOpen, Layers, Bookmark, History, Bell, Compass, PlusCircle, X, Settings2, UserRound } from 'lucide-react';
+import { Search, Home, BookOpen, Layers, Bookmark, History, Bell, Compass, PlusCircle, X, Settings2, UserRound, Sparkles } from 'lucide-react';
 import { PageView } from '../types';
 
-interface Props { isOpen: boolean; onClose: ()=>void; onOpenSearch: ()=>void; onNavigate:(page:PageView,param?:string)=>void; onCreatePost?:()=>void; }
+interface Props { isOpen: boolean; onClose: ()=>void; onOpenSearch: ()=>void; onNavigate:(page:PageView,param?:string)=>void; onCreatePost?:()=>void; onOpenSiteAI?:()=>void; }
 
 type Command = { id:string; label:string; hint?:string; icon:React.ComponentType<{className?:string}>; run:()=>void };
 
-export const CommandPalette: React.FC<Props> = ({ isOpen, onClose, onOpenSearch, onNavigate, onCreatePost }) => {
+export const CommandPalette: React.FC<Props> = ({ isOpen, onClose, onOpenSearch, onNavigate, onCreatePost, onOpenSiteAI }) => {
   const [query,setQuery]=useState(''); const inputRef=useRef<HTMLInputElement>(null);
   useEffect(()=>{ if(!isOpen) return; setQuery(''); setTimeout(()=>inputRef.current?.focus(),30); },[isOpen]);
   useEffect(()=>{ const h=(e:KeyboardEvent)=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); return; } if(e.key==='Escape'&&isOpen) onClose(); }; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h); },[isOpen,onClose]);
@@ -21,6 +21,7 @@ export const CommandPalette: React.FC<Props> = ({ isOpen, onClose, onOpenSearch,
     {id:'history',label:'Reading History',icon:History,run:()=>{onClose();onNavigate('history');}},
     {id:'notifications',label:'Notifications',icon:Bell,run:()=>{onClose();onNavigate('notifications');}},
     {id:'explore',label:'Explore',icon:Compass,run:()=>{onClose();onNavigate('explore');}},
+    ...(onOpenSiteAI ? [{id:'ai',label:'Ask OFFSCRPT AI',hint:'Site-wide grounded assistant',icon:Sparkles,run:()=>{onClose();onOpenSiteAI();}}] : []),
     ...(onCreatePost ? [{id:'create',label:'Create a Post',icon:PlusCircle,run:()=>{onClose();onCreatePost();}}] : []),
   ],[onClose,onCreatePost,onNavigate,onOpenSearch]);
   const filtered=commands.filter(c=>`${c.label} ${c.hint||''}`.toLowerCase().includes(query.trim().toLowerCase()));

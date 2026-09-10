@@ -161,7 +161,7 @@ export const SeriesView: React.FC<Props> = ({ articles, onNavigate, selectedSeri
         </div>
       </section>
 
-      <AIAssistantPanel input={{contentType:'series',contentId:active.id||active.slug,title:active.title,content:[active.description||'',...active.items.map((a:any)=>`${a.title}\n${a.excerpt||''}`)].join('\n\n'),metadata:{articleCount:active.items.length,tags:active.tags||[],owner:creatorName},sourceRevision:active.updatedAt||active.createdAt}}/>
+      <AIAssistantPanel input={{contentType:'series',contentId:active.id||active.slug,title:active.title,content:[active.description||'',...active.items.map((a:any)=>`${a.title}\n${a.excerpt||''}`)].join('\n\n'),metadata:{articleCount:active.items.length,tags:active.tags||[],owner:creatorName,sourceUrl:`${window.location.origin}/#series/${encodeURIComponent(active.id||active.slug)}`,sourceType:'series'},sourceRevision:active.updatedAt||active.createdAt}}/>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
         <Metric icon={<Layers/>} label="PARTS" value={String(stats.parts)} />

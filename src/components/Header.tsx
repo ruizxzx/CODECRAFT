@@ -44,6 +44,7 @@ interface HeaderProps {
   userProfile?: CommunityUser | null;
   onOpenHandleModal?: () => void;
   onCreateCommunityPost?: () => void;
+  onOpenSiteAI?: () => void;
 }
 
 interface NavLinkItem {
@@ -69,6 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
   userProfile,
   onOpenHandleModal,
   onCreateCommunityPost,
+  onOpenSiteAI,
 }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const user = useAuthUser();
@@ -242,6 +244,11 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Right Action Controls */}
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
             
+            {/* Site-wide AI */}
+            {onOpenSiteAI && <button onClick={onOpenSiteAI} className="hidden md:flex px-2.5 py-1.5 sm:px-3 sm:py-2 bg-[var(--color-primary)] text-black border-2 border-black neo-shadow-sm hover:bg-white items-center space-x-1.5 font-display text-xs font-black uppercase" title="Ask OFFSCRPT AI">
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4"/><span className="hidden sm:inline">ASK AI</span>
+            </button>}
+
             {/* Search Button */}
             <button
               onClick={() => onOpenCommandPalette ? onOpenCommandPalette() : onOpenSearch()}
@@ -348,6 +355,15 @@ export const Header: React.FC<HeaderProps> = ({
           <Search className="w-5 h-5 stroke-[2.5]" />
           <span>SEARCH</span>
         </button>
+        {onOpenSiteAI && <button
+          onClick={onOpenSiteAI}
+          className="mobile-nav-action bg-[var(--color-primary)]"
+          aria-label="Ask OFFSCRPT AI"
+          title="Ask OFFSCRPT AI"
+        >
+          <Sparkles className="w-5 h-5 stroke-[2.5]" />
+          <span>AI</span>
+        </button>}
         <button
           onClick={() => onCreateCommunityPost?.()}
           className="mobile-nav-action mobile-nav-create bg-[var(--color-secondary)]"
