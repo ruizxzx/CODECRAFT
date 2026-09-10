@@ -25,6 +25,7 @@ import { CommunityEditor } from './CommunityEditor';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { UniqueHandleModal } from './UniqueHandleModal';
 import { CommunityPostExtras } from './CommunityPostExtras';
+import { FeedMediaPreview } from './FeedMediaPreview';
 
 interface CommunityViewProps {
   onNavigate: (page: PageView, param?: string) => void;
@@ -417,7 +418,8 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                     {post.title}
                   </h3>
                   
-                  <CommunityPostExtras post={post} onHashtag={(tag) => onNavigate('explore', tag)} compact />
+                  <FeedMediaPreview mediaUrls={post.mediaUrls} coverImage={post.coverImage} coverImageAlt={post.coverImageAlt} compact />
+                  <CommunityPostExtras post={{...post, mediaUrls: []}} onHashtag={(tag) => onNavigate('explore', tag)} compact />
 
                   {/* Content Excerpt */}
                   <p className="font-sans text-neutral-600 mt-2 line-clamp-2 text-sm leading-relaxed">

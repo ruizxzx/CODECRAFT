@@ -513,7 +513,7 @@ service cloud.firestore {
           )
         );
       allow update: if isSignedIn() && request.auth.uid == existing().authorId
-        && incoming().diff(existing()).affectedKeys().hasOnly(['title','details','topics','attachments','relatedArticleSlug','relatedCommunityId','updatedAt']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['title','details','topics','attachments','mediaUrls','coverImage','coverImageAlt','relatedArticleSlug','relatedCommunityId','updatedAt']);
       allow update: if isSignedIn() && request.auth.uid == existing().authorId
         && incoming().diff(existing()).affectedKeys().hasOnly(['authorUsername','authorName','authorAvatar','updatedAt']);
       allow delete: if isStaff() || (isSignedIn() && request.auth.uid == existing().authorId);

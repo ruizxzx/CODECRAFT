@@ -2,6 +2,7 @@ import React from 'react';
 import { CommunityPost } from '../types';
 import { extractHashtags } from '../lib/community';
 import { Hash } from 'lucide-react';
+import { FeedMediaPreview } from './FeedMediaPreview';
 
 interface Props { post: CommunityPost; onHashtag?: (tag: string) => void; compact?: boolean; }
 
@@ -9,15 +10,7 @@ export const CommunityPostExtras: React.FC<Props> = ({ post, onHashtag, compact 
   const media = (post.mediaUrls || []).filter(Boolean).slice(0, 6);
   const tags = (post.hashtags || extractHashtags(`${post.title} ${post.content}`)).slice(0, 12);
   return <>
-    {media.length > 0 && (
-      <div className={`grid gap-2 mt-4 ${media.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
-        {media.map((url, i) => (
-          <a key={`${url}-${i}`} href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="block border-2 border-black overflow-hidden bg-neutral-100 group/media">
-            <img src={url} alt="Post media" loading="lazy" className={`w-full object-cover ${compact ? 'max-h-48' : 'max-h-80'} group-hover/media:scale-[1.01] transition-transform`} onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = 'none'; }} />
-          </a>
-        ))}
-      </div>
-    )}
+    {media.length > 0 && <div className="mt-4"><FeedMediaPreview mediaUrls={media} coverImage={post.coverImage} coverImageAlt={post.coverImageAlt} compact={compact} /></div>}
     {tags.length > 0 && (
       <div className="flex flex-wrap gap-1.5 mt-3">
         {tags.map(tag => onHashtag ? (
