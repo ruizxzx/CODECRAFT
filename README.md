@@ -339,7 +339,13 @@ V77 adds first-class Questions with deep-link pages, follow/notifications, answe
 ## V77 — Questions + Answers
 V77 upgrades the existing discussion/question foundation into a first-class Q&A layer without removing prior V76 functionality.
 
+## V77.0.1 — Vercel Build Fix
 
-### V77.0.2 — Question runtime fix
-- Fixed React Hooks ordering crash on question pages.
-- Question cards now navigate directly to dedicated question pages.
+Removed a duplicate `getQuestionForModeration` export from the Questions + Answers data layer. This release preserves V77 functionality and fixes the production bundler failure caused by duplicate symbol declarations.
+
+
+## V77.0.3 — Theme + Runtime Hardening
+- New visitors default to light mode instead of inheriting system dark mode.
+- Explicit local theme preference remains respected.
+- Signed-in theme remains cloud-synced.
+- Dynamic manifest routes use absolute origin URLs.

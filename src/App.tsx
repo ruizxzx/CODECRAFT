@@ -355,8 +355,8 @@ export default function App() {
     };
     try {
       const cached = localStorage.getItem('offscrpt:theme');
-      if (cached === 'dark' || cached === 'light') apply(cached as 'light'|'dark');
-      else if (window.matchMedia('(prefers-color-scheme: dark)').matches) apply('dark');
+      // New visitors default to light mode. Explicit local preferences still win.
+      apply(cached === 'dark' ? 'dark' : 'light');
     } catch (error) { console.warn('OFFSCRPT recoverable operation failed:', error); }
     if (!userAuth?.uid) return;
     return subscribeThemePreference(apply);
@@ -388,8 +388,9 @@ export default function App() {
         name: brandName,
         short_name: brandName,
         description: siteConfig.metaDescription || 'Independent technology publication for builders.',
-        start_url: '/#home',
-        scope: '/',
+        // Blob-backed manifests need absolute URLs for hash routes.
+        start_url: `${window.location.origin}/#home`,
+        scope: `${window.location.origin}/`,
         display: 'standalone',
         background_color: '#ffffff',
         theme_color: siteConfig.themePrimaryColor || '#FFD600',
@@ -403,6 +404,11 @@ export default function App() {
       const objectUrl = URL.createObjectURL(blob);
       manifestLink.href = objectUrl;
       manifestLink.dataset.dynamicManifest = objectUrl;
+      // Revoke this blob URL when the manifest configuration changes/unmounts
+      // so repeated CMS updates do not leak object URLs in the browser.
+      return () => {
+        URL.revokeObjectURL(objectUrl);
+      };
     }
 
     document.title = `${brandName} — Tech Publication for Builders`;
