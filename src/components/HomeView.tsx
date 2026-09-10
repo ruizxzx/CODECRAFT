@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Article, PageView, Category, SiteConfig, CommunityPost } from '../types';
 import { Hero } from './Hero';
+import { FeedMediaPreview } from './FeedMediaPreview';
 import { ArticleCard } from './ArticleCard';
 import { NewsletterSignup } from './NewsletterSignup';
 import { getPosts, subscribeCarouselSlides } from '../lib/community';
@@ -446,9 +447,10 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <div className="inline-block self-start px-2 py-0.5 bg-[var(--color-secondary)] border-2 border-black font-mono text-[10px] font-black uppercase mb-3">
                   {post.type}
                 </div>
-                <h3 className="font-display font-black text-xl group-hover:text-[var(--color-primary)] transition-colors line-clamp-3 mb-4">
+                <h3 className="font-display font-black text-xl group-hover:text-[var(--color-primary)] transition-colors line-clamp-3 mb-3">
                   {post.title}
                 </h3>
+                <FeedMediaPreview item={post} compact />
                 <div className="mt-auto pt-4 border-t-2 border-black flex justify-between items-center font-mono text-xs font-bold uppercase">
                   <span className="truncate max-w-[120px]">@{post.authorUsername}</span>
                   <div className="flex items-center space-x-2">

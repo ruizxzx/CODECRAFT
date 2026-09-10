@@ -25,7 +25,7 @@ import { CommunityEditor } from './CommunityEditor';
 import { formatDisplayDate } from '../lib/dateUtils';
 import { UniqueHandleModal } from './UniqueHandleModal';
 import { CommunityPostExtras } from './CommunityPostExtras';
-import { PostMediaPreview } from './PostMediaPreview';
+import { FeedMediaPreview } from './FeedMediaPreview';
 import { PollBlock } from './PollBlock';
 
 interface CommunityViewProps {

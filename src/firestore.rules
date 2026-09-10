@@ -492,7 +492,9 @@ service cloud.firestore {
         && incoming().followersCount == 0
         && incoming().moderationState == 'VISIBLE'
         && incoming().isAnonymous is bool
-        && incoming().topics.size() <= 10;
+        && incoming().topics.size() <= 10
+        && incoming().get('attachments', []).size() <= 8
+        && incoming().get('mediaUrls', []).size() <= 8;
       allow update: if isStaff();
       // Answer creation/deletion counter update: authenticated author of the atomic answer write.
       allow update: if isSignedIn()
