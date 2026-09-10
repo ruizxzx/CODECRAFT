@@ -314,3 +314,9 @@ If the R2 upload fails, the processed crop is retained for retry and the existin
 ## V75.12 — Firestore Quota & Usage Optimization
 
 V75.12 hardens Firestore usage without changing Firestore into a different data store. The release adds short-lived in-memory caches, in-flight request deduplication, quota cooldowns, bounded retry behavior, fewer always-on recommendation listeners, cached platform counts, throttled admin identity synchronization, and profile cache invalidation after writes. Quota failures are not retried automatically.
+
+
+## V75.13 — Site-wide media completion
+- Social Admin community icon/banner uploads with crop/preview and cloud save.
+- Creator Page custom link logo/image uploads with R2 + public rendering.
+- Carousel new-slide image upload uses the crop/preview flow; duplicate upload control removed.

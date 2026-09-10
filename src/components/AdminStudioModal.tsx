@@ -2377,8 +2377,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                         {newSlideMode === 'image' && <div>
                           <label className="font-mono text-xs font-bold uppercase block mb-1">Slide Image URL</label>
                           <div className="flex flex-col sm:flex-row gap-2">
-                            <input type="url" value={newSlideImageUrl} onChange={(e) => setNewSlideImageUrl(e.target.value)} placeholder="https://... or upload" className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm" /><MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact onUploaded={(url)=>setNewSlideImageUrl(url)} />
-                            <MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact cropAspect="16:9" cropShape="rect" outputWidth={1600} outputHeight={900} onUploaded={(url) => setNewSlideImageUrl(url)} />
+                            <input type="url" value={newSlideImageUrl} onChange={(e) => setNewSlideImageUrl(e.target.value)} placeholder="https://... or upload" className="flex-1 px-3 py-2 border-2 border-neutral-300 focus:border-black font-sans text-sm" /><MediaUploadButton folder="carousel" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD IMAGE" compact cropAspect="16:9" cropShape="rect" outputWidth={1600} outputHeight={900} onUploaded={(url) => setNewSlideImageUrl(url)} />
                           </div>
                         </div>}
 

@@ -60,7 +60,7 @@ export interface CreatorPageConfig {
   featuredArticleSlugs?: string[];
   featuredSeriesIds?: string[];
   featuredPostIds?: string[];
-  customLinks?: Array<{ id: string; label: string; url: string }>;
+  customLinks?: Array<{ id: string; label: string; url: string; imageUrl?: string }>;
   showStats?: boolean;
   showSocialLinks?: boolean;
   showAbout?: boolean;
