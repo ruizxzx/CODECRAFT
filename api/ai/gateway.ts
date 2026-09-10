@@ -35,13 +35,13 @@ function promptFor(task:string,input:any,options:any){
 }
 function normalize(task:string,p:any,model:string){
  const o:any={}; for(const [k,v] of Object.entries(p||{})){ if(Array.isArray(v))o[k]=v.slice(0,20).map((x:any)=>typeof x==='string'?text(x,700):x); else if(v&&typeof v==='object')o[k]=v; else if(typeof v==='boolean'||typeof v==='number'||typeof v==='string')o[k]=v; }
- if(!o.uncertainty)o.uncertainty='Grounded only in the supplied content.'; o.meta={task,generatedAt:new Date().toISOString(),model,promptVersion:'v79.2-openrouter'}; return o;
+ if(!o.uncertainty)o.uncertainty='Grounded only in the supplied content.'; o.meta={task,provider:'OpenRouter',generatedAt:new Date().toISOString(),model,promptVersion:'v79.2-openrouter'}; return o;
 }
 async function verify(token:string){
   const r=await fetch(FIREBASE_LOOKUP_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:token})});
   if(!r.ok)throw new Error('INVALID_FIREBASE_TOKEN'); const d=await r.json() as any; const u=d.users?.[0]; if(!u?.localId)throw new Error('INVALID_FIREBASE_TOKEN'); if(u.disabled)throw new Error('ACCOUNT_DISABLED'); return String(u.localId);
 }
-function cacheKey(task:string,input:any,options:any){const raw=JSON.stringify({task,id:input?.contentId||'',title:input?.title||'',content:String(input?.content||'').slice(0,12000),revision:input?.sourceRevision||'',options});let h=2166136261;for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619);}return `${task}:${(h>>>0).toString(36)}`;}
+function cacheKey(task:string,input:any,options:any){const raw=JSON.stringify({provider:'openrouter',task,id:input?.contentId||'',title:input?.title||'',content:String(input?.content||'').slice(0,12000),revision:input?.sourceRevision||'',options});let h=2166136261;for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619);}return `${task}:${(h>>>0).toString(36)}`;}
 function consume(uid:string){ const day=new Date().toISOString().slice(0,10); const current=buckets.get(uid); const next=current?.day===day?current:{day,count:0}; if(next.count>=DAILY_LIMIT)return false; next.count+=1; buckets.set(uid,next); return true; }
 function parseAIJson(raw:string){ const clean=String(raw||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,''); try{return JSON.parse(clean);}catch{} const first=clean.indexOf('{'); const last=clean.lastIndexOf('}'); if(first>=0&&last>first)return JSON.parse(clean.slice(first,last+1)); throw Object.assign(new Error('AI_INVALID_JSON'),{status:502}); }
 
