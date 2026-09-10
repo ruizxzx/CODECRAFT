@@ -494,27 +494,92 @@ export async function adminUpdateUser(uid:string,data:{displayName?:string;bio?:
  const before=await getDoc(ref);
  if(!before.exists()) throw new Error('User profile not found.');
  const current=before.data() as CommunityUser;
+ const nextPhoto = data.photoURL !== undefined ? String(data.photoURL || '') : String(current.photoURL || '');
+ const nextName = data.displayName !== undefined ? String(data.displayName || '') : String(current.displayName || '');
+ const nextVerified = data.isVerified !== undefined ? !!data.isVerified : !!current.isVerified;
+ const nextVerificationColor = data.verificationColor !== undefined ? String(data.verificationColor || '#2196F3') : String(current.verificationColor || '#2196F3');
  const clean:any={...data,updatedAt:serverTimestamp()};
  await updateDoc(ref,clean);
- if(data.displayName!==undefined || data.photoURL!==undefined || data.isVerified!==undefined || data.verificationColor!==undefined){
-  try {
+
+ // Keep the public profile projection canonical. Otherwise a later public-profile
+ // refresh could resurrect an older avatar URL and overwrite fresh denormalized data.
+ try {
+   const username = String(current.username || '').trim().toLowerCase();
+   if (username) {
+     await setDoc(doc(db,'publicProfiles',username), {
+       username,
+       displayName: nextName,
+       photoURL: nextPhoto,
+       bio: data.bio !== undefined ? String(data.bio || '') : String(current.bio || ''),
+       coverImageUrl: data.coverImageUrl !== undefined ? String(data.coverImageUrl || '') : String(current.coverImageUrl || ''),
+       websiteUrl: data.websiteUrl !== undefined ? String(data.websiteUrl || '') : String(current.websiteUrl || ''),
+       location: data.location !== undefined ? String(data.location || '') : String(current.location || ''),
+       socialX: data.socialX !== undefined ? String(data.socialX || '') : String(current.socialX || ''),
+       socialGithub: data.socialGithub !== undefined ? String(data.socialGithub || '') : String(current.socialGithub || ''),
+       socialTelegram: data.socialTelegram !== undefined ? String(data.socialTelegram || '') : String(current.socialTelegram || ''),
+       socialInstagram: data.socialInstagram !== undefined ? String(data.socialInstagram || '') : String(current.socialInstagram || ''),
+       isVerified: nextVerified,
+       verificationColor: nextVerificationColor,
+       updatedAt: serverTimestamp()
+     }, {merge:true});
+   }
+ } catch(err) { console.warn('Admin profile projection refresh failed; canonical user document is still saved:', err); }
+
+ // Refresh every denormalized author identity that can be updated safely from the
+ // browser. Private recipient notification documents intentionally remain actorId-
+ // based; notification surfaces resolve the live profile instead of writing into
+ // recipients' private collections.
+ try {
    const writes:any[]=[];
-   const posts=await getDocs(query(collection(db,'posts'),where('authorId','==',uid)));
-   posts.docs.forEach(d=>writes.push({ref:d.ref,data:{authorName:data.displayName ?? current.displayName,authorAvatar:data.photoURL ?? current.photoURL ?? '',authorUsername:current.username,isVerified:data.isVerified ?? !!current.isVerified,verificationColor:data.verificationColor ?? current.verificationColor ?? '#2196F3',updatedAt:serverTimestamp()}}));
-   let comments;
-   try { comments=await getDocs(query(collectionGroup(db,'comments'),where('authorId','==',uid))); } catch { const all=await getDocs(collectionGroup(db,'comments')); comments={docs:all.docs.filter(d=>d.data()?.authorId===uid)} as any; }
-   comments.docs.forEach((d:any)=>writes.push({ref:d.ref,data:{authorName:data.displayName ?? current.displayName,authorAvatar:data.photoURL ?? current.photoURL ?? '',authorUsername:current.username,isVerified:data.isVerified ?? !!current.isVerified,verificationColor:data.verificationColor ?? current.verificationColor ?? '#2196F3',updatedAt:serverTimestamp()}}));
-   // Main publication articles also denormalize author identity. Refresh only
-   // articles belonging to the edited account; never rewrite unrelated authors.
+   const authorIdentity={authorName:nextName,authorAvatar:nextPhoto,authorUsername:String(current.username||''),isVerified:nextVerified,verificationColor:nextVerificationColor,updatedAt:serverTimestamp()};
+   const rootPosts=await getDocs(query(collection(db,'posts'),where('authorId','==',uid)));
+   rootPosts.docs.forEach(d=>writes.push({ref:d.ref,data:authorIdentity}));
+   try {
+     const communityPosts=await getDocs(query(collectionGroup(db,'posts'),where('authorId','==',uid)));
+     communityPosts.docs.forEach(d=>writes.push({ref:d.ref,data:authorIdentity}));
+   } catch(err) { console.warn('Community post identity query failed:',err); }
+   try {
+     const comments=await getDocs(query(collectionGroup(db,'comments'),where('authorId','==',uid)));
+     comments.docs.forEach(d=>writes.push({ref:d.ref,data:authorIdentity}));
+   } catch(err) { console.warn('Comment identity query failed:',err); }
+   const questions=await getDocs(query(collection(db,'questions'),where('authorId','==',uid)));
+   questions.docs.forEach(d=>writes.push({ref:d.ref,data:{authorName:nextName,authorAvatar:nextPhoto,authorUsername:String(current.username||''),isVerified:nextVerified,verificationColor:nextVerificationColor,updatedAt:serverTimestamp()}}));
+   try {
+     const answers=await getDocs(query(collectionGroup(db,'answers'),where('authorId','==',uid)));
+     answers.docs.forEach(d=>writes.push({ref:d.ref,data:authorIdentity}));
+   } catch(err) { console.warn('Answer identity query failed:',err); }
+   try {
+     const [sentMessages, receivedMessages] = await Promise.all([
+       getDocs(query(collection(db,'messages'),where('senderId','==',uid))),
+       getDocs(query(collection(db,'messages'),where('recipientId','==',uid)))
+     ]);
+     sentMessages.docs.forEach(d=>writes.push({ref:d.ref,data:{senderName:nextName,senderAvatar:nextPhoto,senderUsername:String(current.username||''),updatedAt:serverTimestamp()}}));
+     receivedMessages.docs.forEach(d=>writes.push({ref:d.ref,data:{recipientName:nextName,recipientAvatar:nextPhoto,recipientUsername:String(current.username||''),updatedAt:serverTimestamp()}}));
+   } catch(err) { console.warn('Message identity query failed:',err); }
+   try {
+     const topics=await getDocs(query(collection(db,'topics'),where('createdBy','==',uid)));
+     topics.docs.forEach(d=>writes.push({ref:d.ref,data:{creatorUsername:String(current.username||''),updatedAt:serverTimestamp()}}));
+   } catch(err) { console.warn('Topic identity query failed:',err); }
+   try {
+     const series=await getDocs(query(collection(db,'series'),where('ownerId','==',uid)));
+     series.docs.forEach(d=>writes.push({ref:d.ref,data:{ownerUsername:String(current.username||''),updatedAt:serverTimestamp()}}));
+   } catch(err) { console.warn('Series identity query failed:',err); }
    const articles=await getDocs(collection(db,'articles'));
    articles.docs.forEach(d=>{
-    const a:any=d.data()?.author || {};
-    if(a.uid===uid || String(a.username||'').toLowerCase()===String(current.username||'').toLowerCase()){
-      writes.push({ref:d.ref,data:{author:{...a,uid,username:current.username,name:data.displayName ?? current.displayName,avatar:data.photoURL ?? current.photoURL ?? '',isVerified:data.isVerified ?? !!current.isVerified,verificationColor:data.verificationColor ?? current.verificationColor ?? '#2196F3'},updatedAt:serverTimestamp()}});
-    }
+     const a:any=d.data()?.author || {};
+     if(a.uid===uid || String(a.username||'').toLowerCase()===String(current.username||'').toLowerCase()) {
+       writes.push({ref:d.ref,data:{author:{...a,uid,username:String(current.username||''),name:nextName,avatar:nextPhoto,isVerified:nextVerified,verificationColor:nextVerificationColor},authorUsername:String(current.username||''),authorName:nextName,authorAvatar:nextPhoto,updatedAt:serverTimestamp()}});
+     }
    });
    for(let i=0;i<writes.length;i+=450){ const b=writeBatch(db); writes.slice(i,i+450).forEach((w:any)=>b.update(w.ref,w.data)); await b.commit(); }
-  } catch(err) { console.warn('Admin profile saved but author snapshots could not be refreshed:',err); }
+ } catch(err) { console.warn('Admin profile saved but some author snapshots could not be refreshed:',err); }
+
+ // When the master admin edits their own profile, keep Firebase Auth's cached
+ // profile aligned with Firestore so future client-side profile reads do not reintroduce
+ // the previous avatar URL.
+ if(auth.currentUser?.uid===uid && (data.displayName!==undefined || data.photoURL!==undefined)) {
+   try { await import('firebase/auth').then(({updateProfile})=>updateProfile(auth.currentUser!, {displayName:nextName,photoURL:nextPhoto||null})); }
+   catch(err) { console.warn('Firebase Auth identity refresh failed:',err); }
  }
 }
 export async function adminDeleteUserProfile(uid:string){ await requireStaff(); await deleteDoc(doc(db,'users',uid)); }

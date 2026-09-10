@@ -406,7 +406,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
             {renderTextWithMentions(post.content)}
           </div>
         )}
-        <div className="mb-10"><CommunityPostExtras post={post} onHashtag={(tag) => onNavigate('explore', tag)} /></div>
+        <div className="mb-10"><CommunityPostExtras post={post} onHashtag={(tag) => onNavigate('explore', tag)} showMedia={false} showPoll={false} /></div>
 
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 pt-6 border-t-2 border-neutral-200 min-w-0">
           <div className="flex items-center space-x-2 shrink-0">

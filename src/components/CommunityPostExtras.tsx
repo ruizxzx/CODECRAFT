@@ -5,9 +5,9 @@ import { Hash } from 'lucide-react';
 import { PostMediaPreview } from './PostMediaPreview';
 import { PollBlock } from './PollBlock';
 
-interface Props { post: CommunityPost; onHashtag?: (tag: string) => void; compact?: boolean; }
+interface Props { post: CommunityPost; onHashtag?: (tag: string) => void; compact?: boolean; showMedia?: boolean; showPoll?: boolean; }
 
-export const CommunityPostExtras: React.FC<Props> = ({ post, onHashtag, compact = false }) => {
+export const CommunityPostExtras: React.FC<Props> = ({ post, onHashtag, compact = false, showMedia = true, showPoll = true }) => {
   const tags = (post.hashtags || extractHashtags(`${post.title} ${post.content}`)).slice(0, 12);
   return <>
     <PostMediaPreview post={post} />

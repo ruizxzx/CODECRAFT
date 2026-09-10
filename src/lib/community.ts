@@ -1103,9 +1103,16 @@ export async function getPost(postId: string): Promise<CommunityPost | null> {
     const snap = await getDoc(ref);
     if (!snap.exists()) return null;
     const data:any = snap.data();
-    return { ...data, id: snap.id, type: data.type || data.postType || 'discussion', communityId: data.communityId || (ref.path.startsWith('communities/') ? ref.path.split('/')[1] : undefined),
-      commentsCount: Number(data.commentsCount || 0), upvotesCount: Number(data.upvotesCount ?? (data.score > 0 ? data.score : 0)), downvotesCount: Number(data.downvotesCount || 0), repostsCount: Number(data.repostsCount || 0), viewsCount: Number(data.viewsCount || 0),
-      content: String(data.content || '') };
+    let live = data;
+    if (data.authorId) {
+      try {
+        const profile = await getCommunityProfile(String(data.authorId));
+        if (profile) live = { ...data, authorUsername: profile.username || data.authorUsername || '', authorName: profile.displayName || data.authorName || '', authorAvatar: profile.photoURL || data.authorAvatar || '', isVerified: !!profile.isVerified, verificationColor: profile.verificationColor || data.verificationColor || '#2196F3' };
+      } catch (identityError) { console.warn('Post author identity refresh failed:', identityError); }
+    }
+    return { ...live, id: snap.id, type: live.type || live.postType || 'discussion', communityId: live.communityId || (ref.path.startsWith('communities/') ? ref.path.split('/')[1] : undefined),
+      commentsCount: Number(live.commentsCount || 0), upvotesCount: Number(live.upvotesCount ?? (live.score > 0 ? live.score : 0)), downvotesCount: Number(live.downvotesCount || 0), repostsCount: Number(live.repostsCount || 0), viewsCount: Number(live.viewsCount || 0),
+      content: String(live.content || '') };
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
     return null;
@@ -1629,17 +1636,17 @@ export async function getUserRepostedPosts(userId: string): Promise<CommunityPos
 
 export async function syncUserIdentityAcrossContent(
   userId: string,
-  profile: Pick<CommunityUser, 'displayName' | 'photoURL' | 'username' | 'isVerified' | 'verificationColor'>
+  profile: Partial<Pick<CommunityUser, 'displayName' | 'photoURL' | 'username' | 'isVerified' | 'verificationColor'>>
 ): Promise<{ posts: number; comments: number; communityPosts: number; communities: number; memberships: number; relationships: number; questions: number; answers: number; articles: number; messages: number; notifications: number; reports: number; topics: number; series: number; moderators: number; adminNotifications: number }> {
   if (!userId) throw new Error('Invalid user ID.');
-  const identity = {
+  const identity: Record<string, any> = {
     authorName: profile.displayName || '',
     authorAvatar: profile.photoURL || '',
     authorUsername: profile.username || '',
-    isVerified: !!profile.isVerified,
-    verificationColor: profile.verificationColor || '#2196F3',
     updatedAt: serverTimestamp()
   };
+  if (profile.isVerified !== undefined) identity.isVerified = !!profile.isVerified;
+  if (profile.verificationColor !== undefined) identity.verificationColor = profile.verificationColor || '#2196F3';
   const actorIdentity = {
     actorUsername: profile.username || '',
     actorName: profile.displayName || '',
