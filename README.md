@@ -323,3 +323,9 @@ V75.12 hardens Firestore usage without changing Firestore into a different data 
 
 ## V76 — Social Feed + Discovery Engine
 The home experience now includes a unified discovery feed, algorithmic/chronological modes, cloud-synced recommendation controls, dynamic personalized sections, and bounded on-demand discovery for discussions and communities. Existing recommendation signals, Firestore quota protection, Firebase Auth, R2 media, and prior features are preserved.
+
+
+## V76.0.1 — Home Runtime Fix
+- Fixed home-page temporal-dead-zone crash (`Cannot access 'Ce' before initialization`).
+- Reordered derived feed values so memoized sections never reference `displayedArticles` before initialization.
+- No existing features removed.

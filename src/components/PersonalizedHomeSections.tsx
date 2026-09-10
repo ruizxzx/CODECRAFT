@@ -60,16 +60,16 @@ export const PersonalizedHomeSections:React.FC<Props>=({articles,series,userAuth
    if(feedTab==='trending'&&trendingKind==='questions'&&!extrasLoaded.questions){const snap=await optimizedGetDocs('home:questions:v1',()=>getDocs(query(collection(db,'questions'),orderBy('createdAt','desc'),limit(40))),{ttlMs:120000,allowStaleOnQuota:true});if(active)setQuestions(snap.docs.map(d=>({id:d.id,...d.data()} as SocialQuestion)));if(active)setExtrasLoaded(v=>({...v,questions:true}));}
   }catch(e){console.warn('Home discovery extras failed:',e)}finally{if(active)setExtrasLoading(false)}})();return()=>{active=false}},[feedTab,trendingKind,extrasLoaded.discussions,extrasLoaded.communities,extrasLoaded.questions,discussions.length]);
 
- const secondarySections=useMemo(()=>{
-   const used=new Set<string>(displayedArticles.map(a=>a.slug));
-   return sections.filter(s=>s.title!=='FOR YOU').map(s=>({...s,articles:s.articles.filter(a=>{if(used.has(a.slug))return false;used.add(a.slug);return true}).slice(0,4)})).filter(s=>s.articles.length);
- },[sections,displayedArticles]);
-
  const isColdStart=useMemo(()=>!signals.followedTopics.length&&!signals.history.length&&!signals.saves.length&&!signals.following.length&&articles.length>0,[signals,articles.length]);
  const followingSet=useMemo(()=>new Set(signals.following.flatMap(x=>[String(x.uid||x.id||'').toLowerCase(),String(x.username||'').toLowerCase()]).filter(Boolean)),[signals.following]);
  const modeArticles=useMemo(()=>{const all=applyFeedPreferences(articles,prefs);if(feedTab==='latest')return buildChronologicalArticles(all,12,prefs);if(feedTab==='following'){const followed=all.filter(a=>followingSet.has(String(a.author?.uid||'').toLowerCase())||followingSet.has(String(a.author?.username||'').toLowerCase())).sort((a,b)=>new Date(b.publishedAt||0).getTime()-new Date(a.publishedAt||0).getTime()).slice(0,12);return userAuth?followed:buildChronologicalArticles(all,12,prefs);}if(feedTab==='trending')return [...all].sort((a,b)=>{const score=(x:Article)=>Number(x.viewsCount||0)+Object.values(x.reactionCounts||{}).reduce((n,v)=>n+Number(v||0),0)*8;return score(b)-score(a)}).slice(0,12);return userAuth?(sections.find(s=>s.title==='FOR YOU')?.articles||[]).slice(0,12):buildChronologicalArticles(all,12,prefs)},[articles,prefs,feedTab,followingSet,sections,userAuth]);
  const algorithmic=feedMode==='algorithmic';
  const displayedArticles=algorithmic?modeArticles:buildChronologicalArticles(modeArticles,12,prefs);
+ const secondarySections=useMemo(()=>{
+   const used=new Set<string>(displayedArticles.map(a=>a.slug));
+   return sections.filter(s=>s.title!=='FOR YOU').map(s=>({...s,articles:s.articles.filter(a=>{if(used.has(a.slug))return false;used.add(a.slug);return true}).slice(0,4)})).filter(s=>s.articles.length);
+ },[sections,displayedArticles]);
+
  const creatorRadar=useMemo(()=>{
    const map=new Map<string,{uid?:string;username?:string;name:string;avatar:string;articles:number;views:number;recent:number}>();
    applyFeedPreferences(articles,prefs).forEach(a=>{const key=String(a.author?.uid||a.author?.username||a.author?.name||a.slug);const prev=map.get(key)||{uid:a.author?.uid,username:a.author?.username,name:a.author?.name||'CREATOR',avatar:a.author?.avatar||'',articles:0,views:0,recent:0};prev.articles+=1;prev.views+=Number(a.viewsCount||0);if((Date.now()-new Date(a.publishedAt||0).getTime())<14*86400000)prev.recent+=1;map.set(key,prev)});
