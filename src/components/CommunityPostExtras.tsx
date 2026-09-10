@@ -10,8 +10,8 @@ interface Props { post: CommunityPost; onHashtag?: (tag: string) => void; compac
 export const CommunityPostExtras: React.FC<Props> = ({ post, onHashtag, compact = false, showMedia = true, showPoll = true }) => {
   const tags = (post.hashtags || extractHashtags(`${post.title} ${post.content}`)).slice(0, 12);
   return <>
-    <PostMediaPreview post={post} />
-    {post.poll && <PollBlock poll={post.poll} postId={post.id} communityId={(post as any).communityId} compact />}
+    {showMedia && <PostMediaPreview post={post} />}
+    {showPoll && post.poll && <PollBlock poll={post.poll} postId={post.id} communityId={(post as any).communityId} compact={compact} />}
     {tags.length > 0 && (
       <div className="flex flex-wrap gap-1.5 mt-3">
         {tags.map(tag => onHashtag ? (
