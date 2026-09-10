@@ -438,7 +438,6 @@ export async function resolveReport(reportId:string,uid:string,status:'resolved'
 }
 
 export async function getCommunityPostForModeration(cid:string,pid:string):Promise<CommunityFeedPost|null>{ const s=await getDoc(doc(db,'communities',cid,'posts',pid)); return s.exists()?map(s) as CommunityFeedPost:null; }
-export async function getQuestionForModeration(qid:string):Promise<SocialQuestion|null>{ const s=await getDoc(doc(db,'questions',qid)); return s.exists()?map(s) as SocialQuestion:null; }
 export async function muteUser(uid:string,targetUid:string){ await setDoc(doc(db,'users',uid,'mutes',targetUid),{uid:targetUid,createdAt:serverTimestamp()}); }
 export async function unmuteUser(uid:string,targetUid:string){ await deleteDoc(doc(db,'users',uid,'mutes',targetUid)); }
 export async function getUserMutes(uid:string){ const s=await getDocs(collection(db,'users',uid,'mutes')); return s.docs.map(d=>d.id); }
