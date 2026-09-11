@@ -4,6 +4,7 @@ import App from './App.tsx';
 import './index.css';
 import { installRuntimeErrorReporting, reportRuntimeError, flushQueuedRuntimeErrors } from './lib/runtime';
 import { auth } from './lib/firebase';
+import { Analytics } from '@vercel/analytics/react';
 
 if (typeof window !== 'undefined') {
   installRuntimeErrorReporting();
@@ -48,5 +49,6 @@ createRoot(root).render(
     <AppErrorBoundary>
       <App />
     </AppErrorBoundary>
+    <Analytics />
   </StrictMode>,
 );
