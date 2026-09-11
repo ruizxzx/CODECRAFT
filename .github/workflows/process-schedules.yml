@@ -1,0 +1,29 @@
+name: OFFSCRPT Scheduled Publishing
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: offscrpt-schedule-processor
+  cancel-in-progress: false
+
+jobs:
+  process-schedules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Process due scheduled content
+        env:
+          OFFSCRPT_PRODUCTION_URL: ${{ vars.OFFSCRPT_PRODUCTION_URL || 'https://offscrpt.vercel.app' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -eu
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "CRON_SECRET GitHub repository secret is not configured."
+            exit 1
+          fi
+          url="${OFFSCRPT_PRODUCTION_URL%/}/api/cron/process-schedules"
+          echo "Calling ${url}"
+          curl --fail-with-body --silent --show-error             --retry 2 --retry-delay 2             -H "Authorization: Bearer ${CRON_SECRET}"             -H "Accept: application/json"             "${url}"

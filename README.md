@@ -1,4 +1,4 @@
-## Current release: OFFSCRPT V85.0.0 — Discovery Core
+## Current release: OFFSCRPT V85.1.1 — Scheduling Deployment Fix
 
 # OFFSCRPT — V80.0.0 Intelligence Core
 

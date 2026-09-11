@@ -1,0 +1,23 @@
+OFFSCRPT V85.1.1 BUILD VALIDATION
+
+PASSED
+- Vercel native cron entry removed from vercel.json
+- GitHub Actions schedule workflow added at .github/workflows/process-schedules.yml
+- Workflow supports 5-minute cadence and manual dispatch
+- Cron endpoint now requires CRON_SECRET
+- Scheduling documentation added
+- Version advanced to 85.1.1
+- JSON parsing checks
+
+EXPECTED / ENVIRONMENT-DEPENDENT
+- Full dependency-backed TypeScript typecheck
+- Production Vite build
+- Live Vercel deployment
+- Live GitHub Actions execution
+- Firebase CLI rules validation
+- Authenticated end-to-end scheduling test
+
+NOT CLAIMED
+- bug-free
+- fully verified
+- production verified
