@@ -59,6 +59,7 @@ import { runSyncedOperation } from './lib/sync';
 import { resolveMasterAccess } from './lib/masterControl';
 import { reportRuntimeError } from './lib/runtime';
 import { LearnView } from './components/LearnView';
+import { KnowledgeView } from './components/KnowledgeView';
 
 const SAVED_SLUGS_GUEST_KEY = 'offscrpt_saved_slugs_guest_v1';
 const SAVED_COMMUNITY_GUEST_KEY = 'offscrpt_saved_community_guest_v1';
@@ -532,6 +533,15 @@ export default function App() {
       } else if (hash === 'explore' || hash.startsWith('explore/')) {
         setCurrentPage('explore');
         setActiveArticleSlug(hash.startsWith('explore/') ? hash.replace('explore/', '') : null);
+      } else if (hash === 'knowledge') {
+        setCurrentPage('knowledge');
+        setActiveArticleSlug(null);
+      } else if (hash === 'vault') {
+        setCurrentPage('vault');
+        setActiveArticleSlug(null);
+      } else if (hash === 'research') {
+        setCurrentPage('research');
+        setActiveArticleSlug(null);
       } else if (hash === 'social' || hash === 'community' || hash === 'community/new') {
         setCurrentPage('social');
         setActiveArticleSlug(hash === 'community/new' ? 'new' : null);
@@ -590,6 +600,12 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('creator');
       window.location.hash = `creator/${param}`;
+    } else if (page === 'knowledge') {
+      setActiveArticleSlug(null); setCurrentPage('knowledge'); window.location.hash='knowledge';
+    } else if (page === 'vault') {
+      setActiveArticleSlug(null); setCurrentPage('vault'); window.location.hash='vault';
+    } else if (page === 'research') {
+      setActiveArticleSlug(null); setCurrentPage('research'); window.location.hash='research';
     } else if (page === 'learn') {
       setActiveArticleSlug(null); setCurrentPage('learn'); window.location.hash='learn';
     } else if (page === 'changelog') {
@@ -926,6 +942,9 @@ export default function App() {
             {currentPage === 'social' && (
               <SocialHubView userProfile={userProfile} onNavigate={navigateTo} siteConfig={siteConfig} />
             )}
+            {currentPage === 'knowledge' && <KnowledgeView articles={articles} userProfile={userProfile} onNavigate={navigateTo} mode="knowledge" />}
+            {currentPage === 'vault' && <KnowledgeView articles={articles} userProfile={userProfile} onNavigate={navigateTo} mode="vault" />}
+            {currentPage === 'research' && <KnowledgeView articles={articles} userProfile={userProfile} onNavigate={navigateTo} mode="research" />}
             {currentPage === 'learn' && <LearnView />}
             {currentPage === 'question' && activeArticleSlug && (
               <QuestionView questionId={activeArticleSlug} userProfile={userProfile} onNavigate={navigateTo} />

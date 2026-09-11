@@ -12,7 +12,8 @@ import {
   X, 
   Search, 
   BookOpen, 
-  Sparkles, 
+  Sparkles,
+  Brain, 
   ArrowRight, 
   LogIn, 
   LogOut, 
@@ -239,6 +240,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               );
             })}
+            <button onClick={() => handleNavClick('knowledge')} className={`px-3 py-2.5 flex items-center space-x-1.5 font-display font-black text-xs uppercase transition-all border-2 ${currentPage === 'knowledge' || currentPage === 'vault' || currentPage === 'research' ? 'bg-[var(--color-primary)] border-black neo-shadow-sm' : 'border-transparent hover:border-black hover:bg-neutral-100'}`} title="OFFSCRPT Knowledge"><Brain className="w-4 h-4 stroke-[2.5]"/><span>KNOWLEDGE</span></button>
           </nav>
 
           {/* Right Action Controls */}
@@ -463,6 +465,16 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* Reader Library */}
+          <div>
+            <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">Knowledge</h3>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => handleNavClick('knowledge')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'knowledge' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Brain className="w-4 h-4"/> Ask OFFSCRPT</span><ArrowRight className="w-4 h-4"/></button>
+              <button onClick={() => handleNavClick('vault')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'vault' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Bookmark className="w-4 h-4"/> My Vault</span><ArrowRight className="w-4 h-4"/></button>
+              <button onClick={() => handleNavClick('research')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'research' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Sparkles className="w-4 h-4"/> Research</span><ArrowRight className="w-4 h-4"/></button>
+            </div>
+          </div>
+
+          {/* Your Library */}
           <div>
             <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">Your Library</h3>
             <button onClick={() => handleNavClick('history')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black transition-all flex items-center justify-between ${currentPage === 'history' ? 'bg-[var(--color-primary)] text-black neo-shadow-sm' : 'bg-white text-black hover:bg-neutral-100 neo-shadow-sm'}`}>

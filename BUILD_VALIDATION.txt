@@ -1,30 +1,36 @@
-OFFSCRPT V80.0.0 BUILD VALIDATION
+OFFSCRPT V81.0.0 BUILD VALIDATION
 
-Base: OFFSCRPT V79.11.0 AI Writing + Site-Wide Copilot
+Base: OFFSCRPT V80.0.0 Intelligence Core
 Date: 2026-09-11
 
 PASSING STATIC / STRUCTURAL VALIDATION
-- check:deployment-config: PASS
-- check:imports: PASS (112 active source files)
+- check:v81: PASS
+- TypeScript parser: PASS (114 active TS/TSX files, 0 parse diagnostics)
+- check:syntax: PASS
+- check:imports: PASS
+- check:exports: PASS
+- check:identifiers: PASS
 - check:firebase: PASS
-- check:rules: PASS (balanced rules, 290 braces)
-- check:schema: PASS (12 blueprint entities)
+- check:rules: PASS
+- check:schema: PASS
 - check:runtime: PASS
-- check:recommendations: PASS (16 requirements)
-- check:handles: PASS
-- check:identity-sync: PASS
-- check:public-profile: PASS
-- check:comments: PASS (8 requirements)
-- check:site-sync: PASS (6 requirements)
+- check:recommendations: PASS
 - check:v80: PASS
-- Independent TypeScript parser: PASS (117 TS/TSX files in src + api, 0 parse diagnostics)
+- Security review: standalone OFFSCRPT retrieval now binds the effective UID to the verified Firebase ID token and rejects mismatches.
+
+V81 USER-FACING SURFACES
+- #knowledge: Ask OFFSCRPT + universal knowledge search + source navigation + reading signals + personalized path.
+- #research: permission-checked source retrieval + grounded multi-source synthesis.
+- #vault: existing cloud saves/collections + private device-local notes.
+- Header/Command Palette: direct Knowledge/Vault/Research navigation.
+- Cold-start recommendation topics are generalized for a broad audience rather than coding-specific.
 
 BLOCKED DEPENDENCY-BACKED VALIDATION
-- `npm run build`: BLOCKED with `vite: not found`; the prior dependency installation attempt did not complete.
-- `npm run typecheck`: BLOCKED before project diagnostics because required @types packages are incomplete in the partial node_modules tree (TS2688 for babel/body-parser/connect/express/etc.).
-- Existing repository check scripts that depend on the incomplete local TypeScript package could not run; their failures are dependency-resolution failures, not asserted source defects.
+- `npm ci`: blocked by environment/network package retrieval; offline cache is missing at least `yocto-queue`.
+- `npm run build`: not claimable because Vite dependencies are incomplete in the current environment.
+- `npm run typecheck`: not claimable because required type definitions are unavailable in the incomplete dependency tree.
 
 IMPORTANT
 - No successful Vite production build is claimed.
-- node_modules is removed from the release archive.
-- The release keeps V79.11 OpenRouter gateway architecture and V77/V78 systems; V80 adds shared connection layers and compatibility adapters.
+- node_modules, temporary install shims, logs and build outputs are removed from the release archive.
+- V81 does not introduce a vector database or durable embedding worker; semantic retrieval remains an extensible hybrid foundation.

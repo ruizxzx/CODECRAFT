@@ -16,7 +16,7 @@ interface Props{articles:Article[];series:Series[];userAuth:any;onNavigate:(page
 type FeedMode='algorithmic'|'chronological';
 type FeedTab='for-you'|'following'|'latest'|'trending'|'discussions'|'communities';
 type TrendingKind='articles'|'posts'|'questions'|'creators'|'communities'|'series'|'topics';
-const TOPICS=['AI','WEB','DATABASES','SYSTEMS','DEVTOOLS','SECURITY','STARTUPS','LOCAL AI'];
+const TOPICS=['TRAVEL','MOVIES','MUSIC','SPORTS','FOOD','BOOKS','FITNESS','ART','GAMING','LIFE','BUSINESS','SCIENCE','CULTURE','DESIGN','EDUCATION','OTHER'];
 const emptySignals:RecommendationSignals={history:[],saves:[],following:[],followedTopics:[],followedSeries:[],readingProgress:[],searches:[],reactions:[]};
 
 const Mini:React.FC<{a:Article;onOpen:()=>void;reason?:string;onMenu?:(a:Article)=>void}>=({a,onOpen,reason,onMenu})=><article className="relative text-left border-4 border-black bg-white overflow-hidden hover:bg-[var(--color-primary)] transition-colors group">
@@ -28,7 +28,7 @@ const Mini:React.FC<{a:Article;onOpen:()=>void;reason?:string;onMenu?:(a:Article
 </article>;
 
 const PostMini:React.FC<{p:CommunityPost;onOpen:()=>void;userId?:string}>=({p,onOpen,userId})=><article className="text-left border-4 border-black bg-white overflow-hidden hover:bg-[var(--color-primary)] transition-colors group">
-  <button type="button" onClick={()=>{void emitActivityEvent({type:'recommendation_click',targetId:a.slug,targetType:'article',source:'home-feed',metadata:{reason:reason||''}}).catch(()=>{});onOpen();}} className="w-full text-left">{<PostMediaPreview post={p} />}{!p.coverImage && !(p.mediaUrls||[]).length && <div className="aspect-[16/9] border-b-4 border-black bg-neutral-100 flex items-center justify-center font-mono text-[9px] uppercase">DISCUSSION</div>}
+  <button type="button" onClick={()=>{void emitActivityEvent({type:'recommendation_click',targetId:p.id,targetType:'post',source:'home-feed'}).catch(()=>{});onOpen();}} className="w-full text-left">{<PostMediaPreview post={p} />}{!p.coverImage && !(p.mediaUrls||[]).length && <div className="aspect-[16/9] border-b-4 border-black bg-neutral-100 flex items-center justify-center font-mono text-[9px] uppercase">DISCUSSION</div>}
   <div className="p-4"><div className="font-mono text-[9px] uppercase text-neutral-500">@{p.authorUsername} · {p.commentsCount||0} COMMENTS</div><h3 className="font-display font-black text-xl uppercase mt-1 line-clamp-2">{p.title||'Untitled discussion'}</h3><p className="text-sm mt-2 line-clamp-3">{p.excerpt||p.content}</p></div></button>
   {p.poll&&<PollBlock poll={p.poll} postId={p.id} communityId={(p as any).communityId} userId={userId} compact/>}
 </article>;

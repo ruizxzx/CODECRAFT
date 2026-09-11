@@ -11,7 +11,10 @@ export const CommandPalette: React.FC<Props> = ({ isOpen, onClose, onOpenSearch,
   useEffect(()=>{ if(!isOpen) return; setQuery(''); setTimeout(()=>inputRef.current?.focus(),30); },[isOpen]);
   useEffect(()=>{ const h=(e:KeyboardEvent)=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); return; } if(e.key==='Escape'&&isOpen) onClose(); }; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h); },[isOpen,onClose]);
   const commands:Command[] = useMemo(()=>[
-    {id:'search',label:'Search OFFSCRPT',hint:'Articles, posts, people & tags',icon:Search,run:()=>{onClose();onOpenSearch();}},
+    {id:'search',label:'Search OFFSCRPT',hint:'Everything on OFFSCRPT',icon:Search,run:()=>{onClose();onOpenSearch();}},
+    {id:'knowledge',label:'Ask OFFSCRPT',hint:'Search + grounded knowledge',icon:Sparkles,run:()=>{onClose();onNavigate('knowledge');}},
+    {id:'vault',label:'My Vault',hint:'Saved library + notes',icon:Bookmark,run:()=>{onClose();onNavigate('vault');}},
+    {id:'research',label:'OFFSCRPT Research',hint:'Synthesize published sources',icon:Sparkles,run:()=>{onClose();onNavigate('research');}},
     {id:'home',label:'Go Home',icon:Home,run:()=>{onClose();onNavigate('home');}},
     {id:'dashboard',label:'My OFFSCRPT',hint:'Account dashboard',icon:UserRound,run:()=>{onClose();onNavigate('dashboard');}},
     {id:'preferences',label:'Notification Settings',icon:Settings2,run:()=>{onClose();onNavigate('preferences');}},

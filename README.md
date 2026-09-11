@@ -5,8 +5,8 @@ V80 connects the existing publishing, community, identity, reading, search, feed
 See `V80.0.0_INTELLIGENCE_CORE.md` for the implementation boundary and `BUILD_VALIDATION.txt` for the exact validation status.
 
 
-OFFSCRPT is a full-stack creator platform: a technical blog/publication engine with a
-built-in social layer (posts, comments, follows, communities), creator analytics, a
+OFFSCRPT is a general-purpose publishing, social and knowledge platform with a
+long-form publication engine, community layer, personalized discovery and AI-assisted knowledge tools (posts, comments, follows, communities), creator analytics, a
 personalized recommendation feed, moderation tooling, and a Firestore-authoritative admin
 control center. It's a single-page React app backed entirely by Firebase (Auth + Firestore),
 deployed as a static build to Vercel.
@@ -365,3 +365,8 @@ Removed a duplicate `getQuestionForModeration` export from the Questions + Answe
 ## V77.0.5
 
 Question-page runtime hardening: fixed React hook ordering for the QuestionView and retained guest-first-visit light theme behavior.
+
+
+## V81 Universal Knowledge Engine
+
+V81 adds the user-facing Knowledge, Research and My Vault surfaces on top of the V80 Intelligence Core. Use `#knowledge`, `#research` and `#vault` or the Command Palette. See `V81.0.0_UNIVERSAL_KNOWLEDGE_ENGINE.md` and `BUILD_VALIDATION.txt` for scope and verification.

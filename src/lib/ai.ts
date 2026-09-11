@@ -109,3 +109,20 @@ export function recordAILearningItem(item:{topic?:string;title:string;content:st
 export function clearAICache(){ try { const keys=[]; for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k && (k.startsWith('offscrpt:ai:openrouter:v3:') || k.startsWith('offscrpt:ai:v2:') || k.startsWith('offscrpt:ai:v1:') || k.startsWith('offscrpt:ai:gemini:')))keys.push(k);} keys.forEach(k=>localStorage.removeItem(k)); localStorage.setItem('offscrpt:ai:openrouter:cache-migrated:v1','1'); } catch (error) { console.warn('AI cache clear skipped:', error); } }
 
 export function contentRevision(input:AIContentInput){ const raw=`${input.sourceRevision||''}|${input.title}|${input.content.slice(0,5000)}`; let h=2166136261;for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(36); }
+
+export interface OFFSCRPTRetrievalSource {
+  type: string; id: string; title: string; excerpt?: string; authorId?: string; status?: string; visibility?: string; path?: string; score?: number;
+}
+
+export async function retrieveOFFSCRPTSources(query: string, scope: 'site'|'saved'|'page' = 'site', current?: {type:string; id:string}, savedIds: Array<{type:string;id:string}> = [], limit = 10) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sign in to search OFFSCRPT knowledge.');
+  const token = await user.getIdToken();
+  const response = await fetch('/api/ai/offscript-retrieve', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ query: query.slice(0, 600), uid: user.uid, scope, current, savedIds: savedIds.slice(0, 100), limit: Math.max(1, Math.min(20, limit)) })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(String(data?.error || 'OFFSCRPT retrieval failed.'));
+  return data as { sources: OFFSCRPTRetrievalSource[]; context: string; retrievedAt: string; count: number; disabled?: boolean };
+}
