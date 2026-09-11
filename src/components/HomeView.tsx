@@ -73,10 +73,10 @@ const CarouselComponent: React.FC<{ slides: CarouselSlide[] }> = ({ slides }) =>
   const handleSurfaceClick = () => { if (currentSlide.linkUrl?.trim()) openLink(currentSlide.linkUrl); };
 
   return (
-    <div className="w-full bg-black border-b-4 border-black p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="w-full border-b-4 border-black">
+      <div className="w-full">
         <div
-          className={`relative w-full aspect-[21/9] sm:aspect-[3/1] neo-border overflow-hidden group ${currentSlide.linkUrl?.trim() ? 'cursor-pointer' : ''}`}
+          className={`relative w-full aspect-[16/9] sm:aspect-[21/9] neo-border overflow-hidden group ${currentSlide.linkUrl?.trim() ? 'cursor-pointer' : ''}`}
           style={{ backgroundColor: currentSlide.backgroundColor || '#111111' }}
           onClick={handleSurfaceClick}
           role={currentSlide.linkUrl?.trim() ? 'link' : undefined}

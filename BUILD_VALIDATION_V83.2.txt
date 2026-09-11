@@ -1,0 +1,37 @@
+OFFSCRPT V83.2.0 — BUILD VALIDATION
+
+Implemented:
+- Home carousel outer black framing removed; slide fills available width.
+- Responsive render frame: 16:9 on mobile, 21:9 on larger screens.
+- Carousel images remain object-cover so there is no letterboxing inside the slide.
+- Admin carousel now has responsive crop preview for desktop and mobile.
+- Crop preview reflects X/Y position and zoom in real time and supports click-to-reposition.
+- Added crop safe-area guidance.
+- Fixed duplicate getCarouselSlides declaration in AdminStudioModal.
+- Preserved carousel Firestore fields and CRUD/reorder behavior.
+
+Checks passed:
+- check-v83-1-hardening.mjs
+- check-v83-mobile.mjs
+- check-firebase.mjs
+- check-rules.mjs
+- check-imports.mjs
+- check-schema.mjs
+- check-runtime-patterns.mjs
+- check-recommendations.mjs
+- check-handles.mjs
+- check-identity-sync.mjs
+- check-public-profile-access.mjs
+- check-comments.mjs
+- check-site-sync.mjs
+- check-v80-intelligence.mjs
+- check-v81-universal-knowledge.mjs
+- check-v81-navigation-branding.mjs
+- check-v82-ai-theme.mjs
+
+TypeScript/Vite production validation:
+- Direct global tsc run remains blocked by missing project dependencies in the package environment.
+- Vite CLI is not installed in the active environment.
+- No claim of a completed production build is made.
+
+No Firestore schema/rules changes introduced by this release.

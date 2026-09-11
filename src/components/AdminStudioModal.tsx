@@ -2421,8 +2421,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       {/* Live Thumbnail Preview */}
                       <div className="flex flex-col items-center justify-center border-2 border-dashed border-neutral-300 p-3 bg-neutral-50 min-h-[140px]">
                         <span className="font-mono text-[10px] uppercase font-bold text-neutral-500 mb-2">Live Slide Preview</span>
-                        <div className="w-full aspect-[21/9] border-2 border-black overflow-hidden" style={{ backgroundColor: newSlideBackgroundColor }}>
-                          {newSlideMode === 'image' && newSlideImageUrl ? <img src={newSlideImageUrl} alt="Slide preview" className="w-full h-full object-cover" /> : <div className="h-full grid place-items-center text-center text-neutral-700/70 font-mono text-xs uppercase px-4">Scratch canvas — use the visual builder below</div>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full">
+                          <div>
+                            <div className="font-mono text-[8px] font-black uppercase mb-1">DESKTOP · 21:9</div>
+                            <div className="w-full aspect-[21/9] border-2 border-black overflow-hidden" style={{ backgroundColor: newSlideBackgroundColor }}>
+                              {newSlideMode === 'image' && newSlideImageUrl ? <img src={newSlideImageUrl} alt="Desktop slide preview" className="w-full h-full object-cover" style={{ objectPosition: `${newSlidePositionX}% ${newSlidePositionY}%`, transform: `scale(${newSlideZoom / 100})`, transformOrigin: 'center' }} /> : <div className="h-full grid place-items-center text-center text-neutral-700/70 font-mono text-[9px] uppercase px-2">Scratch canvas — use the visual builder below</div>}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="font-mono text-[8px] font-black uppercase mb-1">MOBILE · 16:9</div>
+                            <div className="w-full aspect-[16/9] border-2 border-black overflow-hidden" style={{ backgroundColor: newSlideBackgroundColor }}>
+                              {newSlideMode === 'image' && newSlideImageUrl ? <img src={newSlideImageUrl} alt="Mobile slide preview" className="w-full h-full object-cover" style={{ objectPosition: `${newSlidePositionX}% ${newSlidePositionY}%`, transform: `scale(${newSlideZoom / 100})`, transformOrigin: 'center' }} /> : <div className="h-full grid place-items-center text-center text-neutral-700/70 font-mono text-[9px] uppercase px-2">Scratch canvas — use the visual builder below</div>}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -2560,8 +2571,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                                   {/* Preview */}
                                   <div className="flex flex-col items-center justify-center border-2 border-black p-2 bg-neutral-100">
                                     <span className="font-mono text-[10px] uppercase font-bold text-neutral-600 mb-2">Updated Preview</span>
-                                    <div className="w-full aspect-[21/9] border-2 border-black overflow-hidden" style={{ backgroundColor: editSlideBackgroundColor }}>
-                                      {editSlideMode === 'image' && editSlideImageUrl ? <img src={editSlideImageUrl} alt="Edit preview" className="w-full h-full object-cover" style={{ objectPosition: `${editSlidePositionX}% ${editSlidePositionY}%`, transform: `scale(${editSlideZoom / 100})` }} /> : <div className="h-full grid place-items-center text-neutral-600 font-mono text-xs uppercase">Scratch canvas</div>}
+                                    <div className="grid grid-cols-1 gap-2 w-full">
+                                      <div>
+                                        <div className="font-mono text-[8px] font-black uppercase mb-1">DESKTOP · 21:9</div>
+                                        <div className="w-full aspect-[21/9] border-2 border-black overflow-hidden" style={{ backgroundColor: editSlideBackgroundColor }}>
+                                          {editSlideMode === 'image' && editSlideImageUrl ? <img src={editSlideImageUrl} alt="Desktop edit preview" className="w-full h-full object-cover" style={{ objectPosition: `${editSlidePositionX}% ${editSlidePositionY}%`, transform: `scale(${editSlideZoom / 100})`, transformOrigin: 'center' }} /> : <div className="h-full grid place-items-center text-neutral-600 font-mono text-[9px] uppercase">Scratch canvas</div>}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <div className="font-mono text-[8px] font-black uppercase mb-1">MOBILE · 16:9</div>
+                                        <div className="w-full aspect-[16/9] border-2 border-black overflow-hidden" style={{ backgroundColor: editSlideBackgroundColor }}>
+                                          {editSlideMode === 'image' && editSlideImageUrl ? <img src={editSlideImageUrl} alt="Mobile edit preview" className="w-full h-full object-cover" style={{ objectPosition: `${editSlidePositionX}% ${editSlidePositionY}%`, transform: `scale(${editSlideZoom / 100})`, transformOrigin: 'center' }} /> : <div className="h-full grid place-items-center text-neutral-600 font-mono text-[9px] uppercase">Scratch canvas</div>}
+                                        </div>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
