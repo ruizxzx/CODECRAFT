@@ -300,7 +300,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
           <div className="font-bold uppercase text-neutral-800">Community Rules</div>
           <p className="text-neutral-600 leading-relaxed">
             • Constructive tech discussions only.
-            <br />• Official dispatches belong to the main blog; user writeups belong in Community SCRPTS.
+            <br />• Official dispatches belong to SCRPTS; user writeups belong in Community SCRPTS.
             <br />• Unique @handles represent your public identity.
           </p>
         </div>

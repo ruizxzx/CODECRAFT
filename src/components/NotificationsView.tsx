@@ -67,7 +67,7 @@ export const NotificationsView: React.FC<Props> = ({ userProfile, onNavigate }) 
     void markNotificationRead(userProfile!.uid, n.id).catch((error) => console.warn('OFFSCRPT recoverable operation failed:', error));
     if (n.targetType === 'post' && n.targetId) onNavigate('community_post', n.targetId);
     else if (n.targetType === 'article' && n.targetId) onNavigate('article', n.targetId);
-    else if (n.targetType === 'question' && n.targetId) onNavigate('social', 'questions');
+    else if (n.targetType === 'question' && n.targetId) onNavigate('question', n.targetId);
     else if (n.targetType === 'profile' && n.targetId) onNavigate('community_profile', n.targetId);
     else if (n.actorUsername) onNavigate('community_profile', n.actorUsername);
   };

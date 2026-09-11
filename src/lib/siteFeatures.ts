@@ -24,6 +24,8 @@ export interface ChangelogEntry {
   title: string;
   changes: string[];
   kind?: 'feature' | 'fix' | 'security' | 'maintenance';
+  createdAt?: unknown;
+  updatedAt?: unknown;
 }
 
 export const RECENT_CHANGELOG: ChangelogEntry[] = [

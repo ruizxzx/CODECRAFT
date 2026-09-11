@@ -336,7 +336,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </header>
 
-      {/* Mobile floating navigation dock. Keep exactly five equal-width actions so the dock never overflows narrow screens. */}
+      {/* Mobile floating navigation dock. Keep five equal-width actions so the dock never overflows narrow screens. */}
       <nav
         className="mobile-floating-nav fixed left-2 right-2 bottom-2 z-[55] md:hidden bg-white border-2 border-black neo-shadow-sm p-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] flex items-stretch gap-1"
         aria-label="Mobile quick navigation"

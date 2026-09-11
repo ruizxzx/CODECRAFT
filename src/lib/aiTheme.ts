@@ -4,6 +4,8 @@ import { resolveMasterAccess } from './masterControl';
 import { writeAdminAudit } from './audit';
 import type { AIThemeConfig, SiteConfig } from '../types';
 
+export type AIThemeColorKey = Exclude<keyof AIThemeConfig, 'updatedAt' | 'updatedBy'>;
+
 export const DEFAULT_AI_THEME: AIThemeConfig = {
   primary: '#FF00E5',
   secondary: '#2457FF',
@@ -28,7 +30,7 @@ export const DEFAULT_AI_THEME: AIThemeConfig = {
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
-export const AI_THEME_KEYS: Array<keyof AIThemeConfig> = [
+export const AI_THEME_KEYS: AIThemeColorKey[] = [
   'primary','secondary','accent','background','surface','border','text','mutedText','buttonText',
   'hover','active','inputBackground','inputBorder','userMessage','assistantMessage','source','link','icon','header'
 ];

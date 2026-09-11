@@ -35,7 +35,8 @@
     "check:v80": "node scripts/check-v80-intelligence.mjs",
     "check:v81": "node scripts/check-v81-universal-knowledge.mjs",
     "check:v81-navigation": "node scripts/check-v81-navigation-branding.mjs",
-    "check:v83-mobile": "node scripts/check-v83-mobile.mjs"
+    "check:v83-mobile": "node scripts/check-v83-mobile.mjs",
+    "check:v83-1": "node scripts/check-v83-1-hardening.mjs"
   },
   "dependencies": {
     "@sanity/client": "^8.5.0",

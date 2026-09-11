@@ -126,7 +126,7 @@ export default async function handler(req: any, res: any) {
     }
 
     const isAdmin = ADMIN_EMAILS.has(user.email);
-    const folder = ['profile', 'articles', 'posts', 'videos', 'attachments', 'answers', 'carousel', 'site'].includes(requestedFolder) ? requestedFolder : 'users';
+    const folder = ['profile', 'articles', 'posts', 'videos', 'attachments', 'answers', 'discussion-replies', 'carousel', 'site'].includes(requestedFolder) ? requestedFolder : 'users';
     if ((folder === 'articles' || folder === 'carousel' || folder === 'site') && !isAdmin) return res.status(403).json({ error: 'Only authorized administrators can upload site-wide media.' });
 
     const ext = fileName.includes('.') ? fileName.split('.').pop() : (contentType.split('/')[1] || 'bin');

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BarChart3, BookOpen, MessageCircle, Users, UserRoundCheck, Heart, Clock, Share2, Bookmark, Eye, RotateCcw, Copy, RefreshCw } from 'lucide-react';
 import type { Article, CommunityUser, PageView, Series } from '../types';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { getCountFromServer, collection } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { getArticleAnalyticsAggregate, subscribeArticleAnalytics, type ArticleAnalyticsAggregate } from '../lib/analytics';
 import { getSeriesList } from '../lib/series';
@@ -74,16 +74,14 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
         markReceived();
       }, rangeDays));
 
-      unsubscribers.push(onSnapshot(
-        collection(db, 'articles', slug, 'comments'),
-        snap => {
-          setStats(prev => ({ ...prev, [slug]: { ...(prev[slug] || { views: 0, uniqueReaders: 0, averageReadingTimeMs: 0, completionRate: 0, scrollDepth: 0, reactions: 0, bookmarks: 0, comments: 0, shares: 0, returnReaders: 0, funnel: { opened: 0, p25: 0, p50: 0, p75: 0, completed: 0 } }), comments: snap.size } }));
-        },
-        error => {
-          console.warn(`Creator comments subscription failed for ${slug}:`, error);
-          setAnalyticsError(prev => prev || `Live comment analytics failed for ${slug}.`);
-        },
-      ));
+      void getCountFromServer(collection(db, 'articles', slug, 'comments'))
+        .then(snapshot => {
+          setStats(prev => ({ ...prev, [slug]: { ...(prev[slug] || { views: 0, uniqueReaders: 0, averageReadingTimeMs: 0, completionRate: 0, scrollDepth: 0, reactions: 0, bookmarks: 0, comments: 0, shares: 0, returnReaders: 0, funnel: { opened: 0, p25: 0, p50: 0, p75: 0, completed: 0 } }), comments: snapshot.data().count } }));
+        })
+        .catch(error => {
+          console.warn(`Creator comment count read failed for ${slug}:`, error);
+          setAnalyticsError(prev => prev || `Comment analytics failed for ${slug}.`);
+        });
     }
 
     return () => unsubscribers.forEach(unsub => unsub());

@@ -17,39 +17,46 @@ export const MarqueeTicker: React.FC<{ siteConfig: SiteConfig }> = ({ siteConfig
   const duration = Math.max(8, Number(siteConfig.marqueeSpeedSeconds) || 25);
   const pauseOnHover = siteConfig.marqueePauseOnHover !== false;
 
+  const renderGroup = (copy: number) => (
+    <div className="marquee-group" aria-hidden={copy === 1 ? true : undefined}>
+      {items.map((item, idx) => {
+        const Icon = ICONS[idx % ICONS.length];
+        const content = (
+          <span className="flex shrink-0 items-center gap-2.5">
+            <Icon className="w-3.5 h-3.5 shrink-0 text-[var(--color-primary)] stroke-[2.5]" />
+            <span className="font-bold">{item.text}</span>
+            <span className="text-white/40 font-mono text-base">•</span>
+          </span>
+        );
+        return item.url ? (
+          <a
+            href={item.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            key={`${copy}-${item.id}-${idx}`}
+            className="inline-flex shrink-0 items-center hover:text-[var(--color-primary)] transition-colors"
+            title={`Open ${item.text}`}
+          >
+            {content}
+            <ExternalLink className="w-3 h-3 ml-1 shrink-0 text-white/35" />
+          </a>
+        ) : (
+          <span key={`${copy}-${item.id}-${idx}`} className="inline-flex shrink-0 items-center">
+            {content}
+          </span>
+        );
+      })}
+    </div>
+  );
+
   return (
-    <div className="w-full h-[40px] bg-black text-white border-b-4 border-black flex items-center overflow-hidden select-none">
+    <div className="marquee-viewport w-full h-[40px] bg-black text-white border-b-4 border-black overflow-hidden select-none">
       <div
-        className={`flex w-max whitespace-nowrap text-xs font-black uppercase tracking-widest animate-marquee ${pauseOnHover ? 'marquee-pause-on-hover' : ''}`}
+        className={`marquee-track ${pauseOnHover ? 'marquee-pause-on-hover' : ''}`}
         style={{ animationDuration: `${duration}s` }}
       >
-        {[...items, ...items, ...items].map((item, idx) => {
-          const Icon = ICONS[idx % ICONS.length];
-          const content = (
-            <span className="flex items-center space-x-2.5">
-              <Icon className="w-3.5 h-3.5 text-[var(--color-primary)] stroke-[2.5]" />
-              <span className="font-bold">{item.text}</span>
-              <span className="text-white/40 font-mono text-base">•</span>
-            </span>
-          );
-          return item.url ? (
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noreferrer noopener"
-              key={`${item.id}-${idx}`}
-              className="inline-flex items-center hover:text-[var(--color-primary)] transition-colors"
-              title={`Open ${item.text}`}
-            >
-              {content}
-              <ExternalLink className="w-3 h-3 ml-1 text-white/35" />
-            </a>
-          ) : (
-            <div key={`${item.id}-${idx}`} className="inline-flex items-center">
-              {content}
-            </div>
-          );
-        })}
+        {renderGroup(0)}
+        {renderGroup(1)}
       </div>
     </div>
   );

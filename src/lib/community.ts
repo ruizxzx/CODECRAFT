@@ -1,7 +1,7 @@
 import { emitActivityEvent } from './activity';
 import { db, auth, checkIsAdmin } from './firebase';
 import { 
-  collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment, runTransaction
+  collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment, runTransaction, documentId
 } from 'firebase/firestore';
 import { CommunityUser, CommunityPost, CommunityComment, UserSavedItem, BookmarkCollection, CarouselSlide, Notification } from '../types';
 import { isPlatformModerator } from './social';
@@ -375,6 +375,24 @@ export async function getAllCommunityUsers(): Promise<CommunityUser[]> {
     console.warn('Failed to load public community users:', error);
     return [];
   }
+}
+
+export async function getPublicProfilesByUsernames(usernames: string[]): Promise<Record<string, CommunityUser>> {
+  const clean = Array.from(new Set(usernames.map(normalizeUsername).filter(Boolean))).slice(0, 100);
+  const out: Record<string, CommunityUser> = {};
+  for (let i = 0; i < clean.length; i += 10) {
+    const batch = clean.slice(i, i + 10);
+    try {
+      const snap = await getDocs(query(collection(db, 'publicProfiles'), where(documentId(), 'in', batch)));
+      for (const docSnap of snap.docs) {
+        const profile = mapDocDates(docSnap.data()) as CommunityUser;
+        if (profile?.username) out[normalizeUsername(profile.username)] = profile;
+      }
+    } catch (error) {
+      console.warn('Batched public profile lookup failed:', error);
+    }
+  }
+  return out;
 }
 
 export async function getAllCommentsForSearch(): Promise<Array<{ id: string; content: string; authorId: string; authorUsername: string; authorName: string; postId?: string; articleSlug?: string; createdAt: string }>> {

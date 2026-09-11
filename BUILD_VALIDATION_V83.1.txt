@@ -1,0 +1,43 @@
+OFFSCRPT V83.1.0 validation snapshot
+
+PASS: V83.1 hardening checks (11/11)
+PASS: V83 mobile checks (7/7)
+PASS: TypeScript syntax parsing (115 active TS/TSX files, 0 syntax diagnostics)
+PASS: import checks
+PASS: export checks
+PASS: identifier checks
+PASS: Firebase checks
+PASS: Firestore rules checks
+PASS: schema checks
+PASS: runtime-pattern checks
+PASS: recommendation checks
+PASS: handle propagation checks
+PASS: identity sync checks
+PASS: public-profile checks
+PASS: comments checks
+PASS: site-sync checks
+PASS: V80 intelligence checks
+PASS: V81 knowledge checks
+PASS: V81 navigation/branding checks
+
+FIXED IN V83.1.0:
+- mobile marquee loop/rendering
+- duplicated mobile CSS layers
+- over-broad mobile grid override affecting intentional scrollers
+- mobile code block wrapping behavior
+- Question answer edit argument mismatch
+- Question reporting argument mismatch
+- discussion reply media upload folder contract
+- upload false-success state
+- direct notification routing to questions
+- Series legacy visibility compatibility in content adapter
+- AI theme key typing
+- changelog cloud timestamp typing
+- comment author profile lookup batching
+- creator dashboard per-article comment listener explosion
+- remaining active user-facing Blog terminology
+
+BUILD BLOCKER:
+- npm ci --offline could not complete because yocto-queue was not cached.
+- Full dependency-backed TypeScript/Vite production build was therefore not run.
+- No claim of a production build pass is made.

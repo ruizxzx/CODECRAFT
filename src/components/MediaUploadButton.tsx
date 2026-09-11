@@ -5,7 +5,7 @@ import { ImageCropperModal } from './ImageCropperModal';
 import type { CropAspectPreset, CropShape, ImageCropResult } from './ImageCropperModal';
 
 interface MediaUploadButtonProps {
-  folder: 'profile' | 'articles' | 'posts' | 'videos' | 'attachments' | 'answers' | 'carousel' | 'users' | 'site';
+  folder: 'profile' | 'articles' | 'posts' | 'videos' | 'attachments' | 'answers' | 'discussion-replies' | 'carousel' | 'users' | 'site';
   accept: string;
   label?: string;
   onUploaded: (url: string, meta: { objectKey: string; kind: 'image' | 'video' | 'file'; contentType: string; size: number; width?: number; height?: number; originalFileName?: string }) => void;
@@ -124,11 +124,12 @@ export const MediaUploadButton: React.FC<MediaUploadButtonProps> = ({
 
     setStatus('uploading');
     try {
+      let allSucceeded = true;
       for (const file of (multiple ? files : [files[0]])) {
         const success = await performUpload(file, undefined, undefined, file.name);
-        if (!success) break;
+        if (!success) { allSucceeded = false; break; }
       }
-      if (!error) {
+      if (allSucceeded) {
         setStatus('done');
         setTimeout(() => setStatus('idle'), 1800);
       }
