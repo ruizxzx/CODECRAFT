@@ -24,7 +24,7 @@ export const CommandPalette: React.FC<Props> = ({ isOpen, onClose, onOpenSearch,
     {id:'history',label:'Reading History',icon:History,run:()=>{onClose();onNavigate('history');}},
     {id:'notifications',label:'Notifications',icon:Bell,run:()=>{onClose();onNavigate('notifications');}},
     {id:'explore',label:'Explore',icon:Compass,run:()=>{onClose();onNavigate('explore');}},
-    ...(onOpenSiteAI ? [{id:'ai-copilot',label:'Open AI Copilot',hint:'Existing site-wide assistant',icon:Sparkles,run:()=>{onClose();onOpenSiteAI();}}] : []),
+    ...(onOpenSiteAI ? [{id:'ai-copilot',label:'Open OFFSCRPT AI',hint:'Unified site-wide and current-page intelligence',icon:Sparkles,run:()=>{onClose();onOpenSiteAI();}}] : []),
         ...(onCreatePost ? [{id:'create',label:'Create a Post',icon:PlusCircle,run:()=>{onClose();onCreatePost();}}] : []),
   ],[onClose,onCreatePost,onNavigate,onOpenSearch]);
   const filtered=commands.filter(c=>`${c.label} ${c.hint||''}`.toLowerCase().includes(query.trim().toLowerCase()));

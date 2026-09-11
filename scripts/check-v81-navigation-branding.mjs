@@ -28,17 +28,17 @@ for (const label of ['Home', 'SCRPTS', 'Community', 'Explore']) {
     throw new Error(`Primary navigation label missing: ${label}`);
   }
 }
-if (!header.includes('ASK OFFSCRPT')) throw new Error('Unified Ask OFFSCRPT entry missing.');
+if (!header.includes('OFFSCRPT AI')) throw new Error('Unified OFFSCRPT AI entry missing.');
 if (header.includes('<span>KNOWLEDGE</span>')) throw new Error('Legacy KNOWLEDGE primary navigation remains.');
 if (header.includes('<span className="hidden sm:inline">ASK AI</span>')) throw new Error('Legacy ASK AI header label remains.');
-if (!header.includes("handleNavClick('knowledge')")) throw new Error('ASK OFFSCRPT is not wired to the knowledge workspace.');
+if (!header.includes("handleNavClick('knowledge')")) throw new Error('OFFSCRPT AI is not wired to the unified knowledge workspace.');
 if (!header.includes('onOpenSiteAI')) throw new Error('Existing site-wide Copilot access is missing.');
 if (!command.includes("label:'Open SCRPTS'")) throw new Error('Command palette SCRPTS entry missing.');
-if (!command.includes("label:'Ask OFFSCRPT'")) throw new Error('Command palette Ask OFFSCRPT entry missing.');
-if (!command.includes("label:'Open AI Copilot'")) throw new Error('Existing Copilot command access missing.');
+if (!command.includes("label:'Open OFFSCRPT AI'")) throw new Error('Command palette OFFSCRPT AI entry missing.');
+if (command.includes("label:'Open AI Copilot'")) throw new Error('Legacy AI Copilot command label remains.');
 if (!app.includes("hash === 'blog'")) throw new Error('Legacy /#blog compatibility missing.');
 if (!cms.includes("id: 'blog', label: 'SCRPTS'")) throw new Error('Default CMS navigation is not branded SCRPTS.');
-if (!knowledge.includes('ASK OFFSCRPT')) throw new Error('Knowledge workspace heading is not branded ASK OFFSCRPT.');
+if (!knowledge.includes('OFFSCRPT AI')) throw new Error('Knowledge workspace heading is not branded OFFSCRPT AI.');
 
 const userFacingLegacy = [
   'READ THE BLOG', 'WRITE A BLOG', 'EDIT BLOG', 'PUBLISH BLOG', 'UNTITLED BLOG',
@@ -48,4 +48,4 @@ const source = files.map(f => fs.readFileSync(f, 'utf8')).join('\n');
 for (const token of userFacingLegacy) {
   if (source.includes(token)) throw new Error(`Legacy user-facing token remains in navigation/branding surface: ${token}`);
 }
-console.log('V81 NAVIGATION/BRANDING CHECK OK — SCRPTS branding, unified Ask OFFSCRPT entry, Copilot preservation and /#blog compatibility verified.');
+console.log('V81.2 AI/navigation check OK — SCRPTS branding, unified OFFSCRPT AI entry, merged AI page and /#blog compatibility verified.');
