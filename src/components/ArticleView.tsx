@@ -43,6 +43,8 @@ import { AIAssistantPanel } from './AIAssistantPanel';
 import type { ArticleReaction } from '../lib/cms';
 import { notifyToast } from '../lib/toast';
 import { articleToContent } from '../lib/content';
+import { saveHighlight, getHighlights, deleteHighlight, saveVaultNote } from '../lib/vault';
+import type { VaultHighlight } from '../types';
 import { deriveRelatedContent } from '../lib/contentGraph';
 
 function slugifyHeading(value: string): string {
@@ -141,6 +143,14 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const [discussionProfile, setDiscussionProfile] = useState<any>(null);
   const [discussionComposer, setDiscussionComposer] = useState<{selectedText?: string; initialTitle?: string; initialContent?: string; initialSource?: any} | null>(null);
   const [selectionQuoteVisible, setSelectionQuoteVisible] = useState(false);
+  const [highlights, setHighlights] = useState<VaultHighlight[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    if (user) void getHighlights(user.uid, article.slug).then(rows => { if (active) setHighlights(rows); }).catch(() => {});
+    else setHighlights([]);
+    return () => { active = false; };
+  }, [user?.uid, article.slug]);
 
   const safeContent = Array.isArray(article.content) ? article.content : [];
   const safeTags = Array.isArray(article.tags) ? article.tags : [];
@@ -797,9 +807,14 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             {discussionProfile && <button type="button" onClick={() => setDiscussionComposer({ initialTitle: `Discussion: ${article.title}`, initialSource: { sourceType:'article', sourceId:article.slug, sourceTitle:article.title, sourceUrl:window.location.origin+`/article/${encodeURIComponent(article.slug)}`, sourceAuthorId:article.author?.uid, sourceAuthorUsername:article.author?.username, sourceAuthorName:article.author?.name } })} className="border-2 border-black bg-white px-4 py-3 font-mono text-xs font-black uppercase shadow-[3px_3px_0_#000]">START A DISCUSSION</button>}
           </div>
           {selectionQuoteVisible && discussionProfile && <button type="button" onClick={() => { const text = window.getSelection()?.toString().trim() || ''; setDiscussionComposer({ selectedText:text, initialTitle:`Discussion: ${article.title}`, initialSource:{ sourceType:'article', sourceId:article.slug, sourceTitle:article.title, sourceUrl:window.location.origin+`/article/${encodeURIComponent(article.slug)}`, sourceAuthorId:article.author?.uid, sourceAuthorUsername:article.author?.username, sourceAuthorName:article.author?.name, selectedText:text } }); setSelectionQuoteVisible(false); }} className="border-2 border-black bg-black text-white px-4 py-2 font-mono text-[10px] font-black uppercase">QUOTE SELECTED TEXT → DISCUSSION</button>}
+          {selectionQuoteVisible && user && <button type="button" onClick={() => { const text = window.getSelection()?.toString().trim() || ''; void saveHighlight(user.uid, { articleSlug: article.slug, articleTitle: article.title, quote: text }).then(h => { setHighlights(prev => [h, ...prev]); notifyToast('Highlight saved to your Vault.', 'success'); }).catch(e => notifyToast(e instanceof Error ? e.message : 'Could not save highlight.', 'error')); setSelectionQuoteVisible(false); }} className="border-2 border-black bg-[var(--color-primary)] px-4 py-2 font-mono text-[10px] font-black uppercase ml-2">SAVE HIGHLIGHT</button>}
         </section>
+        {highlights.length > 0 && <section className="border-4 border-black bg-white p-5 sm:p-6 neo-shadow-sm">
+          <div className="font-mono text-[9px] font-black uppercase mb-3">Your highlights on this article</div>
+          <div className="space-y-2">{highlights.map(h => <div key={h.id} className="border-2 border-black bg-[var(--color-primary)]/10 p-3 flex items-start justify-between gap-3"><p className="text-sm italic">&ldquo;{h.quote}&rdquo;</p><button type="button" onClick={() => { void deleteHighlight(user!.uid, h.id).then(() => setHighlights(prev => prev.filter(x => x.id !== h.id))).catch(() => notifyToast('Could not remove highlight.', 'error')); }} className="shrink-0 border-2 border-black bg-white px-2 py-1 font-mono text-[9px] font-black uppercase">REMOVE</button></div>)}</div>
+        </section>}
 
-        <AIAssistantPanel input={{contentType:'article',contentId:article.slug,title:article.title,content:safeContent.map(b=>[b.content,b.calloutTitle,b.codeBlock?.code,b.items?.join(' ')].filter(Boolean).join(' ')).join(' '),metadata:{tags:safeTags,category:article.category,author:resolvedOriginalAuthor?.name||safeAuthor.name,sourceUrl:`${window.location.origin}/#article/${encodeURIComponent(article.slug)}`,sourceType:'article'},sourceRevision:article.editedAt||article.publishedAt}} selectedText={selectionQuoteVisible ? (window.getSelection()?.toString().trim()||'') : undefined} onCreateNote={(text)=>{try{const k='offscrpt:ai:notes:v1';const old=JSON.parse(localStorage.getItem(k)||'[]');localStorage.setItem(k,JSON.stringify([...old,{id:Date.now().toString(),title:article.title,text,createdAt:new Date().toISOString()}].slice(-100)));notifyToast('AI note saved locally.','success')}catch(error){console.warn('AI note save skipped:',error);}}}/>
+        <AIAssistantPanel input={{contentType:'article',contentId:article.slug,title:article.title,content:safeContent.map(b=>[b.content,b.calloutTitle,b.codeBlock?.code,b.items?.join(' ')].filter(Boolean).join(' ')).join(' '),metadata:{tags:safeTags,category:article.category,author:resolvedOriginalAuthor?.name||safeAuthor.name,sourceUrl:`${window.location.origin}/#article/${encodeURIComponent(article.slug)}`,sourceType:'article'},sourceRevision:article.editedAt||article.publishedAt}} selectedText={selectionQuoteVisible ? (window.getSelection()?.toString().trim()||'') : undefined} onCreateNote={(text)=>{if(user){void saveVaultNote(user.uid,{body:text,title:article.title,articleSlug:article.slug,articleTitle:article.title,quote:text}).then(()=>notifyToast('Note saved to your Vault.','success')).catch(e=>notifyToast(e instanceof Error?e.message:'Could not save note.','error'));}else{try{const k='offscrpt:ai:notes:v1';const old=JSON.parse(localStorage.getItem(k)||'[]');localStorage.setItem(k,JSON.stringify([...old,{id:Date.now().toString(),title:article.title,text,createdAt:new Date().toISOString()}].slice(-100)));notifyToast('Signed out — note saved locally on this device only.','info')}catch(error){console.warn('AI note save skipped:',error);}}}}/>
 
         {/* Article Body - Rich Medium/Editorial Typography */}
         <div ref={articleContentRef} className={`space-y-7 ${fontSize === 'large' ? 'text-xl leading-relaxed' : 'text-lg leading-relaxed'} font-serif text-neutral-900`}>

@@ -472,6 +472,25 @@ export interface BookmarkCollection {
   updatedAt: string;
 }
 
+export interface VaultHighlight {
+  id: string;
+  articleSlug: string;
+  articleTitle: string;
+  quote: string;
+  createdAt: string;
+}
+
+export interface VaultNote {
+  id: string;
+  title: string;
+  body: string;
+  articleSlug?: string;
+  articleTitle?: string;
+  quote?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Notification {
   id: string;
   type: 'follow' | 'upvote' | 'comment' | 'reply' | 'mention' | 'repost' | 'verification' | 'article_published' | 'message';

@@ -732,6 +732,26 @@ service cloud.firestore {
       allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId;
     }
 
+    match /users/{userId}/highlights/{highlightId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && incoming().articleSlug is string && incoming().articleSlug.size() > 0
+        && incoming().quote is string && incoming().quote.size() > 0 && incoming().quote.size() <= 2000
+        && incoming().createdAt is timestamp;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/vaultNotes/{noteId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && incoming().body is string && incoming().body.size() > 0 && incoming().body.size() <= 5000
+        && incoming().createdAt is timestamp;
+      allow update: if isSignedIn() && request.auth.uid == userId
+        && incoming().body is string && incoming().body.size() > 0 && incoming().body.size() <= 5000
+        && incoming().createdAt == existing().createdAt && incoming().updatedAt is timestamp;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
     match /users/{userId}/discussionRead/{postId} {
       allow read: if isSignedIn() && request.auth.uid == userId;
       allow create, update: if isSignedIn() && request.auth.uid == userId
