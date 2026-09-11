@@ -21,17 +21,43 @@ const tokens = (v: string) => norm(v).split(/[^a-z0-9@#_-]+/).map(x => x.replace
 export function parseDiscoveryQuery(raw: string): DiscoveryQueryPlan {
   const input = String(raw || '').trim();
   const filters: DiscoveryQueryPlan['filters'] = {};
+  let remainder = input;
+
+  const isValidDateFilter = (value: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}(?:T[^\s]+)?$/.test(value)) return false;
+    return Number.isFinite(new Date(value).getTime());
+  };
+
+  const filterPattern = /\b(type|topic|tag|author|from|community|series|before|after)\s*:\s*("[^"]*"|[^\s]+)/gi;
+  remainder = remainder.replace(filterPattern, (_match, rawKey: string, rawValue: string) => {
+    const key = rawKey.toLowerCase();
+    const value = String(rawValue || '').replace(/^"|"$/g, '').trim();
+    if (!value || ((key === 'before' || key === 'after') && !isValidDateFilter(value))) {
+      return _match;
+    }
+    if (key === 'from') filters.author = value.replace(/^@/, '');
+    else if (key === 'author') filters.author = value.replace(/^@/, '');
+    else filters[key as keyof typeof filters] = value.replace(/^@(?!(?:author|from)$)/, '');
+    return ' ';
+  });
+
   const remaining: string[] = [];
-  const parts = input.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
-  for (const part of parts) {
-    const clean = part.replace(/^"|"$/g, '');
-    const m = clean.match(/^(type|topic|tag|author|from|community|series|before|after):(.*)$/i);
-    if (!m || !m[2]) { remaining.push(clean); continue; }
-    const key = m[1].toLowerCase();
-    const value = m[2].trim();
-    if (key === 'from') filters.author = value;
-    else filters[key as keyof typeof filters] = value;
+  const parts = remainder.match(/(?:[^\s"]+|"[^"]*")+/g) || [];
+  for (const rawPart of parts) {
+    const clean = rawPart.replace(/^"|"$/g, '').trim();
+    if (!clean) continue;
+
+    if (/^@[a-z0-9][a-z0-9._-]*$/i.test(clean)) {
+      if (!filters.author) filters.author = clean.slice(1);
+      continue;
+    }
+    if (/^#[a-z0-9][a-z0-9._-]*$/i.test(clean)) {
+      if (!filters.topic) filters.topic = clean.slice(1);
+      continue;
+    }
+    remaining.push(clean);
   }
+
   const text = remaining.join(' ').trim();
   return { text, terms: tokens(text), filters };
 }

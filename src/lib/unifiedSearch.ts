@@ -33,7 +33,10 @@ export function searchEverything(entities: ContentEntity[], options: UnifiedSear
   const typeFromQuery = parsed.filters.type;
   if (f.types?.length) candidates = candidates.filter(x => f.types!.includes(x.type));
   if (typeFromQuery) candidates = candidates.filter(x => normalize(x.type) === normalize(typeFromQuery));
-  if (f.creatorId || parsed.filters.author) candidates = candidates.filter(x => normalize(x.authorId) === normalize(f.creatorId || parsed.filters.author));
+  if (f.creatorId || parsed.filters.author) {
+    const creator = normalize(f.creatorId || parsed.filters.author);
+    candidates = candidates.filter(x => normalize(x.authorId) === creator || normalize(x.authorUsername) === creator);
+  }
   if (f.topic || parsed.filters.topic) candidates = candidates.filter(x => x.topics.some(t => normalize(t) === normalize(f.topic || parsed.filters.topic)));
   if (f.tag || parsed.filters.tag) candidates = candidates.filter(x => x.tags.some(t => normalize(t) === normalize(f.tag || parsed.filters.tag)));
   if (f.communityId || parsed.filters.community) candidates = candidates.filter(x => normalize(x.communityId) === normalize(f.communityId || parsed.filters.community));

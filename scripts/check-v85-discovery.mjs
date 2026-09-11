@@ -7,7 +7,7 @@ const required = [
   'src/lib/unifiedSearch.ts',
   'src/lib/recommendationEngine.ts',
   'src/components/SearchModal.tsx',
-  'V85.0.0_DISCOVERY_CORE.md',
+  'V85.0.1_DISCOVERY_CORE_FIXES.md',
   'VERSION.md',
 ];
 for (const rel of required) {
@@ -24,5 +24,5 @@ for (const token of ['filterAuthorizedContent', 'parseDiscoveryQuery', 'freshnes
 const rec = fs.readFileSync(path.join(root, 'src/lib/recommendationEngine.ts'), 'utf8');
 if (!rec.includes("from './discovery'")) throw new Error('Recommendation engine is not connected to Discovery Core');
 const version = fs.readFileSync(path.join(root, 'VERSION.md'), 'utf8');
-if (!version.includes('OFFSCRPT_VERSION=85.0.0')) throw new Error('VERSION.md not set to 85.0.0');
+if (!version.includes('OFFSCRPT_VERSION=85.0.1')) throw new Error('VERSION.md not set to 85.0.1');
 console.log('V85 DISCOVERY CHECK PASS');

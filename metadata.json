@@ -1,8 +1,8 @@
 {
   "name": "OFFSCRPT",
-  "version": "0.85.0",
-  "description": "OFFSCRPT V85 Discovery Core: unified search ranking, discovery query filters, freshness/engagement scoring, and recommendation diversification built on the V84 knowledge foundation.",
-  "release": "OFFSCRPT V85",
+  "version": "0.85.1",
+  "description": "OFFSCRPT V85.0.1 Discovery Core bug fixes and hardening: inline filters, handle-aware author search, result-click telemetry, session-cached question indexing, consistent facet filtering, and resilient search loading.",
+  "release": "OFFSCRPT V85.0.1",
   "majorCapabilities": [
     "V84 Production Knowledge Engine",
     "Universal Search 2.0 Foundation",

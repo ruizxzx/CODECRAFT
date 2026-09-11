@@ -31,6 +31,7 @@ export interface ContentEntity {
   id: string;
   type: ContentType;
   authorId?: string;
+  authorUsername?: string;
   title: string;
   body: string;
   excerpt?: string;

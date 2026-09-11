@@ -1,0 +1,44 @@
+OFFSCRPT V85.0.1 BUILD VALIDATION
+
+STATIC/LOGIC CHECKS
+- Custom TypeScript/TSX parser: PASS (116 files, 0 parser diagnostics)
+- Pure Discovery/Unified Search compile: PASS
+- Discovery filter behavior tests: PASS
+- IMPORT CHECK: PASS (116 active source files)
+- FIREBASE CHECK: PASS
+- RULES CHECK: PASS
+- SCHEMA CHECK: PASS
+- RUNTIME PATTERN CHECK: PASS
+- RECOMMENDATION CHECK: PASS
+- HANDLE PROPAGATION CHECK: PASS
+- IDENTITY SYNC CHECK: PASS
+- PUBLIC PROFILE ACCESS CHECK: PASS
+- COMMENTS CHECK: PASS
+- SITE SYNC CHECK: PASS
+- V80 INTELLIGENCE CHECK: PASS
+- V81 KNOWLEDGE CHECK: PASS
+- V81 NAVIGATION CHECK: PASS
+- V84 KNOWLEDGE CHECK: PASS
+- V85 DISCOVERY CHECK: PASS
+
+DEPENDENCY-BACKED CHECKS
+- npm dependency installation: BLOCKED/NOT COMPLETED in audit environment (network/package install not available).
+- Full TypeScript project typecheck: BLOCKED by missing installed dependencies in audit environment; source-level V85 diagnostics were limited to unresolved external modules.
+- Production Vite build: BLOCKED because dependency tree is not installed.
+- Browser runtime testing: NOT RUN in this container.
+
+LOGIC TESTS
+- type: article: PASS
+- type: article with whitespace after colon: PASS
+- topic quoted filter: PASS
+- author:@handle: PASS
+- bare @handle: PASS
+- bare #topic: PASS
+- combined filters: PASS
+- author handle/UID matching: PASS
+- SearchModal question querying per keystroke removed: PASS
+- partial source loading via Promise.allSettled: PASS
+
+KNOWN LIMITATIONS
+- The build has not been dependency-backed typechecked or Vite-built in this environment.
+- External Firestore/browser behavior requires deployment or a fully provisioned dependency environment for final verification.
