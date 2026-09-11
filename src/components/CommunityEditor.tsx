@@ -105,7 +105,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
         <div className="bg-[var(--color-primary)] px-6 py-4 border-b-4 border-black flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <h2 className="font-display font-black text-xl uppercase tracking-tight text-black">
-              {type === 'blog' ? 'Publish Community Blog' : 'Start Community Discussion'}
+              {type === 'blog' ? 'Publish Community SCRPT' : 'Start Community Discussion'}
             </h2>
           </div>
           <button 
@@ -159,7 +159,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
                 }`}
               >
                 <BookOpen className="w-4 h-4 stroke-[2.5]" />
-                <span>Community Blog (Article)</span>
+                <span>Community SCRPT (Article)</span>
               </button>
               
               <button
@@ -181,7 +181,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="font-mono text-xs font-bold uppercase">
-                {type === 'blog' ? 'Blog Title' : 'Discussion Topic'}
+                {type === 'blog' ? 'SCRPT Title' : 'Discussion Topic'}
               </label>
               <span className="font-mono text-[11px] text-neutral-500">{title.length}/256</span>
             </div>
@@ -254,7 +254,7 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
               ) : (
                 <>
                   <Send className="w-4 h-4 stroke-[2.5]" />
-                  <span>Publish {type === 'blog' ? 'Blog Article' : 'Discussion'}</span>
+                  <span>Publish {type === 'blog' ? 'SCRPT Article' : 'Discussion'}</span>
                 </>
               )}
             </button>

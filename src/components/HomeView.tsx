@@ -135,7 +135,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
   useEffect(() => {
     const fetchCommunityPosts = async () => {
-      // Get discussions and blogs
+      // Get discussions and SCRPTS
       const d = await getPosts('discussion');
       const b = await getPosts('blog');
       const all = [...d, ...b];
@@ -425,7 +425,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </h2>
               </div>
               <p className="font-mono text-xs sm:text-sm text-neutral-600 font-bold uppercase">
-                Featured discussions and blogs from the community
+                Featured discussions and SCRPTS from the community
               </p>
             </div>
             <button 

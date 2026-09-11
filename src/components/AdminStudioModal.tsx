@@ -1522,7 +1522,7 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                   <div className="space-y-4 p-4 border-2 border-black bg-[var(--color-primary)]/20">
                     <div className="flex items-center justify-between gap-3 border-b-2 border-black pb-2">
                       <div>
-                        <h4 className="font-display font-black text-lg uppercase">Blog Archive / Orange Header</h4>
+                        <h4 className="font-display font-black text-lg uppercase">SCRPTS Archive / Orange Header</h4>
                         <p className="font-mono text-[10px] text-neutral-600">The archive header is fully CMS-controlled. The essay number remains live and is calculated from published articles.</p>
                       </div>
                       <div className="px-2 py-1 border-2 border-black bg-white font-mono text-[9px] font-black uppercase">

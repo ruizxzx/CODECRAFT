@@ -121,7 +121,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
         const a = articles.find((x:any) => x.sourcePostId === post.id || x.slug === (post as any).promotedToArticleSlug);
         if (a) await unpublishMainArticle(a);
         setMainArticleStatus('unpublished');
-        notifyToast('Removed from the main publication. The creator blog remains intact.');
+        notifyToast('Removed from the main publication. The creator SCRPT remains intact.');
       } else {
         await promoteCommunityBlogToMain(post, true);
         setMainArticleStatus('published');

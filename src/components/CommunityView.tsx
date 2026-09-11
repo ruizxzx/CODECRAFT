@@ -203,7 +203,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
           ) : !userAuth ? (
             <div className="space-y-4">
               <p className="font-sans text-xs text-neutral-600 leading-relaxed">
-                Sign in with your Google account and claim a unique <strong>@handle</strong> to publish blogs, join discussions, and save your favorites.
+                Sign in with your Google account and claim a unique <strong>@handle</strong> to publish SCRPTS, join discussions, and save your favorites.
               </p>
               <button 
                 onClick={handleLogin}
@@ -289,7 +289,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
           >
             <div className="flex items-center space-x-2">
               <BookOpen className="w-4 h-4" />
-              <span>Community Blogs</span>
+              <span>Community SCRPTS</span>
             </div>
             {activeTab === 'blogs' && <span className="text-[var(--color-primary)] font-black">●</span>}
           </button>
@@ -300,7 +300,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
           <div className="font-bold uppercase text-neutral-800">Community Rules</div>
           <p className="text-neutral-600 leading-relaxed">
             • Constructive tech discussions only.
-            <br />• Official dispatches belong to the main blog; user writeups belong in Community Blogs.
+            <br />• Official dispatches belong to the main blog; user writeups belong in Community SCRPTS.
             <br />• Unique @handles represent your public identity.
           </p>
         </div>
@@ -317,7 +317,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             )}
             <div>
               <h1 className="font-display font-black text-3xl sm:text-4xl uppercase tracking-tighter">
-                {activeTab === 'discussions' ? 'Community Discussions' : 'Community Engineering Blogs'}
+                {activeTab === 'discussions' ? 'Community Discussions' : 'Community Engineering SCRPTS'}
               </h1>
               <p className="font-sans text-xs text-neutral-500 mt-0.5">
                 {activeTab === 'discussions' 
@@ -332,7 +332,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
             className="self-start sm:self-auto px-4 py-2.5 bg-[var(--color-primary)] hover:bg-[var(--color-secondary)] text-black border-2 border-black font-display font-black text-xs uppercase neo-shadow-sm flex items-center space-x-1.5 transition-all"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
-            <span>{activeTab === 'discussions' ? 'Start Discussion' : 'Publish Blog'}</span>
+            <span>{activeTab === 'discussions' ? 'Start Discussion' : 'Publish SCRPT'}</span>
           </button>
         </div>
 
@@ -345,13 +345,13 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
           <div className="bg-white border-4 border-dashed border-black p-12 text-center space-y-4">
             <h3 className="font-display font-black text-2xl uppercase">No {activeTab} yet</h3>
             <p className="font-sans text-neutral-600 max-w-md mx-auto text-sm">
-              Be the first community member to contribute a {activeTab === 'discussions' ? 'topic' : 'blog post'} to the network!
+              Be the first community member to contribute a {activeTab === 'discussions' ? 'topic' : 'SCRPT post'} to the network!
             </p>
             <button 
               onClick={handleStartPost}
               className="px-6 py-3 bg-[var(--color-primary)] font-display font-black text-sm uppercase border-2 border-black neo-shadow-sm hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
             >
-              Create First {activeTab === 'discussions' ? 'Discussion' : 'Blog'}
+              Create First {activeTab === 'discussions' ? 'Discussion' : 'SCRPT'}
             </button>
           </div>
         ) : (
@@ -369,7 +369,7 @@ export const CommunityView: React.FC<CommunityViewProps> = ({
                       <span className={`px-2.5 py-0.5 border border-black font-mono text-[10px] font-black uppercase ${
                         post.type === 'blog' ? 'bg-[var(--color-accent)] text-black' : 'bg-[var(--color-secondary)] text-black'
                       }`}>
-                        {post.type === 'blog' ? 'Community Blog' : 'Discussion'}
+                        {post.type === 'blog' ? 'Community SCRPT' : 'Discussion'}
                       </span>
                       {post.isFeatured && (
                         <div className="inline-flex items-center space-x-1 bg-[var(--color-primary)] text-black px-2 py-0.5 text-[10px] font-mono font-black uppercase border border-black">

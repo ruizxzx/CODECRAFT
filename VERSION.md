@@ -1,4 +1,4 @@
-V81.0.0
+0.81.1
 # OFFSCRPT — V81.0.0 Universal Knowledge Engine
 
 V81 builds the user-facing universal knowledge layer on top of the V80 Intelligence Core.

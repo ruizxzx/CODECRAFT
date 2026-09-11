@@ -30,7 +30,7 @@ import { INITIAL_ARTICLES } from '../data/articles';
 
 export const DEFAULT_TOP_NAVIGATION: NavigationItemConfig[] = [
   { id: 'home', label: 'Home', page: 'home', visible: true },
-  { id: 'blog', label: 'Blog', page: 'blog', visible: true },
+  { id: 'blog', label: 'SCRPTS', page: 'blog', visible: true },
   { id: 'social', label: 'Community', page: 'social', visible: true },
   { id: 'saved', label: 'Saved', page: 'saved', visible: true },
   { id: 'notifications', label: 'Notifications', page: 'notifications', visible: true },
@@ -91,7 +91,7 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   footerHubTitle: 'PUBLICATION HUB',
   footerNavigationLinks: [
     { id: 'footer-nav-home', label: 'Home', type: 'internal', target: 'home', visible: true },
-    { id: 'footer-nav-blog', label: 'The Dispatches', type: 'internal', target: 'blog', visible: true },
+    { id: 'footer-nav-blog', label: 'SCRPTS', type: 'internal', target: 'blog', visible: true },
     { id: 'footer-nav-explore', label: 'Explore', type: 'internal', target: 'explore', visible: true },
     { id: 'footer-nav-series', label: 'Series', type: 'internal', target: 'series', visible: true },
     { id: 'footer-nav-about', label: 'About Krish', type: 'internal', target: 'about', visible: true },

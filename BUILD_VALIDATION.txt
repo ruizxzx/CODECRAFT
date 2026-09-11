@@ -1,36 +1,43 @@
-OFFSCRPT V81.0.0 BUILD VALIDATION
+OFFSCRPT V81.1.0 — NAVIGATION / BRANDING / AI-KNOWLEDGE UNIFICATION
+Validation report
 
-Base: OFFSCRPT V80.0.0 Intelligence Core
-Date: 2026-09-11
+IMPLEMENTED
+- Primary desktop navigation is normalized to Home / SCRPTS / Community / Explore.
+- BLOG user-facing terminology is changed to SCRPTS across publishing/community/discovery UI surfaces while legacy blog route/schema identifiers remain intact for compatibility.
+- Knowledge and the primary Ask AI entry are unified under ASK OFFSCRPT.
+- Existing Site-wide AI Copilot remains available as a secondary utility through the menu and Command Palette; it is not removed.
+- Existing /#blog route remains supported.
+- Existing V80/V81 retrieval, permissions, Firestore and AI gateway architecture is preserved.
+- Command Palette uses SCRPTS / Ask OFFSCRPT terminology.
+- Mobile AI entry routes to the unified Ask OFFSCRPT workspace.
 
-PASSING STATIC / STRUCTURAL VALIDATION
-- check:v81: PASS
-- TypeScript parser: PASS (114 active TS/TSX files, 0 parse diagnostics)
-- check:syntax: PASS
-- check:imports: PASS
-- check:exports: PASS
-- check:identifiers: PASS
-- check:firebase: PASS
-- check:rules: PASS
-- check:schema: PASS
-- check:runtime: PASS
-- check:recommendations: PASS
-- check:v80: PASS
-- Security review: standalone OFFSCRPT retrieval now binds the effective UID to the verified Firebase ID token and rejects mismatches.
+PASSED
+- check:deployment-config
+- check:imports — 114 active source files
+- check:exports — 114 active source files
+- check:identifiers — 114 active source files
+- check:firebase
+- check:rules
+- check:schema
+- check:runtime
+- check:recommendations
+- check:handles
+- check:identity-sync
+- check:public-profile
+- check:comments
+- check:site-sync
+- check:v80
+- check:v81
+- check:v81-navigation
+- TypeScript parser syntax validation — 114 TS/TSX files, 0 parse diagnostics
 
-V81 USER-FACING SURFACES
-- #knowledge: Ask OFFSCRPT + universal knowledge search + source navigation + reading signals + personalized path.
-- #research: permission-checked source retrieval + grounded multi-source synthesis.
-- #vault: existing cloud saves/collections + private device-local notes.
-- Header/Command Palette: direct Knowledge/Vault/Research navigation.
-- Cold-start recommendation topics are generalized for a broad audience rather than coding-specific.
-
-BLOCKED DEPENDENCY-BACKED VALIDATION
-- `npm ci`: blocked by environment/network package retrieval; offline cache is missing at least `yocto-queue`.
-- `npm run build`: not claimable because Vite dependencies are incomplete in the current environment.
-- `npm run typecheck`: not claimable because required type definitions are unavailable in the incomplete dependency tree.
+NOT RUN / ENVIRONMENT BLOCKED
+- npm ci / dependency installation: registry/network operation timed out.
+- Full TypeScript project typecheck: project dependencies are not installed; global TypeScript can parse files but required @types and runtime packages are absent.
+- Vite production build: Vite and application dependencies are not installed, so a real production build cannot be honestly claimed.
 
 IMPORTANT
-- No successful Vite production build is claimed.
-- node_modules, temporary install shims, logs and build outputs are removed from the release archive.
-- V81 does not introduce a vector database or durable embedding worker; semantic retrieval remains an extensible hybrid foundation.
+The release is not described as build-verified or bug-free because dependency-backed typecheck/build could not complete in this environment.
+
+CLEANUP
+- node_modules and temporary validation-only dependency copy are removed before packaging.

@@ -70,7 +70,7 @@ export const Hero: React.FC<HeroProps> = ({ onNavigate, postsCount, siteConfig }
                 onClick={() => onNavigate('blog')}
                 className="bg-black text-white px-6 py-3 font-bold uppercase text-xs sm:text-sm neo-shadow-sm transition-transform active:translate-x-1 active:translate-y-1 active:shadow-none hover:bg-[var(--color-primary)] hover:text-black border-2 border-black flex items-center space-x-2"
               >
-                <span>READ THE BLOG</span>
+                <span>READ SCRPTS</span>
                 <ArrowRight className="w-4 h-4 stroke-[3]" />
               </button>
 

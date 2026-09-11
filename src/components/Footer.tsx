@@ -13,7 +13,7 @@ interface FooterProps {
 
 const DEFAULT_NAV: FooterLink[] = [
   { id: 'fallback-home', label: 'Home', type: 'internal', target: 'home', visible: true },
-  { id: 'fallback-blog', label: 'The Dispatches', type: 'internal', target: 'blog', visible: true },
+  { id: 'fallback-blog', label: 'SCRPTS', type: 'internal', target: 'blog', visible: true },
   { id: 'fallback-explore', label: 'Explore', type: 'internal', target: 'explore', visible: true },
   { id: 'fallback-series', label: 'Series', type: 'internal', target: 'series', visible: true },
   { id: 'fallback-about', label: 'About Krish', type: 'internal', target: 'about', visible: true },

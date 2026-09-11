@@ -13,7 +13,6 @@ import {
   Search, 
   BookOpen, 
   Sparkles,
-  Brain, 
   ArrowRight, 
   LogIn, 
   LogOut, 
@@ -144,25 +143,37 @@ export const Header: React.FC<HeaderProps> = ({
     preferences: Settings,
   };
 
+  // Keep the primary header intentionally fixed and compact. Existing CMS navigation
+  // remains available in the drawer; only the permanent desktop hierarchy is normalized.
   const configuredTop = (siteConfig.topNavigation?.length ? siteConfig.topNavigation : DEFAULT_TOP_NAVIGATION)
     .filter(item => item.visible !== false);
   const configuredMenu = (siteConfig.menuNavigation?.length ? siteConfig.menuNavigation : DEFAULT_MENU_NAVIGATION)
     .filter(item => item.visible !== false);
 
-  const mainNavLinks: NavLinkItem[] = configuredTop.map((item) => ({
+  const primaryDefinition: Array<{ page: PageView; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { page: 'home', label: 'Home', icon: Home },
+    { page: 'blog', label: 'SCRPTS', icon: BookOpen },
+    { page: 'social', label: 'Community', icon: Users },
+    { page: 'explore', label: 'Explore', icon: Compass },
+  ];
+
+  const mainNavLinks: NavLinkItem[] = primaryDefinition.map((item) => ({
     label: item.label,
     page: item.page,
-    icon: iconById[item.id] || ArrowRight,
-    count: item.page === 'saved' ? savedCount : item.page === 'notifications' ? unreadNotificationCount : undefined,
+    icon: item.icon,
   }));
 
-  const secondaryNavLinks = configuredMenu;
+  const secondaryConfiguredLinks = configuredTop.filter(item => !primaryDefinition.some(primary => primary.page === item.page));
+  const secondaryNavLinks = [...secondaryConfiguredLinks, ...configuredMenu]
+    .filter((item, index, all) => all.findIndex(candidate => candidate.page === item.page) === index);
 
   const handleNavClick = (page: PageView, param?: string) => {
     onNavigate(page, param);
     setSidebarOpen(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const openAskOffscrpt = () => handleNavClick('knowledge');
 
   const handleGoogleSignIn = async () => {
     try {
@@ -240,16 +251,15 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               );
             })}
-            <button onClick={() => handleNavClick('knowledge')} className={`px-3 py-2.5 flex items-center space-x-1.5 font-display font-black text-xs uppercase transition-all border-2 ${currentPage === 'knowledge' || currentPage === 'vault' || currentPage === 'research' ? 'bg-[var(--color-primary)] border-black neo-shadow-sm' : 'border-transparent hover:border-black hover:bg-neutral-100'}`} title="OFFSCRPT Knowledge"><Brain className="w-4 h-4 stroke-[2.5]"/><span>KNOWLEDGE</span></button>
           </nav>
 
           {/* Right Action Controls */}
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
             
             {/* Site-wide AI */}
-            {onOpenSiteAI && <button onClick={onOpenSiteAI} className="hidden md:flex px-2.5 py-1.5 sm:px-3 sm:py-2 bg-[var(--color-primary)] text-black border-2 border-black neo-shadow-sm hover:bg-white items-center space-x-1.5 font-display text-xs font-black uppercase" title="Ask OFFSCRPT AI">
-              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4"/><span className="hidden sm:inline">ASK AI</span>
-            </button>}
+            <button onClick={openAskOffscrpt} className="hidden md:flex px-2.5 py-1.5 sm:px-3 sm:py-2 bg-[var(--color-primary)] text-black border-2 border-black neo-shadow-sm hover:bg-white items-center space-x-1.5 font-display text-xs font-black uppercase" title="Ask OFFSCRPT">
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4"/><span>ASK OFFSCRPT</span>
+            </button>
 
             {/* Search Button */}
             <button
@@ -357,15 +367,15 @@ export const Header: React.FC<HeaderProps> = ({
           <Search className="w-5 h-5 stroke-[2.5]" />
           <span>SEARCH</span>
         </button>
-        {onOpenSiteAI && <button
-          onClick={onOpenSiteAI}
+        <button
+          onClick={openAskOffscrpt}
           className="mobile-nav-action bg-[var(--color-primary)]"
-          aria-label="Ask OFFSCRPT AI"
-          title="Ask OFFSCRPT AI"
+          aria-label="Ask OFFSCRPT"
+          title="Ask OFFSCRPT"
         >
           <Sparkles className="w-5 h-5 stroke-[2.5]" />
-          <span>AI</span>
-        </button>}
+          <span>ASK</span>
+        </button>
         <button
           onClick={() => onCreateCommunityPost?.()}
           className="mobile-nav-action mobile-nav-create bg-[var(--color-secondary)]"
@@ -426,7 +436,7 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <div className="flex items-center space-x-2">
                 <Search className="w-4 h-4 stroke-[3]" />
-                <span>Search Articles</span>
+                <span>Search SCRPTS</span>
               </div>
               <span className="font-mono text-[10px] text-neutral-500">CTRL+K</span>
             </button>
@@ -466,11 +476,12 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Reader Library */}
           <div>
-            <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">Knowledge</h3>
+            <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">ASK OFFSCRPT</h3>
             <div className="flex flex-col gap-2">
-              <button onClick={() => handleNavClick('knowledge')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'knowledge' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Brain className="w-4 h-4"/> Ask OFFSCRPT</span><ArrowRight className="w-4 h-4"/></button>
+              <button onClick={() => handleNavClick('knowledge')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'knowledge' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Sparkles className="w-4 h-4"/> Ask OFFSCRPT</span><ArrowRight className="w-4 h-4"/></button>
               <button onClick={() => handleNavClick('vault')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'vault' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Bookmark className="w-4 h-4"/> My Vault</span><ArrowRight className="w-4 h-4"/></button>
               <button onClick={() => handleNavClick('research')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'research' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Sparkles className="w-4 h-4"/> Research</span><ArrowRight className="w-4 h-4"/></button>
+              {onOpenSiteAI && <button onClick={() => { onOpenSiteAI(); setSidebarOpen(false); }} className="w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between bg-white hover:bg-neutral-100"><span className="flex items-center gap-2"><Sparkles className="w-4 h-4"/> AI COPILOT</span><ArrowRight className="w-4 h-4"/></button>}
             </div>
           </div>
 

@@ -132,7 +132,7 @@ export const UniqueHandleModal: React.FC<UniqueHandleModalProps> = ({
           </div>
 
           <p className="font-sans text-sm text-neutral-700 leading-relaxed">
-            Choose your unique <strong>@handle</strong> to publish blogs and discussions in the community, participate in debates, and like posts.
+            Choose your unique <strong>@handle</strong> to publish SCRPTS and discussions in the community, participate in debates, and like posts.
           </p>
 
           <div>

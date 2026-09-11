@@ -12,20 +12,20 @@ export const CommandPalette: React.FC<Props> = ({ isOpen, onClose, onOpenSearch,
   useEffect(()=>{ const h=(e:KeyboardEvent)=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); return; } if(e.key==='Escape'&&isOpen) onClose(); }; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h); },[isOpen,onClose]);
   const commands:Command[] = useMemo(()=>[
     {id:'search',label:'Search OFFSCRPT',hint:'Everything on OFFSCRPT',icon:Search,run:()=>{onClose();onOpenSearch();}},
-    {id:'knowledge',label:'Ask OFFSCRPT',hint:'Search + grounded knowledge',icon:Sparkles,run:()=>{onClose();onNavigate('knowledge');}},
+    {id:'knowledge',label:'Ask OFFSCRPT',hint:'Search + grounded intelligence',icon:Sparkles,run:()=>{onClose();onNavigate('knowledge');}},
     {id:'vault',label:'My Vault',hint:'Saved library + notes',icon:Bookmark,run:()=>{onClose();onNavigate('vault');}},
     {id:'research',label:'OFFSCRPT Research',hint:'Synthesize published sources',icon:Sparkles,run:()=>{onClose();onNavigate('research');}},
     {id:'home',label:'Go Home',icon:Home,run:()=>{onClose();onNavigate('home');}},
     {id:'dashboard',label:'My OFFSCRPT',hint:'Account dashboard',icon:UserRound,run:()=>{onClose();onNavigate('dashboard');}},
     {id:'preferences',label:'Notification Settings',icon:Settings2,run:()=>{onClose();onNavigate('preferences');}},
-    {id:'blog',label:'Open Blog',icon:BookOpen,run:()=>{onClose();onNavigate('blog');}},
+    {id:'blog',label:'Open SCRPTS',icon:BookOpen,run:()=>{onClose();onNavigate('blog');}},
     {id:'series',label:'Open Series',icon:Layers,run:()=>{onClose();onNavigate('series');}},
     {id:'saved',label:'Open Saved',icon:Bookmark,run:()=>{onClose();onNavigate('saved');}},
     {id:'history',label:'Reading History',icon:History,run:()=>{onClose();onNavigate('history');}},
     {id:'notifications',label:'Notifications',icon:Bell,run:()=>{onClose();onNavigate('notifications');}},
     {id:'explore',label:'Explore',icon:Compass,run:()=>{onClose();onNavigate('explore');}},
-    ...(onOpenSiteAI ? [{id:'ai',label:'Ask OFFSCRPT AI',hint:'Site-wide grounded assistant',icon:Sparkles,run:()=>{onClose();onOpenSiteAI();}}] : []),
-    ...(onCreatePost ? [{id:'create',label:'Create a Post',icon:PlusCircle,run:()=>{onClose();onCreatePost();}}] : []),
+    ...(onOpenSiteAI ? [{id:'ai-copilot',label:'Open AI Copilot',hint:'Existing site-wide assistant',icon:Sparkles,run:()=>{onClose();onOpenSiteAI();}}] : []),
+        ...(onCreatePost ? [{id:'create',label:'Create a Post',icon:PlusCircle,run:()=>{onClose();onCreatePost();}}] : []),
   ],[onClose,onCreatePost,onNavigate,onOpenSearch]);
   const filtered=commands.filter(c=>`${c.label} ${c.hint||''}`.toLowerCase().includes(query.trim().toLowerCase()));
   useEffect(()=>{ if(!isOpen) return; const h=(e:KeyboardEvent)=>{ if(e.key==='Enter' && !e.shiftKey && filtered.length===1){ e.preventDefault(); filtered[0].run(); } }; window.addEventListener('keydown',h); return ()=>window.removeEventListener('keydown',h); },[filtered,isOpen]);

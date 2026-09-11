@@ -181,7 +181,7 @@ export const SavedView: React.FC<SavedViewProps> = ({
           <Bookmark className="w-12 h-12 text-neutral-400 mx-auto mb-4" />
           <h2 className="font-display font-black text-2xl uppercase mb-2">No Saved Items Found</h2>
           <p className="font-sans text-neutral-600 max-w-md mx-auto mb-6 text-sm">
-            Save articles from the main blog or discussions from the community to read them later in this unified offline-ready vault.
+            Save articles from the main SCRPTS or discussions from the community to read them later in this unified offline-ready vault.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <button
@@ -219,7 +219,7 @@ export const SavedView: React.FC<SavedViewProps> = ({
 
               {savedArticles.length === 0 ? (
                 <p className="font-mono text-sm text-neutral-500 italic py-4">
-                  No main site dispatches saved. Click the bookmark icon on any blog article to add it here.
+                  No main site dispatches saved. Click the bookmark icon on any SCRPT article to add it here.
                 </p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -247,7 +247,7 @@ export const SavedView: React.FC<SavedViewProps> = ({
                 <div className="flex items-center space-x-2">
                   <span className="w-3 h-3 bg-[var(--color-accent)] border-2 border-black" />
                   <h2 className="font-display font-black text-2xl uppercase tracking-tight">
-                    Community Posts & Blogs
+                    Community Posts & SCRPTS
                   </h2>
                 </div>
                 <span className="font-mono text-xs font-bold text-neutral-600">
@@ -257,7 +257,7 @@ export const SavedView: React.FC<SavedViewProps> = ({
 
               {savedPosts.length === 0 ? (
                 <p className="font-mono text-sm text-neutral-500 italic py-4">
-                  No community posts saved. Click the bookmark icon on any community blog or discussion to add it here.
+                  No community posts saved. Click the bookmark icon on any community SCRPT or discussion to add it here.
                 </p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -271,7 +271,7 @@ export const SavedView: React.FC<SavedViewProps> = ({
                           <span className={`px-2.5 py-0.5 border-2 border-black font-mono text-[11px] font-black uppercase ${
                             post.type === 'blog' ? 'bg-[var(--color-accent)] text-black' : 'bg-[var(--color-secondary)] text-black'
                           }`}>
-                            {post.type === 'blog' ? 'Community Blog' : 'Discussion'}
+                            {post.type === 'blog' ? 'Community SCRPT' : 'Discussion'}
                           </span>
                           
                           <div className="flex items-center gap-2">

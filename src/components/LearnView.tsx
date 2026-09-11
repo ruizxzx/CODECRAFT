@@ -59,7 +59,7 @@ export const LearnView: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="font-mono text-[9px] font-black uppercase">AI RECAP</div>
-            <h2 className="font-display font-black text-2xl uppercase">YOUR KNOWLEDGE</h2>
+            <h2 className="font-display font-black text-2xl uppercase">YOUR OFFSCRPT</h2>
           </div>
           <div className="flex gap-2">
             <select value={mode} onChange={e => setMode(e.target.value)} className="border-2 border-black bg-white px-2 py-2 font-mono text-[9px] font-black">

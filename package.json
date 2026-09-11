@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.81.0",
+  "version": "0.81.1",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -19,7 +19,7 @@
     "check:schema": "node scripts/check-schema.mjs",
     "check:runtime": "node scripts/check-runtime-patterns.mjs",
     "health:deployment": "node scripts/deployment-health.mjs",
-    "verify": "npm run check:deployment-config && npm run typecheck && npm run build && npm run check:syntax && npm run check:imports && npm run check:exports && npm run check:identifiers && npm run check:firebase && npm run check:rules && npm run check:schema && npm run check:runtime && npm run check:recommendations && npm run check:handles && npm run check:handle-propagation && npm run check:identity-sync && npm run check:public-profile && npm run check:comments && npm run check:site-sync && npm run check:v80 && npm run check:v81",
+    "verify": "npm run check:deployment-config && npm run typecheck && npm run build && npm run check:syntax && npm run check:imports && npm run check:exports && npm run check:identifiers && npm run check:firebase && npm run check:rules && npm run check:schema && npm run check:runtime && npm run check:recommendations && npm run check:handles && npm run check:handle-propagation && npm run check:identity-sync && npm run check:public-profile && npm run check:comments && npm run check:site-sync && npm run check:v80 && npm run check:v81 && npm run check:v81-navigation",
     "check:deployment-config": "node scripts/check-deployment-config.mjs",
     "check:recommendations": "node scripts/check-recommendations.mjs",
     "check:handles": "node scripts/check-handles.mjs",
@@ -33,7 +33,8 @@
     "check:ai": "node scripts/check-ai-gateway.mjs",
     "check:path-conflicts": "node scripts/check-path-conflicts.mjs",
     "check:v80": "node scripts/check-v80-intelligence.mjs",
-    "check:v81": "node scripts/check-v81-universal-knowledge.mjs"
+    "check:v81": "node scripts/check-v81-universal-knowledge.mjs",
+    "check:v81-navigation": "node scripts/check-v81-navigation-branding.mjs"
   },
   "dependencies": {
     "@sanity/client": "^8.5.0",

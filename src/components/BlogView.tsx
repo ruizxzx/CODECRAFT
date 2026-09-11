@@ -148,7 +148,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-3">
             <div className="font-mono text-[10px] font-black uppercase tracking-wider">EDITORIAL ADMIN · LIVE FIRESTORE CONTENT</div>
             <div className="flex gap-2">
-              <button type="button" onClick={onWriteNew} className="px-4 py-2 bg-[var(--color-primary)] text-black border-2 border-black font-display font-black text-xs uppercase neo-shadow-sm inline-flex items-center gap-1.5"><Plus className="w-4 h-4"/> WRITE NEW BLOG</button>
+              <button type="button" onClick={onWriteNew} className="px-4 py-2 bg-[var(--color-primary)] text-black border-2 border-black font-display font-black text-xs uppercase neo-shadow-sm inline-flex items-center gap-1.5"><Plus className="w-4 h-4"/> WRITE NEW SCRPT</button>
             </div>
           </div>
         </div>
@@ -335,7 +335,7 @@ export const BlogView: React.FC<BlogViewProps> = ({
                 />
                 {isMasterAdmin && (
                   <div className="mt-2 grid grid-cols-2 gap-2">
-                    <button type="button" onClick={() => onEditArticle?.(art)} className="py-2 bg-white border-2 border-black font-mono text-[10px] font-black uppercase inline-flex items-center justify-center gap-1.5 hover:bg-[var(--color-primary)]"><Edit2 className="w-3.5 h-3.5"/> EDIT BLOG</button>
+                    <button type="button" onClick={() => onEditArticle?.(art)} className="py-2 bg-white border-2 border-black font-mono text-[10px] font-black uppercase inline-flex items-center justify-center gap-1.5 hover:bg-[var(--color-primary)]"><Edit2 className="w-3.5 h-3.5"/> EDIT SCRPT</button>
                     <button type="button" onClick={() => { if (window.confirm(`Delete the article \"${art.title}\" permanently?`)) void onDeleteArticle?.(art.slug); }} className="py-2 bg-[var(--color-accent)] border-2 border-black font-mono text-[10px] font-black uppercase inline-flex items-center justify-center gap-1.5 hover:bg-black hover:text-white"><Trash2 className="w-3.5 h-3.5"/> DELETE</button>
                   </div>
                 )}
