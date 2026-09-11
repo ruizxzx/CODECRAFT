@@ -68,7 +68,7 @@ export const HistoryView: React.FC<Props> = ({ onNavigate }) => {
             <p className="text-sm text-neutral-600 mt-2 line-clamp-2">{item.excerpt}</p>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <div className="flex-1 min-w-[160px]"><div className="h-2 border-2 border-black bg-white"><div className="h-full bg-[var(--color-primary)]" style={{width:`${Math.max(0, Math.min(100, item.progress || 0))}%`}}/></div><div className="font-mono text-[9px] uppercase mt-1">{item.progress || 0}% LAST PROGRESS</div></div>
+            <div className="flex-1 min-w-0"><div className="h-2 border-2 border-black bg-white"><div className="h-full bg-[var(--color-primary)]" style={{width:`${Math.max(0, Math.min(100, item.progress || 0))}%`}}/></div><div className="font-mono text-[9px] uppercase mt-1">{item.progress || 0}% LAST PROGRESS</div></div>
             <button onClick={()=>onNavigate('article', item.slug)} className="border-2 border-black bg-black text-white px-3 py-2 font-mono text-[9px] font-black uppercase inline-flex items-center gap-1">{item.progress && item.progress < 100 ? 'RESUME' : 'OPEN'} <ArrowRight className="w-3 h-3"/></button>
             <button onClick={()=>remove(item.slug)} className="border-2 border-black bg-white px-3 py-2 font-mono text-[9px] font-black uppercase inline-flex items-center gap-1 hover:bg-red-100"><Trash2 className="w-3 h-3"/> REMOVE</button>
           </div>

@@ -598,7 +598,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       </div>
 
       {/* Floating Sub-Header for reading utility */}
-      <div className="sticky top-20 z-30 bg-white border-b-4 border-black py-2.5 px-4 sm:px-8 flex items-center justify-between">
+      <div className="article-utility-bar sticky top-20 z-30 bg-white border-b-4 border-black py-2.5 px-4 sm:px-8 flex items-center justify-between gap-2">
         <button
           onClick={onBack}
           className="flex items-center space-x-2 font-display font-black text-xs uppercase px-3 py-1.5 bg-white neo-border-2 neo-shadow-sm hover:bg-[var(--color-primary)] active:translate-x-0.5 active:translate-y-0.5 transition-all"
@@ -607,7 +607,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           <span>ALL DISPATCHES</span>
         </button>
 
-        <div className="flex items-center space-x-2 sm:space-x-3">
+        <div className="article-utility-actions flex items-center flex-wrap justify-end gap-2 sm:gap-3">
           {/* Font Size Adjuster */}
           <div className="hidden sm:flex items-center neo-border-2 bg-white text-xs font-mono font-bold">
             <button
@@ -659,7 +659,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
       <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-20">
         
         {/* Breadcrumb path */}
-        <div className="flex items-center space-x-2 font-mono text-xs font-bold text-neutral-500 mb-6 uppercase">
+        <div className="article-breadcrumb flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs font-bold text-neutral-500 mb-6 uppercase">
           <button onClick={onBack} className="hover:text-black hover:underline">
             HOME
           </button>

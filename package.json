@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.82.0",
+  "version": "0.83.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -34,7 +34,8 @@
     "check:path-conflicts": "node scripts/check-path-conflicts.mjs",
     "check:v80": "node scripts/check-v80-intelligence.mjs",
     "check:v81": "node scripts/check-v81-universal-knowledge.mjs",
-    "check:v81-navigation": "node scripts/check-v81-navigation-branding.mjs"
+    "check:v81-navigation": "node scripts/check-v81-navigation-branding.mjs",
+    "check:v83-mobile": "node scripts/check-v83-mobile.mjs"
   },
   "dependencies": {
     "@sanity/client": "^8.5.0",

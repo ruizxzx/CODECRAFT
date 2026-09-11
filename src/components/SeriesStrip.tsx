@@ -58,7 +58,7 @@ export const SeriesStrip: React.FC<Props> = ({ articles, onNavigate, compact = f
           <p className="mt-3 text-sm sm:text-base text-neutral-600 max-w-2xl">Follow connected articles as one structured reading path. Progress carries across devices when you're signed in.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <label className="border-2 border-black px-3 py-2 flex items-center gap-2 bg-white min-w-[230px]">
+          <label className="border-2 border-black px-3 py-2 flex items-center gap-2 bg-white min-w-[230px] max-w-full">
             <Search className="w-4 h-4" />
             <input value={query} onChange={e => setQuery(e.target.value)} placeholder="SEARCH SERIES" className="w-full outline-none font-mono text-[10px] font-black uppercase" />
           </label>

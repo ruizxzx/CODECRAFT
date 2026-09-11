@@ -1,0 +1,43 @@
+OFFSCRPT V82.1.0 — MOBILE RESPONSIVENESS VALIDATION
+
+BASE: OFFSCRPT V82.0.0 AI VISUAL CONTROL CENTER
+
+IMPLEMENTED
+- Site-wide narrow viewport overflow containment.
+- Responsive media and form controls.
+- Long text/URL wrapping.
+- Mobile-safe handling for known desktop min-width utilities.
+- Base multi-column grids collapse to one column below 768px.
+- Dense control groups can wrap using mobile utility classes.
+- Article reader utility toolbar wraps on mobile.
+- Article breadcrumbs wrap on mobile.
+- Mobile dock shrinks to available width; Saved is moved out at <=390px.
+- Modal/dialog width constrained to viewport.
+- Existing desktop styling is preserved outside the mobile breakpoint.
+
+FIRESTORE
+- src/firestore.rules unchanged from V82.0.0.
+- firestore.indexes.json unchanged from V82.0.0.
+- firebase.json unchanged from V82.0.0.
+- No database migration required.
+
+STATIC VALIDATION
+- Syntax parser: PASS — 115 active TS/TSX files parsed.
+- Import check: PASS — 115 files scanned.
+- Export check: PASS — 115 files scanned.
+- Firebase check: PASS.
+- Firestore rules check: PASS.
+- Runtime-pattern check: PASS — 115 files scanned.
+- V82 AI theme check: PASS.
+- V81 navigation/branding check: PASS.
+- Path/name conflict check: PASS.
+- CSS brace balance: PASS — 172 opening / 172 closing braces.
+- Firestore diff vs V82.0.0: NONE.
+
+TYPECHECK / PRODUCTION BUILD
+- Full project typecheck: BLOCKED because npm dependencies are not installed in the build environment.
+- Offline npm install: BLOCKED by uncached dependency yocto-queue.
+- Vite production build: NOT RUN because Vite/React dependencies are unavailable.
+
+HONEST STATUS
+Static/source validation passed. Dependency-backed typecheck and production build remain environment-blocked and are not claimed as passed.

@@ -336,9 +336,9 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </header>
 
-      {/* Mobile floating navigation dock. Secondary actions remain in the hamburger drawer. */}
+      {/* Mobile floating navigation dock. Keep exactly five equal-width actions so the dock never overflows narrow screens. */}
       <nav
-        className="mobile-floating-nav fixed left-3 right-3 bottom-3 z-[55] md:hidden bg-white border-2 border-black neo-shadow-sm p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] flex items-center justify-around gap-1"
+        className="mobile-floating-nav fixed left-2 right-2 bottom-2 z-[55] md:hidden bg-white border-2 border-black neo-shadow-sm p-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] flex items-stretch gap-1"
         aria-label="Mobile quick navigation"
       >
         <button
@@ -349,20 +349,6 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Home className="w-5 h-5 stroke-[2.5]" />
           <span>HOME</span>
-        </button>
-        <button
-          onClick={() => handleNavClick('saved')}
-          className={`mobile-nav-action relative ${currentPage === 'saved' ? 'bg-[var(--color-primary)]' : 'bg-white'}`}
-          aria-label="Saved"
-          title="Saved"
-        >
-          <Bookmark className="w-5 h-5 stroke-[2.5]" />
-          {savedCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-black text-[var(--color-primary)] min-w-4 h-4 px-1 flex items-center justify-center text-[9px] font-mono font-bold border border-black">
-              {savedCount}
-            </span>
-          )}
-          <span>SAVED</span>
         </button>
         <button
           onClick={onOpenSearch}
@@ -380,7 +366,7 @@ export const Header: React.FC<HeaderProps> = ({
           title="OFFSCRPT AI"
         >
           <Sparkles className="w-5 h-5 stroke-[2.5]" />
-          <span>ASK</span>
+          <span>AI</span>
         </button>
         <button
           onClick={() => onCreateCommunityPost?.()}

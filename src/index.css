@@ -217,6 +217,204 @@ html, body, #root {
   }
 }
 
+
+
+/* ================================================================
+   V82.1 SITE-WIDE MOBILE RESPONSIVENESS
+   Desktop layout remains the source of truth. These rules only
+   relax rigid desktop assumptions on narrow viewports.
+   ================================================================ */
+@media (max-width: 767px) {
+  html, body, #root {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  #root > *, main, section, article, header, footer, aside {
+    min-width: 0;
+  }
+
+  img, video, iframe, embed, object, svg {
+    max-width: 100%;
+  }
+
+  input, textarea, select, button {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  textarea, input[type="text"], input[type="search"], input[type="url"],
+  input[type="email"], input[type="password"], input[type="number"], select {
+    min-width: 0;
+  }
+
+  /* Any base grid with 2+ columns becomes a single fluid column on phones.
+     Breakpoint-prefixed grids (sm:/md:/lg:) still take over at their breakpoint. */
+  [class~="grid-cols-2"],
+  [class~="grid-cols-3"],
+  [class~="grid-cols-4"],
+  [class~="grid-cols-5"],
+  [class~="grid-cols-6"],
+  [class~="grid-cols-7"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* Flex children may otherwise retain their content-sized auto minimum. */
+  .flex > button, .flex > a, .flex > input, .flex > textarea, .flex > select,
+  .flex > div, .flex > section, .flex > article {
+    min-width: 0;
+  }
+
+  button, a {
+    max-width: 100%;
+  }
+
+  /* Long URLs, IDs, usernames and generated AI text must not widen a page. */
+  p, li, td, th, pre, code, blockquote, figcaption {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  pre {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre-wrap;
+  }
+
+  /* Desktop-sized minimums used by dashboards/forms become fluid on phones. */
+  [class*="min-w-["] {
+    min-width: 0 !important;
+  }
+
+  /* Preserve horizontal scrolling only where the component explicitly opts into it. */
+  .overflow-x-auto {
+    max-width: 100%;
+    scrollbar-width: thin;
+  }
+
+  /* Dense control groups should wrap instead of pushing a button off-screen. */
+  .mobile-wrap-actions,
+  .mobile-wrap-controls {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .mobile-wrap-actions > button,
+  .mobile-wrap-actions > a,
+  .mobile-wrap-controls > button,
+  .mobile-wrap-controls > a,
+  .mobile-wrap-controls > label,
+  .mobile-wrap-controls > select {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Article reader toolbar: back action gets its own row when needed. */
+  .article-utility-bar {
+    align-items: stretch;
+    flex-wrap: wrap;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .article-utility-bar > button:first-child {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .article-utility-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .article-utility-actions > * {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .article-utility-actions button,
+  .article-utility-actions a {
+    min-height: 40px;
+  }
+
+  .article-breadcrumb {
+    line-height: 1.4;
+  }
+
+  /* Avoid fixed-height media and cards creating accidental horizontal/visual overflow. */
+  .prose, .prose-sm, .prose-lg {
+    max-width: 100%;
+  }
+
+  /* Modals/panels should use the viewport width, not a desktop minimum. */
+  [role="dialog"] {
+    max-width: 100vw;
+  }
+
+  /* Keep large neo-brutalist shadows inside the viewport on narrow screens. */
+  .neo-shadow-lg {
+    box-shadow: 6px 6px 0 #000000;
+  }
+
+  /* Tables without an explicit overflow wrapper remain usable on phones. */
+  table {
+    max-width: 100%;
+  }
+
+  /* Six-button mobile dock: make every item shrink cleanly. */
+  .mobile-floating-nav {
+    width: auto;
+    max-width: calc(100vw - 16px);
+    left: 8px;
+    right: 8px;
+    gap: 2px;
+  }
+
+  .mobile-nav-action {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    overflow: hidden;
+  }
+
+  .mobile-nav-action span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Very narrow phones: prioritize tap targets and remove secondary dock item. */
+@media (max-width: 390px) {
+  .mobile-floating-nav {
+    padding: 4px;
+  }
+
+  .mobile-nav-action {
+    min-height: 46px;
+    padding-left: 2px;
+    padding-right: 2px;
+    font-size: 7px;
+  }
+
+  .mobile-nav-action:nth-child(2) {
+    display: none;
+  }
+
+  .mobile-nav-action {
+    width: 20%;
+  }
+
+  .article-utility-actions > * {
+    flex: 1 1 calc(50% - 4px);
+  }
+}
+
 @media print {
   .print\:hidden { display: none !important; }
   body { background: white !important; }
@@ -322,3 +520,124 @@ html.dark img { color-scheme: dark; }
 .ai-themed .ai-preview-user { background-color: var(--ai-user-message); }
 .ai-themed .ai-preview-assistant { background-color: var(--ai-assistant-message); }
 .ai-themed .ai-preview-source { background-color: var(--ai-source); }
+
+/* V83 — Site-wide mobile responsiveness hardening.
+   Desktop layouts remain untouched; mobile gets safe sizing, wrapping and scroll containment. */
+@media (max-width: 767px) {
+  html, body, #root {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  /* Prevent common Tailwind min-width utilities from forcing the viewport wider. */
+  [class*="min-w-["], [class~="min-w-full"] { min-width: 0 !important; }
+
+  /* Stack multi-column content on phones unless a component explicitly opts out. */
+  [class~="grid-cols-2"],
+  [class~="grid-cols-3"],
+  [class~="grid-cols-4"],
+  [class~="grid-cols-5"],
+  [class~="grid-cols-6"],
+  [class~="grid-cols-7"],
+  [class~="grid-cols-8"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  /* Let ordinary action rows wrap instead of pushing content outside the viewport. */
+  .mobile-safe-wrap { flex-wrap: wrap !important; }
+
+  button, a, input, textarea, select { max-width: 100%; }
+  img, video, canvas, svg { max-width: 100%; }
+  iframe { max-width: 100%; }
+
+  /* Long text/code/URLs must never create page-level horizontal overflow. */
+  p, h1, h2, h3, h4, h5, h6, li, td, th, label, button, a {
+    overflow-wrap: anywhere;
+  }
+  pre, code { max-width: 100%; }
+  pre { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { max-width: 100%; }
+
+  /* Keep fixed dialogs and popovers inside the viewport. */
+  .fixed [class*="w-["], .fixed [class*="max-w-"] {
+    max-width: calc(100vw - 16px) !important;
+  }
+
+  /* The mobile quick dock is exactly five equal actions. No sixth item can create 120% width. */
+  .mobile-floating-nav {
+    width: auto;
+    max-width: calc(100vw - 16px);
+    overflow: hidden;
+  }
+  .mobile-nav-action {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    padding-left: 2px;
+    padding-right: 2px;
+    min-height: 52px;
+  }
+  .mobile-nav-action span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Reduce oversized desktop typography and shadows only where it is clearly unsafe on phones. */
+  h1 { max-width: 100%; }
+  .neo-shadow-lg { box-shadow: 7px 7px 0 #000000; }
+  .neo-shadow { box-shadow: 5px 5px 0 #000000; }
+
+  /* Media embeds should scale with the content column. */
+  .aspect-video { max-width: 100%; }
+}
+
+@media (max-width: 380px) {
+  .mobile-floating-nav { left: 6px; right: 6px; bottom: 6px; }
+  .mobile-nav-action { min-height: 48px; font-size: 7px; }
+  .mobile-nav-action svg { width: 18px; height: 18px; }
+}
+
+/* Any intentional horizontal scroller keeps its own scroll area rather than widening the page. */
+.overflow-x-auto, .overflow-x-scroll {
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+
+@media (max-width: 767px) {
+  /* Article reading controls: allow every action to wrap instead of leaving the viewport. */
+  .article-utility-bar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .article-utility-bar > button:first-child {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+  .article-utility-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .article-utility-actions > * {
+    min-width: 0;
+  }
+
+  /* Breadcrumbs and metadata are content rows, not single-line desktop rails. */
+  .max-w-4xl .font-mono.uppercase {
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+  }
+
+  /* Preserve intentional horizontal data tables inside their own scroller. */
+  .overflow-x-auto > table {
+    width: max-content;
+    min-width: 100%;
+  }
+}
