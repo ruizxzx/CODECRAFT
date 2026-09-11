@@ -1,3 +1,5 @@
+## Current release: OFFSCRPT V85.0.0 — Discovery Core
+
 # OFFSCRPT — V80.0.0 Intelligence Core
 
 V80 connects the existing publishing, community, identity, reading, search, feed, AI, recommendation and analytics surfaces through shared compatibility layers. It preserves the existing V77–V79 systems, keeps OpenRouter behind the existing backend gateway, and adds server-enforced AI retrieval plus Master Control feature flags.

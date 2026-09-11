@@ -1,19 +1,15 @@
 {
   "name": "OFFSCRPT",
-  "version": "0.75.13",
-  "description": "OFFSCRPT V72 cumulative production release: V71 article history + V71.5 Batch 2 + analytics/stability fixes.",
-  "release": "OFFSCRPT V72",
+  "version": "0.85.0",
+  "description": "OFFSCRPT V85 Discovery Core: unified search ranking, discovery query filters, freshness/engagement scoring, and recommendation diversification built on the V84 knowledge foundation.",
+  "release": "OFFSCRPT V85",
   "majorCapabilities": [
-    "V71 Article History",
-    "Creator Analytics",
-    "Recommendations",
-    "Advanced Comments",
-    "Reporting",
-    "Granular Moderation",
-    "Universal Sharing",
-    "Presence",
-    "System Health",
-    "Runtime Error Reporting",
-    "Sync State Infrastructure"
+    "V84 Production Knowledge Engine",
+    "Universal Search 2.0 Foundation",
+    "Discovery Query Filters",
+    "Freshness + Engagement Ranking",
+    "Recommendation Diversification",
+    "Personalized Discovery Foundation",
+    "Explore + Search Compatibility"
   ]
 }

@@ -1,0 +1,22 @@
+OFFSCRPT V85.0.0 — DISCOVERY CORE
+
+PASSED
+- Source tree extracted and inspected from OFFSCRPT-V84.0.0-PRODUCTION-KNOWLEDGE-ENGINE.zip
+- V84 source/docs preserved as base
+- New Discovery Core module added
+- Unified search remains backwards-compatible at the existing API boundary
+- Search query parser supports type/topic/tag/author/from/community/series/before/after filters
+- Search permission filtering remains before ranking
+- Recommendation engine now consumes shared Discovery Core scoring/diversification
+- Package version advanced to 0.85.0
+
+BLOCKED
+- Full npm dependency install / production Vite build / full TypeScript typecheck were not run in this environment because dependency installation was previously unavailable/blocked.
+
+NOT CLAIMED
+- bug-free
+- fully verified
+- production verified
+
+FINAL CLEANUP STATUS
+- node_modules/dist/build/test artifacts were not introduced by this source-only build step.

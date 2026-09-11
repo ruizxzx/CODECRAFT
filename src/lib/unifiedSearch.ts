@@ -1,5 +1,6 @@
 import type { ContentEntity, ContentType } from './intelligence/types';
 import { filterAuthorizedContent } from './permissions';
+import { engagementScore, freshnessScore, lexicalMatchScore, parseDiscoveryQuery } from './discovery';
 
 export interface UnifiedSearchFilters {
   types?: ContentType[];
@@ -21,39 +22,46 @@ export interface UnifiedSearchOptions {
 }
 
 export interface UnifiedSearchResult extends ContentEntity { score: number; reasons: string[]; }
-
 const normalize = (v: unknown) => String(v ?? '').toLowerCase().trim();
 
 export function searchEverything(entities: ContentEntity[], options: UnifiedSearchOptions = {}): UnifiedSearchResult[] {
-  const q = normalize(options.query);
-  const terms = q.split(/\s+/).filter(Boolean);
+  const parsed = parseDiscoveryQuery(options.query || '');
+  const q = normalize(parsed.text);
+  const terms = parsed.terms;
   let candidates = filterAuthorizedContent(entities, { userId: options.viewer?.userId, isAdmin: options.viewer?.isAdmin });
   const f = options.filters || {};
+  const typeFromQuery = parsed.filters.type;
   if (f.types?.length) candidates = candidates.filter(x => f.types!.includes(x.type));
-  if (f.creatorId) candidates = candidates.filter(x => x.authorId === f.creatorId);
-  if (f.topic) candidates = candidates.filter(x => x.topics.map(normalize).includes(normalize(f.topic)));
-  if (f.tag) candidates = candidates.filter(x => x.tags.map(normalize).includes(normalize(f.tag)));
-  if (f.communityId) candidates = candidates.filter(x => x.communityId === f.communityId);
-  if (f.seriesId) candidates = candidates.filter(x => x.seriesId === f.seriesId);
-  if (f.dateFrom) candidates = candidates.filter(x => new Date(x.publishedAt || x.createdAt || 0) >= new Date(f.dateFrom!));
-  if (f.dateTo) candidates = candidates.filter(x => new Date(x.publishedAt || x.createdAt || 0) <= new Date(f.dateTo!));
+  if (typeFromQuery) candidates = candidates.filter(x => normalize(x.type) === normalize(typeFromQuery));
+  if (f.creatorId || parsed.filters.author) candidates = candidates.filter(x => normalize(x.authorId) === normalize(f.creatorId || parsed.filters.author));
+  if (f.topic || parsed.filters.topic) candidates = candidates.filter(x => x.topics.some(t => normalize(t) === normalize(f.topic || parsed.filters.topic)));
+  if (f.tag || parsed.filters.tag) candidates = candidates.filter(x => x.tags.some(t => normalize(t) === normalize(f.tag || parsed.filters.tag)));
+  if (f.communityId || parsed.filters.community) candidates = candidates.filter(x => normalize(x.communityId) === normalize(f.communityId || parsed.filters.community));
+  if (f.seriesId || parsed.filters.series) candidates = candidates.filter(x => normalize(x.seriesId) === normalize(f.seriesId || parsed.filters.series));
+  const from = f.dateFrom || parsed.filters.after;
+  const to = f.dateTo || parsed.filters.before;
+  if (from) candidates = candidates.filter(x => new Date(x.publishedAt || x.createdAt || 0) >= new Date(from));
+  if (to) candidates = candidates.filter(x => new Date(x.publishedAt || x.createdAt || 0) <= new Date(to));
   if (typeof f.maxReadingMinutes === 'number') candidates = candidates.filter(x => Number((x as any).readingTimeMinutes ?? Number.POSITIVE_INFINITY) <= f.maxReadingMinutes!);
 
-  const results = candidates.map(entity => {
-    const hay = entity.search.normalizedText;
-    let score = q ? 0 : 1;
-    const reasons: string[] = [];
-    if (q) {
-      if (normalize(entity.title) === q) { score += 100; reasons.push('exact title match'); }
-      if (normalize(entity.title).includes(q)) { score += 50; reasons.push('title match'); }
-      terms.forEach(term => { if (hay.includes(term)) score += 8; if (entity.tags.some(t => normalize(t) === term)) { score += 12; reasons.push(`tag: ${term}`); } if (entity.topics.some(t => normalize(t) === term)) { score += 14; reasons.push(`topic: ${term}`); } });
-    }
-    const ageDays = Math.max(0, (Date.now() - new Date(entity.publishedAt || entity.createdAt || 0).getTime()) / 86400000);
-    score += Math.max(0, 4 - ageDays / 30);
-    score += Math.min(8, Number(entity.stats.views || 0) / 2000);
-    score += Math.min(6, Number(entity.stats.likes || 0) / 100);
+  const scored = candidates.map(entity => {
+    const lexical = lexicalMatchScore(entity, terms, q);
+    let score = lexical.score;
+    const reasons = [...lexical.reasons];
+    if (!q) score = 5;
+    score += freshnessScore(entity) * 8;
+    score += engagementScore(entity) * 0.65;
+    if (entity.stats?.quality) score += Math.min(8, Number(entity.stats.quality));
     if (entity.status !== 'published' && entity.status !== 'unlisted') score -= 1000;
-    return { ...entity, score, reasons: Array.from(new Set(reasons)) };
-  }).filter(x => x.score > -500).sort((a,b) => b.score - a.score).slice(0, Math.max(1, Math.min(100, options.limit || 20)));
-  return results;
+    if (entity.publishedAt) {
+      const ageDays = Math.max(0, (Date.now() - new Date(entity.publishedAt).getTime()) / 86400000);
+      if (ageDays <= 14) reasons.push('recent');
+    }
+    return { ...entity, score, reasons: [...new Set(reasons)] };
+  });
+
+  return scored
+    .filter(x => x.score > -500)
+    .sort((a, b) => b.score - a.score || normalize(a.title).localeCompare(normalize(b.title)))
+    .slice(0, Math.max(1, Math.min(100, options.limit || 20)));
 }
