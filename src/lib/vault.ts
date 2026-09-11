@@ -1,89 +1,24 @@
 import { db } from './firebase';
-import {
-  collection, doc, setDoc, getDocs, query, where, orderBy, deleteDoc, serverTimestamp, limit as fsLimit,
-} from 'firebase/firestore';
-import type { VaultHighlight, VaultNote } from '../types';
+import { collection, doc, setDoc, getDocs, query, where, orderBy, deleteDoc, serverTimestamp, limit as fsLimit, updateDoc } from 'firebase/firestore';
+import type { VaultHighlight, VaultNote, BookmarkCollectionItem, VaultSourceReference, VaultCitation } from '../types';
 
-function mapHighlight(id: string, data: any): VaultHighlight {
-  return {
-    id,
-    articleSlug: String(data.articleSlug || ''),
-    articleTitle: String(data.articleTitle || ''),
-    quote: String(data.quote || ''),
-    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()),
-  };
-}
-
-function mapNote(id: string, data: any): VaultNote {
-  return {
-    id,
-    title: String(data.title || ''),
-    body: String(data.body || ''),
-    articleSlug: data.articleSlug || undefined,
-    articleTitle: data.articleTitle || undefined,
-    quote: data.quote || undefined,
-    createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (data.createdAt || new Date().toISOString()),
-    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : (data.updatedAt || data.createdAt || new Date().toISOString()),
-  };
-}
-
-/** Save a highlighted quote from an article. Requires a signed-in user (uid). */
-export async function saveHighlight(uid: string, input: { articleSlug: string; articleTitle: string; quote: string }): Promise<VaultHighlight> {
-  const quote = input.quote.trim().slice(0, 2000);
-  if (!quote) throw new Error('Select some text to highlight.');
-  const ref = doc(collection(db, 'users', uid, 'highlights'));
-  const payload = { articleSlug: input.articleSlug, articleTitle: input.articleTitle.slice(0, 200), quote, createdAt: serverTimestamp() };
-  await setDoc(ref, payload);
-  return mapHighlight(ref.id, { ...payload, createdAt: new Date().toISOString() });
-}
-
-/** Highlights for one article (used on the article page), or all of a user's highlights (Vault). */
-export async function getHighlights(uid: string, articleSlug?: string): Promise<VaultHighlight[]> {
-  if (!uid) return [];
-  try {
-    const base = collection(db, 'users', uid, 'highlights');
-    const q = articleSlug ? query(base, where('articleSlug', '==', articleSlug), fsLimit(200)) : query(base, orderBy('createdAt', 'desc'), fsLimit(200));
-    const snap = await getDocs(q);
-    return snap.docs.map(d => mapHighlight(d.id, d.data()));
-  } catch (error) {
-    console.warn('Could not fetch highlights:', error);
-    return [];
-  }
-}
-
-export async function deleteHighlight(uid: string, id: string): Promise<void> {
-  await deleteDoc(doc(db, 'users', uid, 'highlights', id));
-}
-
-/** Save a note, optionally linked to the article/quote the person was reading when they wrote it. */
-export async function saveVaultNote(uid: string, input: { title?: string; body: string; articleSlug?: string; articleTitle?: string; quote?: string }): Promise<VaultNote> {
-  const body = input.body.trim().slice(0, 5000);
-  if (!body) throw new Error('Write something to save.');
-  const ref = doc(collection(db, 'users', uid, 'vaultNotes'));
-  const payload = {
-    title: (input.title || '').trim().slice(0, 120) || 'Untitled note',
-    body,
-    articleSlug: input.articleSlug || null,
-    articleTitle: (input.articleTitle || '').slice(0, 200) || null,
-    quote: (input.quote || '').slice(0, 2000) || null,
-    createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-  };
-  await setDoc(ref, payload);
-  const now = new Date().toISOString();
-  return mapNote(ref.id, { ...payload, createdAt: now, updatedAt: now });
-}
-
-export async function getVaultNotes(uid: string): Promise<VaultNote[]> {
-  if (!uid) return [];
-  try {
-    const snap = await getDocs(query(collection(db, 'users', uid, 'vaultNotes'), orderBy('createdAt', 'desc'), fsLimit(200)));
-    return snap.docs.map(d => mapNote(d.id, d.data()));
-  } catch (error) {
-    console.warn('Could not fetch vault notes:', error);
-    return [];
-  }
-}
-
-export async function deleteVaultNote(uid: string, id: string): Promise<void> {
-  await deleteDoc(doc(db, 'users', uid, 'vaultNotes', id));
-}
+const iso=(v:any)=>v?.toDate?v.toDate().toISOString():(v||new Date().toISOString());
+function mapHighlight(id:string,data:any):VaultHighlight{return {id,articleSlug:String(data.articleSlug||''),articleTitle:String(data.articleTitle||''),quote:String(data.quote||''),createdAt:iso(data.createdAt),blockId:data.blockId||undefined,prefix:data.prefix||undefined,suffix:data.suffix||undefined,startOffset:typeof data.startOffset==='number'?data.startOffset:undefined,endOffset:typeof data.endOffset==='number'?data.endOffset:undefined,collectionIds:Array.isArray(data.collectionIds)?data.collectionIds:[],sourceReference:data.sourceReference||undefined,anchorStatus:data.anchorStatus||'anchored'};}
+function mapNote(id:string,data:any):VaultNote{return {id,title:String(data.title||'Untitled note'),body:String(data.body||''),articleSlug:data.articleSlug||undefined,articleTitle:data.articleTitle||undefined,quote:data.quote||undefined,createdAt:iso(data.createdAt),updatedAt:iso(data.updatedAt||data.createdAt),collectionIds:Array.isArray(data.collectionIds)?data.collectionIds:[],sourceReference:data.sourceReference||undefined};}
+const requireUid=(uid:string)=>{if(!uid)throw new Error('Sign in required.');};
+export async function saveHighlight(uid:string,input:{articleSlug:string;articleTitle:string;quote:string;blockId?:string;prefix?:string;suffix?:string;startOffset?:number;endOffset?:number;collectionIds?:string[];sourceReference?:VaultSourceReference;}):Promise<VaultHighlight>{requireUid(uid);const quote=input.quote.trim().slice(0,2000);if(!quote)throw new Error('Select some text to highlight.');const ref=doc(collection(db,'users',uid,'highlights'));const payload={articleSlug:input.articleSlug,articleTitle:input.articleTitle.slice(0,200),quote,blockId:input.blockId||null,prefix:(input.prefix||'').slice(0,300)||null,suffix:(input.suffix||'').slice(0,300)||null,startOffset:typeof input.startOffset==='number'?input.startOffset:null,endOffset:typeof input.endOffset==='number'?input.endOffset:null,collectionIds:Array.isArray(input.collectionIds)?input.collectionIds.slice(0,20):[],sourceReference:input.sourceReference||{contentId:input.articleSlug,contentType:'article',title:input.articleTitle,route:`/article/${encodeURIComponent(input.articleSlug)}`,excerpt:quote},anchorStatus:'anchored',createdAt:serverTimestamp()};await setDoc(ref,payload);return mapHighlight(ref.id,{...payload,createdAt:new Date().toISOString()});}
+export async function getHighlights(uid:string,articleSlug?:string){if(!uid)return [];try{const base=collection(db,'users',uid,'highlights');const q=articleSlug?query(base,where('articleSlug','==',articleSlug),fsLimit(200)):query(base,orderBy('createdAt','desc'),fsLimit(200));const snap=await getDocs(q);return snap.docs.map(d=>mapHighlight(d.id,d.data()));}catch(e){console.warn('Could not fetch highlights:',e);throw new Error('Vault could not be loaded.');}}
+export async function updateHighlightCollections(uid:string,id:string,collectionIds:string[]){requireUid(uid);await updateDoc(doc(db,'users',uid,'highlights',id),{collectionIds:collectionIds.slice(0,20),updatedAt:serverTimestamp()});}
+export async function deleteHighlight(uid:string,id:string){requireUid(uid);await deleteDoc(doc(db,'users',uid,'highlights',id));}
+export async function saveVaultNote(uid:string,input:{title?:string;body:string;articleSlug?:string;articleTitle?:string;quote?:string;collectionIds?:string[];sourceReference?:VaultSourceReference}):Promise<VaultNote>{requireUid(uid);const body=input.body.trim().slice(0,5000);if(!body)throw new Error('Write something to save.');const ref=doc(collection(db,'users',uid,'vaultNotes'));const payload={title:(input.title||'').trim().slice(0,120)||'Untitled note',body,articleSlug:input.articleSlug||null,articleTitle:(input.articleTitle||'').slice(0,200)||null,quote:(input.quote||'').slice(0,2000)||null,collectionIds:Array.isArray(input.collectionIds)?input.collectionIds.slice(0,20):[],sourceReference:input.sourceReference||undefined,createdAt:serverTimestamp(),updatedAt:serverTimestamp()};await setDoc(ref,payload);const now=new Date().toISOString();return mapNote(ref.id,{...payload,createdAt:now,updatedAt:now});}
+export async function getVaultNotes(uid:string){if(!uid)return [];try{const snap=await getDocs(query(collection(db,'users',uid,'vaultNotes'),orderBy('createdAt','desc'),fsLimit(200)));return snap.docs.map(d=>mapNote(d.id,d.data()));}catch(e){console.warn('Could not fetch vault notes:',e);throw new Error('Vault could not be loaded.');}}
+export async function updateVaultNoteCollections(uid:string,id:string,collectionIds:string[]){requireUid(uid);await updateDoc(doc(db,'users',uid,'vaultNotes',id),{collectionIds:collectionIds.slice(0,20),updatedAt:serverTimestamp()});}
+export async function deleteVaultNote(uid:string,id:string){requireUid(uid);await deleteDoc(doc(db,'users',uid,'vaultNotes',id));}
+export async function getVaultCollections(uid:string){requireUid(uid);const snap=await getDocs(collection(db,'users',uid,'collections'));return snap.docs.map(d=>({id:d.id,...d.data()}));}
+export async function createVaultCollection(uid:string,name:string,description=''){requireUid(uid);const clean=name.trim().slice(0,60);if(!clean)throw new Error('Collection name is required.');const ref=doc(collection(db,'users',uid,'collections'));const now=new Date().toISOString();await setDoc(ref,{name:clean,description:description.trim().slice(0,160),createdAt:serverTimestamp(),updatedAt:serverTimestamp(),kind:'vault'});return {id:ref.id,name:clean,description:description.trim().slice(0,160),createdAt:now,updatedAt:now};}
+export async function updateVaultCollection(uid:string,id:string,name:string,description=''){requireUid(uid);const clean=name.trim().slice(0,60);if(!clean)throw new Error('Collection name is required.');await updateDoc(doc(db,'users',uid,'collections',id),{name:clean,description:description.trim().slice(0,160),updatedAt:serverTimestamp()});}
+export async function deleteVaultCollection(uid:string,id:string){requireUid(uid);if(id==='general')return;const [highlights,notes]=await Promise.all([getHighlights(uid),getVaultNotes(uid)]);await Promise.all(highlights.filter(h=>h.collectionIds?.includes(id)).map(h=>updateHighlightCollections(uid,h.id,(h.collectionIds||[]).filter(x=>x!==id))));await Promise.all(notes.filter(n=>n.collectionIds?.includes(id)).map(n=>updateVaultNoteCollections(uid,n.id,(n.collectionIds||[]).filter(x=>x!==id))));await deleteDoc(doc(db,'users',uid,'collections',id));}
+export async function addToVaultCollection(uid:string,collectionId:string,itemType:BookmarkCollectionItem['itemType'],itemId:string){requireUid(uid);const ref=doc(db,'users',uid,'vaultCollectionItems',`${collectionId}_${itemType}_${itemId}`);await setDoc(ref,{id:ref.id,userId:uid,collectionId,itemType,itemId,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});}
+export async function removeFromVaultCollection(uid:string,collectionId:string,itemType:BookmarkCollectionItem['itemType'],itemId:string){requireUid(uid);await deleteDoc(doc(db,'users',uid,'vaultCollectionItems',`${collectionId}_${itemType}_${itemId}`)).catch(()=>{});}
+export async function getVaultCollectionItems(uid:string,collectionId?:string){requireUid(uid);const base=collection(db,'users',uid,'vaultCollectionItems');const q=collectionId?query(base,where('collectionId','==',collectionId),fsLimit(500)):query(base,orderBy('createdAt','desc'),fsLimit(500));const snap=await getDocs(q);return snap.docs.map(d=>({id:d.id,...d.data()} as BookmarkCollectionItem));}
+export function buildVaultCitation(item:VaultHighlight|VaultNote):VaultCitation{const source=item.sourceReference||{contentId:item.articleSlug||item.id,contentType:'article',title:'articleTitle' in item ? item.articleTitle : item.title,route:item.articleSlug?`/article/${encodeURIComponent(item.articleSlug)}`:undefined,excerpt:'quote' in item?item.quote:undefined};return {id:item.id,itemType:'quote' in item?'highlight':'note',source,quotedText:'quote' in item?item.quote:undefined,label:source.title};}

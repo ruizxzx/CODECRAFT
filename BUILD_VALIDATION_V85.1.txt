@@ -1,0 +1,20 @@
+OFFSCRPT V85.1.0 BUILD VALIDATION
+
+PASSED
+- Repository audit: canonical frontend identified as src/
+- No root-level duplicate frontend tree found in base
+- TypeScript/TSX parser: all checked source files parse cleanly
+- Package version/lock consistency updated
+- Vercel cron configuration present
+- V85.1 modules/import references added
+
+BLOCKED / ENVIRONMENT
+- Dependency-backed full project typecheck: dependencies unavailable in the environment
+- Production Vite build: dependencies unavailable in the environment
+- Live browser/auth/security integration testing: requires deployed Firebase/Vercel environment and real test accounts
+- Firebase CLI rules validation: Firebase CLI is not installed in the environment
+
+NOT CLAIMED
+- bug-free
+- fully verified
+- production verified

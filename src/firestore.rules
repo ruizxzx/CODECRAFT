@@ -395,9 +395,13 @@ service cloud.firestore {
     function isCommunityModerator(communityId) {
       return isSignedIn() && get(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid)).data.get('role','member') in ['owner','moderator'];
     }
+    function communityMode(communityId) { return get(/databases/$(database)/documents/communities/$(communityId)).data.get('membershipMode', get(/databases/$(database)/documents/communities/$(communityId)).data.get('isPrivate', false) ? 'private' : 'public'); }
+    function communityMember(communityId) { return isSignedIn() && exists(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid)); }
+    function communityCanRead(communityId) { return communityMode(communityId) == 'public' || isAdmin() || isPlatformModerator() || isCommunityOwner(communityId) || communityMember(communityId); }
+    function communityCanJoin(communityId) { return communityMode(communityId) == 'public'; }
 
     match /communities/{communityId} {
-      allow read: if true;
+      allow read: if communityCanRead(communityId);
       allow create: if userMayCommunity(request.auth.uid) && (isAdmin() || isPlatformModerator() || communityCreationEnabled())
         && incoming().ownerId == request.auth.uid
         && incoming().membersCount == 1
@@ -407,7 +411,7 @@ service cloud.firestore {
         && validText(incoming().description, 1000);
       allow update: if isSignedIn() && (
         isAdmin() || isPlatformModerator() ||
-        (existing().ownerId == request.auth.uid && incoming().ownerId == existing().ownerId && incoming().diff(existing()).affectedKeys().hasOnly(['name','slug','description','iconUrl','bannerUrl','rules','ownerUsername','ownerName','ownerAvatar','isPrivate','isArchived','isLocked','allowLinks','allowMedia','defaultPostType','updatedAt'])) ||
+        (existing().ownerId == request.auth.uid && incoming().ownerId == existing().ownerId && incoming().diff(existing()).affectedKeys().hasOnly(['name','slug','description','iconUrl','bannerUrl','rules','ownerUsername','ownerName','ownerAvatar','isPrivate','membershipMode','wikiEnabled','isArchived','isLocked','allowLinks','allowMedia','defaultPostType','updatedAt'])) ||
         (incoming().diff(existing()).affectedKeys().hasOnly(['membersCount','updatedAt']) && incoming().membersCount >= 0) ||
         (incoming().diff(existing()).affectedKeys().hasOnly(['postsCount','updatedAt']) && incoming().postsCount >= 0) ||
         (existing().ownerId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['ownerId','ownerUsername','ownerName','ownerAvatar','updatedAt']))
@@ -415,8 +419,8 @@ service cloud.firestore {
       allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || existing().ownerId == request.auth.uid);
 
       match /members/{memberId} {
-        allow read: if true;
-        allow create: if isSignedIn() && (request.auth.uid == memberId || isAdmin() || isPlatformModerator() || isCommunityOwner(communityId))
+        allow read: if communityCanRead(communityId);
+        allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || isCommunityOwner(communityId) || (request.auth.uid == memberId && communityCanJoin(communityId)))
           && incoming().uid == memberId;
         allow update: if isSignedIn() && (
           isAdmin() ||
@@ -436,12 +440,12 @@ service cloud.firestore {
       }
 
       match /posts/{postId}/{nestedPath=**} {
-        allow read: if true;
+        allow read: if communityCanRead(communityId);
         allow delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || isCommunityModerator(communityId) || request.auth.uid == get(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)).data.authorId);
       }
 
       match /posts/{postId} {
-        allow read: if true;
+        allow read: if communityCanRead(communityId);
         allow create: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || communityPostsEnabled())
           && incoming().authorId == request.auth.uid
           && exists(/databases/$(database)/documents/communities/$(communityId)/members/$(request.auth.uid))
@@ -738,6 +742,7 @@ service cloud.firestore {
         && incoming().articleSlug is string && incoming().articleSlug.size() > 0
         && incoming().quote is string && incoming().quote.size() > 0 && incoming().quote.size() <= 2000
         && incoming().createdAt is timestamp;
+      allow update: if isSignedIn() && request.auth.uid == userId && incoming().articleSlug == existing().articleSlug && incoming().quote == existing().quote && incoming().updatedAt is timestamp;
       allow delete: if isSignedIn() && request.auth.uid == userId;
     }
 
@@ -750,6 +755,21 @@ service cloud.firestore {
         && incoming().body is string && incoming().body.size() > 0 && incoming().body.size() <= 5000
         && incoming().createdAt == existing().createdAt && incoming().updatedAt is timestamp;
       allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/vaultCollectionItems/{itemId} {
+      allow read, create, update, delete: if isSignedIn() && request.auth.uid == userId
+        && incoming().userId == request.auth.uid
+        && incoming().collectionId is string && incoming().collectionId.size() <= 128
+        && incoming().itemType in ['article','highlight','note']
+        && incoming().itemId is string && incoming().itemId.size() <= 256;
+    }
+
+    match /collaboratorInvites/{inviteId} {
+      allow read: if isSignedIn() && (resource.data.inviterId == request.auth.uid || resource.data.inviteeId == request.auth.uid || isAdmin() || isPlatformModerator());
+      allow create: if isSignedIn() && incoming().inviterId == request.auth.uid && incoming().inviteeId is string && incoming().articleSlug is string && incoming().status == 'pending';
+      allow update: if isSignedIn() && ((existing().inviteeId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status','respondedAt'])) || existing().inviterId == request.auth.uid || isAdmin() || isPlatformModerator());
+      allow delete: if isSignedIn() && (existing().inviterId == request.auth.uid || isAdmin() || isPlatformModerator());
     }
 
     match /users/{userId}/discussionRead/{postId} {
@@ -1110,7 +1130,16 @@ service cloud.firestore {
         && request.resource.data.updatedAt is timestamp)
         || (isSignedIn() && resource.data.get('author', {}).get('uid', '') == request.auth.uid
           && request.resource.data.get('author', {}).get('uid', '') == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['author','authorUsername','authorName','authorAvatar','updatedAt']));
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['author','authorUsername','authorName','authorAvatar','updatedAt']))
+        || (isSignedIn() && resource.data.get('author', {}).get('uid', '') == request.auth.uid
+          && request.resource.data.get('author', {}).get('uid', '') == resource.data.get('author', {}).get('uid', '')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['collaborators','publicationWorkflowState','scheduledAt','scheduledUnpublishAt','scheduledTimezone','creatorReviewStatus','creatorReviewNote','creatorReviewUpdatedBy','creatorReviewUpdatedAt','updatedAt']));
+
+      match /workflow/{stepId} {
+        allow read: if isSignedIn() && (isAdmin() || isPlatformModerator() || get(/databases/$(database)/documents/articles/$(slug)).data.get('author',{}).get('uid','') == request.auth.uid || resource.data.get('createdBy','') == request.auth.uid);
+        allow create: if isSignedIn() && (isAdmin() || isPlatformModerator() || get(/databases/$(database)/documents/articles/$(slug)).data.get('author',{}).get('uid','') == request.auth.uid) && request.resource.data.get('createdBy',request.auth.uid) == request.auth.uid;
+        allow update, delete: if isSignedIn() && (isAdmin() || isPlatformModerator() || get(/databases/$(database)/documents/articles/$(slug)).data.get('author',{}).get('uid','') == request.auth.uid || resource.data.get('createdBy','') == request.auth.uid);
+      }
 
       match /reactions/{userId} {
         allow read: if true;
@@ -1244,7 +1273,7 @@ service cloud.firestore {
       allow read: if true;
     }
     match /communities/{communityId}/posts/{postId}/comments/{commentId} {
-      allow read: if true;
+      allow read: if communityCanRead(communityId);
       allow update: if isAdmin() || hasModeratorPermission('moderateComments')
         || (isSignedIn() && existing().authorId == request.auth.uid
           && incoming().authorId == existing().authorId
@@ -1254,7 +1283,7 @@ service cloud.firestore {
 
     // Collection-group read access for profile activity aggregation.
     match /{path=**}/comments/{commentId} {
-      allow read: if true;
+      allow read: if !resource.data.keys().hasAny(['communityId']) || (isSignedIn() && (resource.data.get('communityId','') == '' || communityCanRead(resource.data.get('communityId',''))));
     }
 
 

@@ -7,6 +7,8 @@ import { getArticleAnalyticsAggregate, subscribeArticleAnalytics, type ArticleAn
 import { getSeriesList } from '../lib/series';
 import { getSeriesArticles, createArticleRevision, getArticleRevisions, restoreArticleRevision } from '../lib/cms';
 import { notifyToast } from '../lib/toast';
+import { CreatorWorkflowPanel } from './CreatorWorkflowPanel';
+import { getCreatorCollaboratorInvites, acceptCreatorCollaboratorInvite, declineCreatorCollaboratorInvite } from '../lib/creatorWorkspace';
 
 interface Props {
   articles: Article[];
@@ -36,12 +38,12 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
   const [revisions, setRevisions] = useState<any[]>([]);
   const [compareSlugs, setCompareSlugs] = useState<string[]>([]);
   const [selectedFunnelStage, setSelectedFunnelStage] = useState<'opened'|'p25'|'p50'|'p75'|'completed'>('opened');
+  const [collabInvites,setCollabInvites]=useState<any[]>([]);
 
   const mine = useMemo(
     () =>
       articles.filter(
         (article) =>
-          published(article) &&
           ((article.author?.uid && article.author.uid === userProfile?.uid) ||
             (article.author?.username && article.author.username === userProfile?.username)),
       ),
@@ -49,6 +51,9 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
   );
 
   const rangeDays = range === 'all' ? 'all' : range;
+
+  useEffect(() => { if(userProfile?.uid){ void getCreatorCollaboratorInvites().then(setCollabInvites).catch(()=>setCollabInvites([])); }
+  },[userProfile?.uid]);
 
   useEffect(() => {
     if (!mine.length) {
@@ -245,6 +250,7 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
         </section>
       )}
 
+{collabInvites.length>0&&<section className="border-4 border-black bg-[var(--color-primary)] p-4 mb-5"><div className="font-mono text-[9px] font-black uppercase">Collaborator invitations</div><div className="space-y-2 mt-2">{collabInvites.map(i=><div key={i.id} className="border-2 border-black bg-white p-3 flex flex-wrap justify-between gap-2 font-mono text-[9px]"><span>{i.articleSlug} · {String(i.role||'viewer').toUpperCase()}</span><span className="flex gap-2"><button onClick={()=>void acceptCreatorCollaboratorInvite(i.id).then(()=>{setCollabInvites(x=>x.filter(v=>v.id!==i.id));notifyToast('Invitation accepted.','success')}).catch(e=>notifyToast(e instanceof Error?e.message:'Could not accept invitation.','error'))} className="border-2 border-black px-2 py-1">ACCEPT</button><button onClick={()=>void declineCreatorCollaboratorInvite(i.id).then(()=>setCollabInvites(x=>x.filter(v=>v.id!==i.id))).catch(e=>notifyToast(e instanceof Error?e.message:'Could not decline invitation.','error'))} className="border-2 border-black px-2 py-1">DECLINE</button></span></div>)}</div></section>}
       {top && stats[top.slug] && (
         <section className="border-4 border-black bg-white p-5">
           <div className="flex flex-wrap items-end justify-between gap-2">
@@ -288,7 +294,7 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
         {!compareSlugs.length && <div className="mt-4 border-2 border-dashed border-black p-6 font-mono text-xs">SELECT ARTICLES TO COMPARE PERFORMANCE ACROSS THE CURRENT RANGE.</div>}
       </section>
 
-      <section><div className="flex items-end justify-between mb-3"><h2 className="font-display font-black text-3xl uppercase">YOUR ARTICLES</h2><span className="font-mono text-[9px]">ANALYTICS + VERSION HISTORY</span></div><div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">{mine.map((article) => { const x = stats[article.slug]; return <div key={article.slug} className="border-4 border-black bg-white p-4"><button onClick={() => onNavigate('article', article.slug)} className="text-left w-full hover:bg-[var(--color-secondary)]"><div className="font-mono text-[9px] uppercase">{article.category} · {article.readingTimeMinutes || 0} MIN</div><h3 className="font-display font-black text-xl uppercase mt-1">{article.title}</h3><div className="mt-4 grid grid-cols-2 gap-2 font-mono text-[9px]"><span>{x?.views ?? Number(article.viewsCount || 0)} VIEWS</span><span>{x?.uniqueReaders ?? 0} UNIQUE</span><span>{x?.completionRate ?? 0}% COMPLETE</span><span>{x?.shares ?? 0} SHARES</span></div></button><div className="flex gap-2 mt-3"><button onClick={() => void openRevisions(article)} className="border-2 border-black px-2 py-1 font-mono text-[9px] font-black uppercase"><RotateCcw className="inline w-3 h-3" /> HISTORY</button><button onClick={async () => { try { await createArticleRevision(article); notifyToast('Current article saved as a cloud revision.', 'success'); } catch (error) { notifyToast(error instanceof Error ? error.message : 'Snapshot failed.', 'error'); } }} className="border-2 border-black px-2 py-1 font-mono text-[9px] font-black uppercase"><Copy className="inline w-3 h-3" /> SNAPSHOT</button></div></div>; })}</div></section>
+      <section><div className="flex items-end justify-between mb-3"><h2 className="font-display font-black text-3xl uppercase">YOUR ARTICLES</h2><span className="font-mono text-[9px]">ANALYTICS + VERSION HISTORY</span></div><div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">{mine.map((article) => { const x = stats[article.slug]; return <div key={article.slug} className="border-4 border-black bg-white p-4"><button onClick={() => onNavigate('article', article.slug)} className="text-left w-full hover:bg-[var(--color-secondary)]"><div className="font-mono text-[9px] uppercase">{article.category} · {article.readingTimeMinutes || 0} MIN</div><h3 className="font-display font-black text-xl uppercase mt-1">{article.title}</h3><div className="mt-4 grid grid-cols-2 gap-2 font-mono text-[9px]"><span>{x?.views ?? Number(article.viewsCount || 0)} VIEWS</span><span>{x?.uniqueReaders ?? 0} UNIQUE</span><span>{x?.completionRate ?? 0}% COMPLETE</span><span>{x?.shares ?? 0} SHARES</span></div></button><div className="flex gap-2 mt-3"><button onClick={() => void openRevisions(article)} className="border-2 border-black px-2 py-1 font-mono text-[9px] font-black uppercase"><RotateCcw className="inline w-3 h-3" /> HISTORY</button><button onClick={async () => { try { await createArticleRevision(article); notifyToast('Current article saved as a cloud revision.', 'success'); } catch (error) { notifyToast(error instanceof Error ? error.message : 'Snapshot failed.', 'error'); } }} className="border-2 border-black px-2 py-1 font-mono text-[9px] font-black uppercase"><Copy className="inline w-3 h-3" /> SNAPSHOT</button></div><CreatorWorkflowPanel article={article}/></div>; })}</div></section>
 
       <section><div className="flex items-end justify-between mb-3"><h2 className="font-display font-black text-3xl uppercase">SERIES ANALYTICS</h2><span className="font-mono text-[9px]">PART-BY-PART DROP-OFF</span></div><div className="grid md:grid-cols-2 gap-4">{series.map((item) => <button key={item.id} onClick={() => void openSeries(item.id)} className="border-4 border-black bg-white p-5 text-left hover:bg-[var(--color-secondary)]"><div className="font-mono text-[9px] uppercase">{item.articleCount || 0} PARTS · {Number(item.viewsCount || 0).toLocaleString()} SERIES VIEWS</div><h3 className="font-display font-black text-2xl uppercase mt-1">{item.title}</h3><div className="mt-4 flex justify-between font-mono text-[9px]"><span>OPEN ANALYTICS</span><span>→</span></div></button>)}</div></section>
 

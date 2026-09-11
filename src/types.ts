@@ -464,32 +464,23 @@ export interface UserSavedItem {
   collectionName?: string;
 }
 
+export type VaultCollectionItemType = 'article' | 'highlight' | 'note';
 export interface BookmarkCollection {
-  id: string;
-  name: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
+  id: string; name: string; description?: string; createdAt: string; updatedAt: string;
 }
-
+export interface BookmarkCollectionItem {
+  id: string; collectionId: string; userId: string; itemType: VaultCollectionItemType; itemId: string; createdAt: string; updatedAt?: string;
+}
+export interface VaultSourceReference {
+  contentId: string; contentType: string; title: string; authorId?: string; route?: string; sourceUrl?: string; excerpt?: string;
+}
 export interface VaultHighlight {
-  id: string;
-  articleSlug: string;
-  articleTitle: string;
-  quote: string;
-  createdAt: string;
+  id: string; articleSlug: string; articleTitle: string; quote: string; createdAt: string; blockId?: string; prefix?: string; suffix?: string; startOffset?: number; endOffset?: number; collectionIds?: string[]; sourceReference?: VaultSourceReference; anchorStatus?: 'anchored' | 'changed' | 'unavailable';
 }
-
 export interface VaultNote {
-  id: string;
-  title: string;
-  body: string;
-  articleSlug?: string;
-  articleTitle?: string;
-  quote?: string;
-  createdAt: string;
-  updatedAt: string;
+  id: string; title: string; body: string; articleSlug?: string; articleTitle?: string; quote?: string; createdAt: string; updatedAt: string; collectionIds?: string[]; sourceReference?: VaultSourceReference;
 }
+export interface VaultCitation { id: string; itemType: 'highlight' | 'note'; source: VaultSourceReference; quotedText?: string; label: string; }
 
 export interface Notification {
   id: string;

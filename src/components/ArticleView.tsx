@@ -57,6 +57,21 @@ function slugifyHeading(value: string): string {
     .replace(/^-|-$/g, '') || 'section';
 }
 
+function renderInlineHighlightText(text:string, highlights:VaultHighlight[], blockId:string){
+  const active=highlights.filter(h=>h.anchorStatus!=='unavailable' && (!h.blockId || h.blockId===blockId) && h.quote);
+  if(!active.length)return <RichText text={text}/>;
+  let value=text;
+  const parts:Array<{text:string;mark?:boolean;id?:string}>=[];
+  const ranges:{start:number;end:number;h:VaultHighlight}[]=[];
+  for(const h of active){const i=value.indexOf(h.quote);if(i>=0)ranges.push({start:i,end:i+h.quote.length,h});}
+  ranges.sort((a,b)=>a.start-b.start);
+  let cursor=0;
+  for(const r of ranges){if(r.start<cursor)continue;if(r.start>cursor)parts.push({text:value.slice(cursor,r.start)});parts.push({text:value.slice(r.start,r.end),mark:true,id:r.h.id});cursor=r.end;}
+  if(cursor<value.length)parts.push({text:value.slice(cursor)});
+  if(!parts.length)return <RichText text={text}/>;
+  return <>{parts.map((part,i)=>part.mark?<mark key={`${part.id}-${i}`} data-vault-highlight-id={part.id} className="bg-[var(--color-primary)] px-0.5 rounded-sm">{part.text}</mark>:<RichText key={i} text={part.text}/>)}</>;
+}
+
 function getVideoEmbedUrl(url: string): string | null {
   const value = String(url || '').trim();
   if (!value) return null;
@@ -807,7 +822,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             {discussionProfile && <button type="button" onClick={() => setDiscussionComposer({ initialTitle: `Discussion: ${article.title}`, initialSource: { sourceType:'article', sourceId:article.slug, sourceTitle:article.title, sourceUrl:window.location.origin+`/article/${encodeURIComponent(article.slug)}`, sourceAuthorId:article.author?.uid, sourceAuthorUsername:article.author?.username, sourceAuthorName:article.author?.name } })} className="border-2 border-black bg-white px-4 py-3 font-mono text-xs font-black uppercase shadow-[3px_3px_0_#000]">START A DISCUSSION</button>}
           </div>
           {selectionQuoteVisible && discussionProfile && <button type="button" onClick={() => { const text = window.getSelection()?.toString().trim() || ''; setDiscussionComposer({ selectedText:text, initialTitle:`Discussion: ${article.title}`, initialSource:{ sourceType:'article', sourceId:article.slug, sourceTitle:article.title, sourceUrl:window.location.origin+`/article/${encodeURIComponent(article.slug)}`, sourceAuthorId:article.author?.uid, sourceAuthorUsername:article.author?.username, sourceAuthorName:article.author?.name, selectedText:text } }); setSelectionQuoteVisible(false); }} className="border-2 border-black bg-black text-white px-4 py-2 font-mono text-[10px] font-black uppercase">QUOTE SELECTED TEXT → DISCUSSION</button>}
-          {selectionQuoteVisible && user && <button type="button" onClick={() => { const text = window.getSelection()?.toString().trim() || ''; void saveHighlight(user.uid, { articleSlug: article.slug, articleTitle: article.title, quote: text }).then(h => { setHighlights(prev => [h, ...prev]); notifyToast('Highlight saved to your Vault.', 'success'); }).catch(e => notifyToast(e instanceof Error ? e.message : 'Could not save highlight.', 'error')); setSelectionQuoteVisible(false); }} className="border-2 border-black bg-[var(--color-primary)] px-4 py-2 font-mono text-[10px] font-black uppercase ml-2">SAVE HIGHLIGHT</button>}
+          {selectionQuoteVisible && user && <button type="button" onClick={() => { const sel = window.getSelection(); const text = sel?.toString().trim() || ''; const node = sel?.anchorNode?.parentElement?.closest('[data-article-block]') as HTMLElement | null; const blockId = node?.dataset.articleBlock; void saveHighlight(user.uid, { articleSlug: article.slug, articleTitle: article.title, quote: text, blockId, sourceReference:{contentId:article.slug,contentType:'article',title:article.title,route:`/article/${encodeURIComponent(article.slug)}`,authorId:article.author?.uid,excerpt:text} }).then(h => { setHighlights(prev => [h, ...prev]); notifyToast('Highlight saved to your Vault.', 'success'); }).catch(e => notifyToast(e instanceof Error ? e.message : 'Could not save highlight.', 'error')); setSelectionQuoteVisible(false); }} className="border-2 border-black bg-[var(--color-primary)] px-4 py-2 font-mono text-[10px] font-black uppercase ml-2">SAVE HIGHLIGHT</button>}
         </section>
         {highlights.length > 0 && <section className="border-4 border-black bg-white p-5 sm:p-6 neo-shadow-sm">
           <div className="font-mono text-[9px] font-black uppercase mb-3">Your highlights on this article</div>
@@ -821,8 +836,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
           {safeContent.map((block, index) => {
             if (block.type === 'paragraph') {
               return (
-                <p key={index} className="text-neutral-800 leading-relaxed">
-                  <RichText text={block.content} />
+                <p key={index} data-article-block={String(index)} className="text-neutral-800 leading-relaxed">
+                  {renderInlineHighlightText(String(block.content||''), highlights, String(index))}
                 </p>
               );
             }
@@ -832,9 +847,9 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                 <h2 
                   key={index} 
                   id={`article-block-${index}-${slugifyHeading(String(block.content || 'section'))}`}
-                  className="font-display font-black text-2xl sm:text-3xl text-black tracking-tight mt-12 pt-6 border-t-2 border-black/20 uppercase"
+                  data-article-block={String(index)} className="font-display font-black text-2xl sm:text-3xl text-black tracking-tight mt-12 pt-6 border-t-2 border-black/20 uppercase"
                 >
-                  <RichText text={block.content} />
+                  {renderInlineHighlightText(String(block.content||''), highlights, String(index))}
                 </h2>
               );
             }
@@ -844,9 +859,9 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                 <h3 
                   key={index} 
                   id={`article-block-${index}-${slugifyHeading(String(block.content || 'section'))}`}
-                  className="font-display font-black text-xl sm:text-2xl text-black mt-8"
+                  data-article-block={String(index)} className="font-display font-black text-xl sm:text-2xl text-black mt-8"
                 >
-                  <RichText text={block.content} />
+                  {renderInlineHighlightText(String(block.content||''), highlights, String(index))}
                 </h3>
               );
             }
@@ -854,8 +869,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             if (block.type === 'quote') {
               return (
                 <figure key={index} className="my-8 p-6 bg-gray-50 border-l-8 border-black neo-border neo-shadow-sm">
-                  <blockquote className="font-serif italic text-xl sm:text-2xl text-black leading-snug">
-                    <RichText text={block.content} />
+                  <blockquote data-article-block={String(index)} className="font-serif italic text-xl sm:text-2xl text-black leading-snug">
+                    {renderInlineHighlightText(String(block.content||''), highlights, String(index))}
                   </blockquote>
                   {block.quoteAuthor && (
                     <figcaption className="mt-3 font-mono text-xs font-bold text-neutral-600 uppercase">
@@ -878,8 +893,8 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
                     <span>{block.calloutTitle || 'KEY INSIGHT'}</span>
                     <Sparkles className="w-3.5 h-3.5 fill-black" />
                   </div>
-                  <div className="p-5 font-sans font-medium text-neutral-900 text-base">
-                    <RichText text={block.content} />
+                  <div data-article-block={String(index)} className="p-5 font-sans font-medium text-neutral-900 text-base">
+                    {renderInlineHighlightText(String(block.content||''), highlights, String(index))}
                   </div>
                 </div>
               );
@@ -935,7 +950,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
             if (block.type === 'list' && block.items) {
               return (
                 <ul key={index} className="my-8 list-disc pl-7 space-y-3 font-sans text-base text-neutral-800">
-                  {(Array.isArray(block.items) ? block.items : []).filter(Boolean).map((item, idx) => <li key={idx}><RichText text={String(item)} /></li>)}
+                  {(Array.isArray(block.items) ? block.items : []).filter(Boolean).map((item, idx) => <li key={idx} data-article-block={String(index)}>{renderInlineHighlightText(String(item), highlights, String(index))}</li>)}
                 </ul>
               );
             }
