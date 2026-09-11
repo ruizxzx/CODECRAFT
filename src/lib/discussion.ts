@@ -2,6 +2,7 @@ import { auth, db } from './firebase';
 import { CommunityPost, CommunityUser } from '../types';
 import { addComment, createPost, getComments, getPost, getCommunityProfile, toggleCommentReaction, updateComment, followPost, unfollowPost, isFollowingPost, markPostDiscussionRead, getPostDiscussionReadState } from './community';
 import { collection, getDocs, limit, query, where, documentId } from 'firebase/firestore';
+import { emitActivityEvent } from './activity';
 
 export type DiscussionSort = 'top' | 'newest' | 'oldest' | 'discussed' | 'author' | 'helpful' | 'unread';
 export interface DiscussionThreadPart extends CommunityPost {
@@ -80,9 +81,12 @@ export async function createDiscussion(input: {
       allowRemixes: true,
       allowReplies: 'everyone',
     });
+    void emitActivityEvent({ type: 'discussion_create', targetId: p.id, targetType: 'discussion', source: 'community-discussion', metadata: { communityId: input.communityId } }).catch(() => {});
     return { ...(p as any), ...(input.source ? { source: input.source } : {}), discussionStatus: 'active', visibility: input.visibility || 'community' } as any;
   }
-  return await createPost(payload as any) as CommunityPost;
+  const created = await createPost(payload as any) as CommunityPost;
+  void emitActivityEvent({ type: 'discussion_create', targetId: created.id, targetType: 'discussion', source: 'discussion' }).catch(() => {});
+  return created;
 }
 
 export async function createQuoteDiscussion(input: {
@@ -104,7 +108,7 @@ export async function createQuoteDiscussion(input: {
     sourceAuthorId: input.original.authorId, sourceAuthorUsername: input.original.authorUsername,
     sourceAuthorName: input.original.authorName,
   };
-  return await createPost({
+  const created = await createPost({
     type: 'discussion', title, content, authorId: input.user.uid, authorUsername: input.user.username,
     authorName: input.user.displayName, authorAvatar: input.user.photoURL || '',
     isVerified: !!input.user.isVerified, verificationColor: input.user.verificationColor || '#2196F3',
@@ -114,6 +118,8 @@ export async function createQuoteDiscussion(input: {
     ...(input.remix ? { remixOfPostId: input.original.id, remixSourceSnapshot: source, isRemix: true } : {}),
     allowQuotes: true, allowRemixes: true, discussionStatus: 'active', visibility: 'public',
   } as any) as CommunityPost;
+  void emitActivityEvent({ type: input.remix ? 'discussion_remix' : 'discussion_quote', targetId: created.id, targetType: 'discussion', source: 'discussion', metadata: { quotedPostId: input.original.id } }).catch(() => {});
+  return created;
 }
 
 export async function createRemixDiscussion(input: { user: CommunityUser; original: CommunityPost; commentary?: string }): Promise<CommunityPost> {
@@ -178,11 +184,13 @@ export async function getDiscussionReplies(postId: string) { return getComments(
 export async function replyToDiscussion(postId: string, user: CommunityUser, content: string, parentId?: string, meta?: { quotedText?: string; quoteSource?: any; mediaUrls?: string[]; mentionedUsernames?: string[] }) {
   const post = await getPost(postId); if (!post) throw new Error('Discussion no longer exists.');
   if ((post as any).discussionStatus === 'locked' || (post as any).isLocked) throw new Error('This discussion is locked.');
-  return addComment(postId, post.commentsCount, {
+  const created = await addComment(postId, post.commentsCount, {
     authorId: user.uid, authorUsername: user.username, authorName: user.displayName,
     authorAvatar: user.photoURL || '', content: clean(content, 5000), parentId: parentId || '',
     ...(meta || {}) as any,
   } as any);
+  void emitActivityEvent({ type: 'discussion_reply', targetId: created.id, targetType: 'comment', source: 'discussion', metadata: { discussionId: postId, parentId: parentId || '' } }).catch(() => {});
+  return created;
 }
 
 export const updateDiscussionReply = updateComment;

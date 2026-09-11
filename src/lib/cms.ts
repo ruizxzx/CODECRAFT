@@ -1,3 +1,5 @@
+import { emitActivityEvent } from './activity';
+import { enqueueIndexSync } from './indexSync';
 import { 
   collection, 
   collectionGroup,
@@ -677,6 +679,7 @@ export async function recordArticleView(slug:string, viewerId?:string):Promise<v
     await runTransaction(db,async(tx)=>{const articleSnap=await tx.get(articleRef);if(!articleSnap.exists())return;const current=Number(articleSnap.data()?.viewsCount||0);tx.update(articleRef,{viewsCount:current+1,updatedAt:serverTimestamp()});});
     try{localStorage.setItem(localKey,'1');}catch{/* optional */}
   }catch(e){ console.warn('Anonymous article view tracking failed:',e); }
+  void emitActivityEvent({ type:'content_view', targetId:slug, targetType:'article', source:'article' }).catch(()=>{});
 }
 
 export async function getArticleViewCount(slug:string):Promise<number>{
@@ -701,7 +704,9 @@ export async function setArticleReaction(slug:string,userId:string,reaction:Arti
     if(old.exists()) await deleteDoc(ref);
     try { await deleteDoc(indexRef); } catch { /* best-effort cleanup for legacy accounts */ }
   }
+  void emitActivityEvent({ type: reaction ? 'like' : 'unlike', targetId: slug, targetType:'article', metadata:{ reaction: reaction || '' } }).catch(()=>{});
 }
+
 export async function getArticleReaction(slug:string,userId:string):Promise<ArticleReaction|null>{
   if(!userId) return null; const s=await getDoc(doc(db,'articles',slug,'reactions',userId)); return s.exists()?(s.data()?.reaction||null):null;
 }
@@ -825,6 +830,8 @@ export async function saveArticle(article: Article, options:{createRevision?:boo
       console.warn('Article notification fan-out failed:', notificationError);
     }
   }
+  void enqueueIndexSync({ operation: isNewArticle ? 'create' : 'update', contentId: article.slug, contentType: 'article', path: `articles/${article.slug}`, revision: String((article as any).editedAt || (article as any).updatedAt || ''), reason: isNewArticle ? 'article-created' : 'article-updated' }).catch(() => {});
+  if (article.isPublished !== false && article.mainPublicationStatus !== 'unpublished') void enqueueIndexSync({ operation: 'publish', contentId: article.slug, contentType: 'article', path: `articles/${article.slug}` }).catch(() => {});
   return article;
 }
 
@@ -939,6 +946,7 @@ export async function unpublishMainArticle(article: Article): Promise<void> {
     unpublishedAt: serverTimestamp(),
     unpublishedBy: auth.currentUser?.uid || ''
   });
+  void enqueueIndexSync({ operation: 'unpublish', contentId: article.slug, contentType: 'article', path: `articles/${article.slug}`, reason: 'article-unpublished' }).catch(() => {});
   const data = existing.data() as any;
   if (data.sourcePostId) {
     try {
@@ -1032,6 +1040,7 @@ export async function deleteArticle(slug: string): Promise<void> {
     slug,
     deletedAt: serverTimestamp()
   });
+  void enqueueIndexSync({ operation: 'delete', contentId: slug, contentType: 'article', path: `articles/${slug}`, reason: 'article-deleted' }).catch(() => {});
 }
 
 // ==========================================

@@ -102,6 +102,13 @@ export interface MasterCommentRecord {
   createdAt?: string;
 }
 
+export interface IntelligenceActivityHealth {
+  totalEvents: number;
+  recent24h: number;
+  eventTypes: Record<string, number>;
+  latestAt?: string;
+}
+
 export interface RecommendationHealth {
   sourceCounts: { articles: number; topics: number; series: number };
   topCloudArticles: Array<{ slug: string; title: string; views: number }>;
@@ -548,6 +555,22 @@ export async function getPlatformAnalytics(): Promise<PlatformAnalytics> {
     creators:creatorAgg,
     measuredAt:now,
   };
+}
+
+
+export async function getIntelligenceActivityHealth(): Promise<IntelligenceActivityHealth> {
+  await requireMaster();
+  const snap = await getDocs(query(collectionGroup(db, 'activityEvents'), limit(3000)));
+  const cutoff = Date.now() - 86400000;
+  const eventTypes: Record<string, number> = {};
+  let recent24h = 0; let latest = 0;
+  for (const d of snap.docs) {
+    const data:any = d.data();
+    const type = String(data.type || 'unknown'); eventTypes[type] = (eventTypes[type] || 0) + 1;
+    const at = data.createdAt?.toDate?.()?.getTime?.() || data.timestamp?.toDate?.()?.getTime?.() || Date.parse(String(data.createdAt || data.timestamp || '')) || 0;
+    if (at >= cutoff) recent24h++; if (at > latest) latest = at;
+  }
+  return { totalEvents: snap.size, recent24h, eventTypes, latestAt: latest ? new Date(latest).toISOString() : undefined };
 }
 
 export async function getRecommendationHealth(): Promise<RecommendationHealth> {

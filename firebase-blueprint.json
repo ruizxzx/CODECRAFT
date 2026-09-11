@@ -5,109 +5,438 @@
       "description": "User profile in the community",
       "type": "object",
       "properties": {
-        "uid": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "username": { "type": "string", "maxLength": 32, "pattern": "^[a-zA-Z0-9_]+$" },
-        "displayName": { "type": "string", "maxLength": 64 },
-        "photoURL": { "type": "string", "maxLength": 2048 },
-        "bio": { "type": "string", "maxLength": 500 },
-        "themeColor": { "type": "string", "maxLength": 7, "pattern": "^#[0-9a-fA-F]{6}$" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "username": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[a-zA-Z0-9_]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "themeColor": {
+          "type": "string",
+          "maxLength": 7,
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
       },
-      "required": ["uid", "username", "displayName", "createdAt", "updatedAt"]
+      "required": [
+        "uid",
+        "username",
+        "displayName",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "Username": {
       "title": "Username",
       "description": "Map from username to uid to ensure uniqueness",
       "type": "object",
       "properties": {
-        "uid": { "type": "string", "maxLength": 128 }
+        "uid": {
+          "type": "string",
+          "maxLength": 128
+        }
       },
-      "required": ["uid"]
+      "required": [
+        "uid"
+      ]
     },
     "Post": {
       "title": "Post",
       "description": "A community discussion or blog post",
       "type": "object",
       "properties": {
-        "type": { "type": "string", "enum": ["discussion", "blog"] },
-        "title": { "type": "string", "maxLength": 256 },
-        "content": { "type": "string", "maxLength": 100000 },
-        "authorId": { "type": "string", "maxLength": 128 },
-        "authorUsername": { "type": "string", "maxLength": 32 },
-        "authorName": { "type": "string", "maxLength": 64 },
-        "authorAvatar": { "type": "string", "maxLength": 2048 },
-        "clapsCount": { "type": "number" },
-        "commentsCount": { "type": "number" },
-        "isFeatured": { "type": "boolean" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "type": {
+          "type": "string",
+          "enum": [
+            "discussion",
+            "blog"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 100000
+        },
+        "authorId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "authorUsername": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "authorName": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "authorAvatar": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "clapsCount": {
+          "type": "number"
+        },
+        "commentsCount": {
+          "type": "number"
+        },
+        "isFeatured": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
       },
-      "required": ["type", "title", "content", "authorId", "authorUsername", "clapsCount", "commentsCount", "createdAt", "updatedAt"]
+      "required": [
+        "type",
+        "title",
+        "content",
+        "authorId",
+        "authorUsername",
+        "clapsCount",
+        "commentsCount",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "Comment": {
       "title": "Comment",
       "description": "A comment on a post",
       "type": "object",
       "properties": {
-        "postId": { "type": "string", "maxLength": 128 },
-        "authorId": { "type": "string", "maxLength": 128 },
-        "authorUsername": { "type": "string", "maxLength": 32 },
-        "authorName": { "type": "string", "maxLength": 64 },
-        "authorAvatar": { "type": "string", "maxLength": 2048 },
-        "content": { "type": "string", "maxLength": 5000 },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "postId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "authorId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "authorUsername": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "authorName": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "authorAvatar": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
       },
-      "required": ["postId", "authorId", "authorUsername", "content", "createdAt", "updatedAt"]
+      "required": [
+        "postId",
+        "authorId",
+        "authorUsername",
+        "content",
+        "createdAt",
+        "updatedAt"
+      ]
     },
     "Clap": {
       "title": "Clap",
       "description": "A clap on a post",
       "type": "object",
       "properties": {
-        "postId": { "type": "string", "maxLength": 128 },
-        "userId": { "type": "string", "maxLength": 128 },
-        "createdAt": { "type": "string" }
+        "postId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string"
+        }
       },
-      "required": ["postId", "userId", "createdAt"]
+      "required": [
+        "postId",
+        "userId",
+        "createdAt"
+      ]
     },
     "Save": {
       "title": "Save",
       "description": "A saved article or community post",
       "type": "object",
       "properties": {
-        "itemId": { "type": "string", "maxLength": 128 },
-        "itemType": { "type": "string", "enum": ["article", "post"] },
-        "title": { "type": "string", "maxLength": 256 },
-        "createdAt": { "type": "string" }
+        "itemId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "itemType": {
+          "type": "string",
+          "enum": [
+            "article",
+            "post"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "createdAt": {
+          "type": "string"
+        }
       },
-      "required": ["itemId", "itemType", "createdAt"]
+      "required": [
+        "itemId",
+        "itemType",
+        "createdAt"
+      ]
     },
     "ArticleLike": {
       "title": "ArticleLike",
       "description": "A like on a main site dispatch/article",
       "type": "object",
       "properties": {
-        "slug": { "type": "string", "maxLength": 128 },
-        "userId": { "type": "string", "maxLength": 128 },
-        "createdAt": { "type": "string" }
+        "slug": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string"
+        }
       },
-      "required": ["slug", "userId", "createdAt"]
+      "required": [
+        "slug",
+        "userId",
+        "createdAt"
+      ]
     },
     "CarouselSlide": {
       "title": "CarouselSlide",
       "description": "Promotional carousel slide on the homepage",
       "type": "object",
       "properties": {
-        "title": { "type": "string", "maxLength": 256 },
-        "imageUrl": { "type": "string", "maxLength": 2048 },
-        "linkUrl": { "type": "string", "maxLength": 2048 },
-        "order": { "type": "number" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "title": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "linkUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "order": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
       },
-      "required": ["imageUrl", "order"]
+      "required": [
+        "imageUrl",
+        "order"
+      ]
+    },
+    "ContentEntity": {
+      "title": "ContentEntity",
+      "description": "Normalized compatibility abstraction consumed by search, feed, AI and recommendations",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "type": {
+          "type": "string"
+        },
+        "authorId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 120000
+        },
+        "excerpt": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "visibility": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "seriesId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "communityId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "parentId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "rootId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "tags": {
+          "type": "array"
+        },
+        "topics": {
+          "type": "array"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "publishedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "ActivityEvent": {
+      "title": "ActivityEvent",
+      "description": "Standardized private user activity event",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "targetId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "targetType": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "sessionId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "metadata": {
+          "type": "object"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      }
+    },
+    "ContentRelationship": {
+      "title": "ContentRelationship",
+      "description": "Server/admin-derived edge between content entities",
+      "type": "object",
+      "properties": {
+        "fromId": {
+          "type": "string"
+        },
+        "fromType": {
+          "type": "string"
+        },
+        "toId": {
+          "type": "string"
+        },
+        "toType": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "IntelligenceConfig": {
+      "title": "IntelligenceConfig",
+      "description": "Master-controlled V80 feature flags",
+      "type": "object",
+      "properties": {
+        "unifiedSearch": {
+          "type": "boolean"
+        },
+        "semanticSearch": {
+          "type": "boolean"
+        },
+        "aiRetrieval": {
+          "type": "boolean"
+        },
+        "recommendations": {
+          "type": "boolean"
+        },
+        "personalizedFeed": {
+          "type": "boolean"
+        },
+        "activityEngine": {
+          "type": "boolean"
+        },
+        "contentGraph": {
+          "type": "boolean"
+        }
+      }
     }
   },
   "firestore": {
@@ -142,6 +471,18 @@
     "carousel_slides/{slideId}": {
       "schema": "CarouselSlide",
       "description": "Promotional carousel slides configured by administrators"
+    },
+    "users/{userId}/activityEvents/{eventId}": {
+      "schema": "ActivityEvent",
+      "description": "Standardized private user activity"
+    },
+    "contentRelationships/{relationshipId}": {
+      "schema": "ContentRelationship",
+      "description": "Derived/admin-managed content graph edge"
+    },
+    "intelligenceConfig/global": {
+      "schema": "IntelligenceConfig",
+      "description": "Master feature flags"
     }
   }
 }

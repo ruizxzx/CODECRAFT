@@ -42,6 +42,8 @@ import { DiscussionComposer } from './DiscussionComposer';
 import { AIAssistantPanel } from './AIAssistantPanel';
 import type { ArticleReaction } from '../lib/cms';
 import { notifyToast } from '../lib/toast';
+import { articleToContent } from '../lib/content';
+import { deriveRelatedContent } from '../lib/contentGraph';
 
 function slugifyHeading(value: string): string {
   return String(value || 'section')
@@ -514,17 +516,22 @@ export const ArticleView: React.FC<ArticleViewProps> = ({
   const articleTagSet = new Set((safeTags || []).map(x => String(x).toLowerCase()));
   const relatedSeries = allSeries.filter(s => s.id !== article.seriesId && s.status !== 'archived' && s.visibility !== 'private' && Array.isArray((s as any).tags) && (s as any).tags.some((tag: any) => articleTagSet.has(String(tag).toLowerCase()))).slice(0,4);
 
-  const relatedArticles = allArticles
-    .filter((a) => a.slug !== article.slug)
-    .map(a => {
+  const relatedArticles = (() => {
+    const current = articleToContent(article);
+    const candidates = allArticles.filter(a => a.slug !== article.slug).map(articleToContent);
+    const graphRanked = deriveRelatedContent(current, candidates, 8);
+    const graphIds = new Set(graphRanked.map(x => x.id));
+    const byId = new Map(allArticles.map(a => [String(a.slug || a.id), a]));
+    const ranked = graphRanked.map(x => byId.get(x.id)).filter(Boolean) as Article[];
+    if (ranked.length >= 3) return ranked.slice(0,3);
+    const fallback = allArticles.filter(a => a.slug !== article.slug && !graphIds.has(String(a.slug || a.id))).map(a => {
       const tags = Array.isArray(a.tags) ? a.tags.map(t => String(t)) : [];
       const articleTags = safeTags.map(t => String(t).toLowerCase());
       const overlap = tags.filter(t => articleTags.includes(t.toLowerCase())).length;
       return { a, score: (a.category === article.category ? 4 : 0) + overlap * 2 };
-    })
-    .sort((x,y) => y.score - x.score || new Date(y.a.publishedAt).getTime() - new Date(x.a.publishedAt).getTime())
-    .slice(0, 3)
-    .map(x=>x.a);
+    }).sort((x,y) => y.score - x.score || new Date(y.a.publishedAt).getTime() - new Date(x.a.publishedAt).getTime()).map(x => x.a);
+    return [...ranked, ...fallback].slice(0,3);
+  })();
   useEffect(() => {
     if (!toc.length) return;
     const hash = window.location.hash.replace(/^#/, '');

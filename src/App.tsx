@@ -49,6 +49,7 @@ import { SiteAnnouncementPopup } from './components/SiteAnnouncementPopup';
 import { auth, checkIsAdmin } from './lib/firebase';
 import { isPlatformModerator } from './lib/social';
 import { getCommunityProfile, getProfileByUsername, ensureCommunityProfileForUser, subscribeUserSaves, toggleUserSaveInCloud, getReadingProgress, saveReadingProgress, ensureFollowingAuthor, subscribeCommunityProfile } from './lib/community';
+import { emitActivityEvent } from './lib/activity';
 import { subscribeReadingQueue, toggleReadingQueue, subscribeThemePreference } from './lib/account';
 import { syncAdminAuthorProfile, syncAuthorToAllCloudArticles, getSiteConfig } from './lib/cms';
 import { Loader2 } from 'lucide-react';
@@ -627,6 +628,7 @@ export default function App() {
     if (!userAuth) return;
     try {
       await runSyncedOperation(() => toggleUserSaveInCloud(userAuth.uid, slug, 'article', wasSaved, targetArticle?.title || slug));
+      void emitActivityEvent({ type: willBeSaved ? 'save' : 'unsave', targetId: slug, targetType: 'article', source: 'article-bookmark' }).catch(() => {});
       void recordArticleAnalyticsEvent(slug, 'bookmark', { active: willBeSaved, title: targetArticle?.title || slug }).catch((error) => console.warn('Bookmark analytics event failed:', error));
       notifyToast(willBeSaved ? 'Saved to your library.' : 'Removed from your saved items.', 'success');
     } catch (e) {
@@ -651,6 +653,7 @@ export default function App() {
     if (!userAuth) return;
     try {
       await runSyncedOperation(() => toggleUserSaveInCloud(userAuth.uid, postId, 'post', wasSaved, title || 'Community Post'));
+      void emitActivityEvent({ type: willBeSaved ? 'save' : 'unsave', targetId: postId, targetType: 'post', source: 'community-bookmark' }).catch(() => {});
       notifyToast(willBeSaved ? 'Saved community post.' : 'Removed from your saved items.', 'success');
     } catch (e) {
       applyLocal(wasSaved);

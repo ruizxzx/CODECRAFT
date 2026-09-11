@@ -1,4 +1,5 @@
 import { auth, db } from './firebase';
+import { emitActivityEvent } from './activity';
 import {
   collection,
   doc,
@@ -156,7 +157,10 @@ export async function recordArticleAnalyticsEvent(
     createdAt: serverTimestamp(),
     ...payload,
   });
+  const activityType = type === 'share' ? 'share' : type === 'bookmark' ? 'save' : type === 'reaction' ? 'like' : type === 'complete' ? 'content_complete' : 'content_view';
+  void emitActivityEvent({ type: activityType, targetId: slug, targetType: 'article', source: 'article-analytics', metadata: payload }).catch(() => {});
 }
+
 
 export interface ArticleAnalyticsAggregate {
   views: number;

@@ -7,6 +7,10 @@ import { Search, X, ArrowUpRight, User, Hash, MessageSquare, FileText, Loader2, 
 import { VerifiedBadge } from './VerifiedBadge';
 import { PostMediaPreview } from './PostMediaPreview';
 import { auth, db } from '../lib/firebase';
+import { emitActivityEvent } from '../lib/activity';
+import { articleToContent, postToContent, questionToContent, seriesToContent, userToContent, topicToContent, normalizeContent } from '../lib/content';
+import { searchEverything } from '../lib/unifiedSearch';
+import type { ContentEntity } from '../lib/intelligence/types';
 import { collection, addDoc, serverTimestamp, getDocs, limit, orderBy, query as firestoreQuery } from 'firebase/firestore';
 
 interface SearchModalProps {
@@ -50,7 +54,10 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, artic
     const value = query.trim();
     if (!auth.currentUser || value.length < 2) return;
     const timer = window.setTimeout(() => {
-      void addDoc(collection(db, 'users', auth.currentUser!.uid, 'searches'), { query: value.slice(0, 120), createdAt: serverTimestamp() }).catch((error) => console.warn('Search behavior sync failed:', error));
+      void Promise.all([
+        addDoc(collection(db, 'users', auth.currentUser!.uid, 'searches'), { query: value.slice(0, 120), createdAt: serverTimestamp() }),
+        emitActivityEvent({ type: 'search', targetId: value.slice(0,120), targetType: 'search', source: 'global-search' }),
+      ]).catch((error) => console.warn('Search behavior sync failed:', error));
     }, 900);
     return () => window.clearTimeout(timer);
   }, [query]);
@@ -80,11 +87,30 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, artic
 
   const q = query.trim().toLowerCase();
   const normalized = q.replace(/^[@#]/, '');
-  const matchingArticles = useMemo(() => articles.filter(a => !q || [a.title,a.excerpt,a.category,...(a.tags||[])].some(v => String(v).toLowerCase().includes(normalized))), [articles,q,normalized]);
-  const matchingPosts = useMemo(() => posts.filter(p => !q || [p.title,p.content,p.authorUsername,p.authorName,...(p.hashtags||[]),...extractHashtags(`${p.title} ${p.content}`)].some(v => String(v).toLowerCase().includes(normalized))), [posts,q,normalized]);
-  const matchingQuestions = useMemo(() => questions.filter(item => !q || [item.title,item.details,item.authorUsername,item.authorName,...(item.topics||[])].some(v => String(v||'').toLowerCase().includes(normalized))), [questions,q,normalized]);
-  const matchingSeries = useMemo(() => series.filter(s => s.visibility !== 'private' && s.status !== 'archived' && (!q || [s.title,s.description,...(s.tags||[]),s.ownerUsername||''].some(v => String(v).toLowerCase().includes(normalized)))), [series,q,normalized]);
-  const matchingUsers = useMemo(() => users.filter(u => !q || u.username.toLowerCase().includes(normalized) || u.displayName.toLowerCase().includes(normalized) || (u.bio||'').toLowerCase().includes(normalized)), [users,q,normalized]);
+  const unifiedEntities = useMemo<ContentEntity[]>(() => [
+    ...articles.map(articleToContent),
+    ...posts.map(postToContent),
+    ...questions.map(questionToContent),
+    ...series.map(seriesToContent),
+    ...users.map(userToContent),
+    ...topics.map(topicToContent),
+    ...comments.map(c => normalizeContent({ id: c.id, type: 'comment', authorId: (c as any).authorId, title: '', content: c.content, visibility: 'public', status: (c as any).isDeleted ? 'deleted' : 'published', createdAt: (c as any).createdAt, updatedAt: (c as any).updatedAt, sourceCollection: 'comments', sourcePath: c.id }))
+  ], [articles,posts,questions,series,users,topics,comments]);
+  const unifiedResults = useMemo(() => searchEverything(unifiedEntities, {
+    query: normalized,
+    viewer: { userId: auth.currentUser?.uid },
+    limit: Math.max(120, unifiedEntities.length),
+  }), [unifiedEntities, normalized]);
+  const idsByType = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    unifiedResults.forEach(r => { const set = map.get(r.type) || new Set<string>(); set.add(r.id); map.set(r.type, set); });
+    return map;
+  }, [unifiedResults]);
+  const matchingArticles = useMemo(() => articles.filter(a => idsByType.get('article')?.has(String(a.slug || a.id))), [articles,idsByType]);
+  const matchingPosts = useMemo(() => posts.filter(p => idsByType.get(p.type === 'discussion' ? 'discussion' : 'post')?.has(String(p.id))), [posts,idsByType]);
+  const matchingQuestions = useMemo(() => questions.filter(item => idsByType.get('question')?.has(String(item.id))), [questions,idsByType]);
+  const matchingSeries = useMemo(() => series.filter(s => idsByType.get('series')?.has(String(s.id))), [series,idsByType]);
+  const matchingUsers = useMemo(() => users.filter(u => idsByType.get('user')?.has(String(u.uid))), [users,idsByType]);
   const matchingTags = useMemo(() => {
     const map = new Map<string,number>();
     posts.forEach(p => (p.hashtags || extractHashtags(`${p.title} ${p.content}`)).forEach(tag => map.set(tag,(map.get(tag)||0)+1)));
@@ -94,6 +120,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, artic
   }, [posts,articles,series,q,normalized]);
   const matchingTopics = useMemo(() => topics.filter(t => !q || `${t.name} ${t.description}`.toLowerCase().includes(normalized)), [topics,q,normalized]);
   const matchingComments = useMemo(() => comments.filter(c => !q || c.content.toLowerCase().includes(normalized) || c.authorUsername.toLowerCase().includes(normalized) || c.authorName.toLowerCase().includes(normalized)), [comments,q,normalized]);
+
+  const trackResultClick = (type: string, id: string) => { void emitActivityEvent({ type: 'search_result_click', targetId: id, targetType: type, source: 'global-search', metadata: { query: q.slice(0,120) } }).catch(() => undefined); };
 
   const counts = { articles: matchingArticles.length, posts: matchingPosts.length, questions: matchingQuestions.length, series: matchingSeries.length, people: matchingUsers.length, hashtags: matchingTags.length, comments: matchingComments.length, topics: matchingTopics.length };
   const sections = tab === 'all' ? (['articles','posts','questions','series','people','topics','hashtags','comments'] as SearchTab[]) : [tab];

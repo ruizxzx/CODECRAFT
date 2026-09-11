@@ -1,3 +1,4 @@
+import { emitActivityEvent } from './activity';
 import { db, auth, checkIsAdmin } from './firebase';
 import { 
   collection, collectionGroup, doc, setDoc, getDoc, updateDoc, getDocs, query, where, orderBy, deleteDoc, writeBatch, limit, serverTimestamp, onSnapshot, increment, runTransaction
@@ -829,6 +830,7 @@ export async function followUser(currentUserId: string, targetUserId: string, ta
       const actor = await getCommunityProfile(currentUserId);
       if (actor) await createNotification(targetUserId, { type: 'follow', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'followed you', targetType: 'profile', targetId: actor.username });
     } catch (notificationError) { console.warn('Follow notification failed:', notificationError); }
+    void emitActivityEvent({ type: 'follow', targetId: targetUserId, targetType: 'user', source: 'profile-follow' }).catch(() => {});
     return true;
   } catch (error) {
     console.error("Error following user:", error);
@@ -859,6 +861,7 @@ export async function unfollowUser(currentUserId: string, targetUserId: string, 
 
   try {
     await batch.commit();
+    void emitActivityEvent({ type: 'unfollow', targetId: targetUserId, targetType: 'user', source: 'profile-follow' }).catch(() => {});
     return true;
   } catch (error) {
     console.error("Error unfollowing user:", error);
@@ -1365,6 +1368,7 @@ export async function followPost(postId: string, userId: string): Promise<boolea
   const actor = await getCommunityProfile(userId);
   await setDoc(ref, { userId, username: actor?.username || '', createdAt: serverTimestamp() });
   try { await createNotification(p.authorId, { type: 'follow', actorId: userId, actorUsername: actor?.username || '', actorName: u.displayName || 'User', actorAvatar: u.photoURL || '', message: 'followed your discussion', targetType: 'post', targetId: postId }); } catch (error) { console.warn('Follow notification skipped:', error); }
+  void emitActivityEvent({type:'follow',targetId:postId,targetType:'post',source:'discussion'}).catch(()=>{});
   return true;
 }
 export async function unfollowPost(postId: string, userId: string): Promise<boolean> {
@@ -1373,7 +1377,7 @@ export async function unfollowPost(postId: string, userId: string): Promise<bool
   if (!postRef) return false;
   const ref = doc(postRef, 'followers', userId);
   if (!(await getDoc(ref)).exists()) return false;
-  await deleteDoc(ref); return true;
+  await deleteDoc(ref); void emitActivityEvent({type:'unfollow',targetId:postId,targetType:'post',source:'discussion'}).catch(()=>{}); return true;
 }
 export async function markPostDiscussionRead(postId: string, userId?: string, commentId?: string) {
   if (!userId || auth.currentUser?.uid !== userId) return;
@@ -1986,6 +1990,7 @@ export async function toggleUserSaveInCloud(
   try {
     if (isCurrentlySaved) {
       await deleteDoc(saveRef);
+      void emitActivityEvent({ type: 'unsave', targetId: itemId, targetType: itemType, source: 'save' }).catch(() => {});
       return false;
     } else {
       await setDoc(saveRef, {
@@ -1996,6 +2001,7 @@ export async function toggleUserSaveInCloud(
         collectionName: collectionName || 'General',
         createdAt: serverTimestamp()
       });
+      void emitActivityEvent({ type: 'save', targetId: itemId, targetType: itemType, source: 'save' }).catch(() => {});
       return true;
     }
   } catch (error) {

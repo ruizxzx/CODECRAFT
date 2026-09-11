@@ -14,6 +14,8 @@ import {
 import { auth, db } from './firebase';
 import { optimizedGetDoc, optimizedGetDocs, isFirestoreQuotaError } from './firestoreOptimization';
 import type { Article, Series } from '../types';
+import { articleToContent } from './content';
+import { recommendationEngine } from './recommendationEngine';
 
 export type RecommendationSection = { title: string; reason?: string; articles: Article[] };
 
@@ -187,6 +189,26 @@ export function rankRecommendations(all: Article[], signals: RecommendationSigna
     if (a) articleTokens(a).forEach(t => savedTopics.add(t));
   }
 
+  // V80 shared engine provides the common cross-content scoring signal while the
+  // legacy article-specific model remains intact for backward compatibility.
+  const topicAffinity: Record<string, number> = {};
+  const creatorAffinity: Record<string, number> = {};
+  const contentAffinity: Record<string, number> = {};
+  for (const h of signals.history) { const a = all.find(x => x.slug === h.slug); if (a) articleTokens(a).forEach(t => { topicAffinity[t] = (topicAffinity[t] || 0) + 1; }); }
+  for (const s of signals.saves) { const a = all.find(x => x.slug === s.itemId); if (a) articleTokens(a).forEach(t => { topicAffinity[t] = (topicAffinity[t] || 0) + 1.5; }); }
+  for (const s of signals.searches) norm(s.query).split(/\s+/).filter(Boolean).forEach(t => { topicAffinity[t] = (topicAffinity[t] || 0) + 0.5; });
+  for (const f of signals.followedTopics) { const t = norm(f.topic || f.slug || f.id); if (t) topicAffinity[t] = (topicAffinity[t] || 0) + 2; }
+  for (const f of signals.following) { const key = norm(f.uid || f.id || f.username); if (key) creatorAffinity[key] = (creatorAffinity[key] || 0) + 4; }
+  const coreRows = recommendationEngine.recommend(candidates.map(articleToContent), { limit: candidates.length }, {
+    topicAffinity, creatorAffinity, contentAffinity,
+    completed: new Set([...historyBySlug.entries()].filter(([,h]) => Number(h.progress || 0) >= 100 || h.completed === true).map(([id]) => id)),
+    negative: new Set([...saved].filter(id => reacted.has(id))),
+    recentIds: new Set(signals.history.filter(h => isRecent(h.viewedAt || h.createdAt, 14)).map(h => String(h.slug || ''))),
+    followedCreators,
+    followedTopics,
+  });
+  const coreScore = new Map(coreRows.map(row => [row.id, row.score]));
+
   const scored = candidates.map(a => {
     const tokens = articleTokens(a);
     const authors = getAuthorKeys(a);
@@ -221,6 +243,7 @@ export function rankRecommendations(all: Article[], signals: RecommendationSigna
     if (reacted.has(a.slug)) score -= 4;
     if (a.trending) score += 3;
     score += Math.min(3, Number(a.viewsCount || 0) / 2000);
+    score += (coreScore.get(a.slug) || 0) * 0.35;
     const freshnessDays = Math.max(0, (Date.now() - asDate(a.publishedAt)) / 86400000);
     score += Math.max(0, 4 - freshnessDays / 14);
     if (isRecent(a.publishedAt, 14)) reasons.push('recently published');

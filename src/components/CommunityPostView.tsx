@@ -17,6 +17,7 @@ import { RichText } from './RichText';
 import { MentionTextarea } from './MentionAutocomplete';
 import { DiscussionPanel } from './DiscussionPanel';
 import { DiscussionComposer, DiscussionComposerMode } from './DiscussionComposer';
+import { emitActivityEvent } from '../lib/activity';
 
 interface CommunityPostViewProps {
   postId: string;
@@ -56,7 +57,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
 
   const effectiveIsSaved = propIsSaved !== undefined ? propIsSaved : localSaved;
 
-  useEffect(() => { if (post?.id) void recordCommunityPostView(post.id, userAuth?.uid); }, [post?.id, userAuth?.uid]);
+  useEffect(() => { if (post?.id) { void recordCommunityPostView(post.id, userAuth?.uid); void emitActivityEvent({type:'discussion_open',targetId:post.id,targetType:post.type==='discussion'?'discussion':'post',source:'community-post'}).catch(()=>{}); } }, [post?.id, userAuth?.uid]);
 
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (user) => {

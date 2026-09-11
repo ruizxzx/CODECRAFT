@@ -169,6 +169,35 @@ service cloud.firestore {
         && incoming().diff(existing()).affectedKeys().hasOnly(['username','updatedAt']);
     }
 
+    // V80 shared activity stream. Events are private to their actor; admins can aggregate through collection-group queries.
+    match /users/{userId}/activityEvents/{eventId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && incoming().userId == userId
+        && incoming().type in ['content_view','content_open','content_start','content_progress','content_complete','content_exit','like','unlike','save','unsave','share','copy','follow','unfollow','discussion_open','discussion_create','discussion_reply','discussion_quote','discussion_remix','discussion_reaction','question_open','question_create','answer_create','answer_accept','answer_reaction','search','search_result_click','recommendation_impression','recommendation_click','community_view','community_join','community_leave','community_post']
+        && incoming().get('targetId','') is string && incoming().get('targetId','').size() <= 256
+        && incoming().get('targetType','') is string && incoming().get('targetType','').size() <= 64
+        && incoming().get('source','') is string && incoming().get('source','').size() <= 80
+        && incoming().get('metadata', {}) is map
+        && incoming().get('createdAt', request.time) == request.time;
+      allow update, delete: if isAdmin();
+    }
+
+    // Client-originated index invalidations are private to the actor. A future server worker can consume them.
+    match /users/{userId}/indexSyncQueue/{queueId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow create: if isSignedIn() && request.auth.uid == userId
+        && incoming().contentId is string && incoming().contentId.size() <= 256
+        && incoming().contentType is string && incoming().contentType.size() <= 64
+        && incoming().operation in ['create','update','delete','publish','unpublish','visibility_change']
+        && incoming().status == 'pending'
+        && incoming().attempts is number
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow create: if isSignedIn() 
@@ -991,6 +1020,18 @@ service cloud.firestore {
       allow create: if isAdmin() && (isBootstrapAdmin() || incoming().get('emergencyAdminLock', false) == false);
       allow update: if isBootstrapAdmin() || (isAdmin() && !emergencyAdminLock());
       allow delete: if isBootstrapAdmin();
+    }
+
+    // V80 intelligence switches are public-readable for safe client presentation, but only master control can mutate them.
+    match /intelligenceConfig/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Persisted content graph edges are administrative/server-derived data, never client-trusted personalization input.
+    match /contentRelationships/{relationshipId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
     }
 
     match /siteConfigBackups/{backupId} {

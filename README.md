@@ -1,4 +1,9 @@
-# OFFSCRPT
+# OFFSCRPT — V80.0.0 Intelligence Core
+
+V80 connects the existing publishing, community, identity, reading, search, feed, AI, recommendation and analytics surfaces through shared compatibility layers. It preserves the existing V77–V79 systems, keeps OpenRouter behind the existing backend gateway, and adds server-enforced AI retrieval plus Master Control feature flags.
+
+See `V80.0.0_INTELLIGENCE_CORE.md` for the implementation boundary and `BUILD_VALIDATION.txt` for the exact validation status.
+
 
 OFFSCRPT is a full-stack creator platform: a technical blog/publication engine with a
 built-in social layer (posts, comments, follows, communities), creator analytics, a

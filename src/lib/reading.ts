@@ -1,6 +1,7 @@
 import { collection, doc, getDocs, getCountFromServer, getDoc, setDoc, deleteDoc, serverTimestamp, query, onSnapshot, limit, orderBy } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { Article, ArticleContentBlock } from '../types';
+import { emitActivityEvent, activitySessionId } from './activity';
 
 export interface ArticleReadingProgress {
   slug: string;
@@ -81,6 +82,7 @@ export async function saveArticleReadingProgress(
     seriesOrder: Number(details.seriesOrder || 0),
     updatedAt: serverTimestamp(),
   }, { merge: true });
+  void emitActivityEvent({ type: completed ? 'content_complete' : safePercent > 0 ? 'content_progress' : 'content_start', targetId: slug, targetType: 'article', sessionId: activitySessionId(`article:${slug}`), source: String(details.source || 'article'), metadata: { percent: safePercent, lastSection: String(lastSection || '').slice(0, 120), seriesId: details.seriesId || '' } }).catch(() => {});
 }
 
 export async function resetArticleReadingProgress(slug: string): Promise<void> {
@@ -112,6 +114,7 @@ export async function recordArticleHistory(
     seriesId: String(details.seriesId || '').slice(0, 200), seriesOrder: Number(details.seriesOrder || 0),
     viewedAt: serverTimestamp(),
   }, { merge: true });
+  void emitActivityEvent({ type: 'content_open', targetId: article.slug, targetType: 'article', sessionId: activitySessionId(`article:${article.slug}`), source: String(details.source || 'article'), metadata: { progress: Math.max(0, Math.min(100, Math.round(progress))) } }).catch(() => {});
 }
 
 export function subscribeArticleHistory(callback: (items: ArticleHistoryItem[]) => void, maxItems = 50): () => void {

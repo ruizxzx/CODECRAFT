@@ -99,3 +99,40 @@ Vite uses `src/` as its source root. Its default relative `dist` output therefor
 landed at `src/dist`, while Vercel was configured to collect repository-root
 `dist`. V72.1 explicitly sets Vite's output directory to the repository-root
 `dist/` and keeps Vercel's `outputDirectory` at `dist`, eliminating the mismatch.
+
+
+V80 — INTELLIGENCE CORE
+========================
+SOURCE BUILD
+------------
+OFFSCRPT V79.11.0 AI Writing + Site-Wide Copilot
+
+ARCHITECTURAL CONSOLIDATION
+---------------------------
+V80 adds a shared ContentEntity, identity-resolution helpers, standardized ActivityEvent
+stream, centralized permission helpers, content-graph primitives, unified search and
+recommendation abstractions, reading-intelligence derivation, AI retrieval through the
+existing OpenRouter gateway, lifecycle index-sync queueing, and Master Control feature
+flags/health diagnostics. Existing V78/V79 systems remain in place and are upgraded at
+connection points rather than replaced wholesale.
+
+SECURITY
+--------
+AI retrieval uses the authenticated Firebase ID token against Firestore, so retrieval
+remains subject to Firestore authorization. Server retrieval additionally rejects deleted
+content and non-published public states, and handles follower/community visibility by
+checking the relevant membership relationship. Private content is never included merely
+because it is present in a client-side catalog.
+
+VALIDATION
+----------
+Static TypeScript parser validation passed for the active src/api tree. V80 manifest and
+architecture checks passed. Full dependency-backed typecheck/build remain environment
+blocked because node_modules was absent and the existing dependency installation attempt
+did not complete. No successful production build is claimed by this release.
+
+KNOWN FOUNDATION-ONLY AREAS
+---------------------------
+No durable external search/vector worker is provisioned; semantic retrieval is an explicit
+architecture seam. Cross-content recommendation ranking and persisted graph backfill remain
+incremental foundations. AI conversation history remains the V79 localStorage implementation.
