@@ -8,6 +8,7 @@ import { Plus, Trash2, ArrowUp, ArrowDown, BookOpen, Image as ImageIcon, Video, 
 import { MediaUploadButton } from './MediaUploadButton';
 import { requestAI } from '../lib/ai';
 import { Wand2, Loader2 } from 'lucide-react';
+import { AIWriterAssistant } from './AIWriterAssistant';
 
 type Props = {
   userProfile: CommunityUser;
@@ -412,6 +413,19 @@ export const PublicBlogComposer: React.FC<Props> = ({
             <input value={coverImageAlt} onChange={(e) => setCoverImageAlt(e.target.value)} placeholder="Cover image alt" className="border-2 border-black p-3" />
             <input value={coverImageCaption} onChange={(e) => setCoverImageCaption(e.target.value)} placeholder="Cover caption" className="border-2 border-black p-3 lg:col-span-2" />
           </div>
+
+          <AIWriterAssistant
+            context={{contentType:'article-draft',contentId:initialPost?.id||`draft:${userProfile.uid}`,title:title||'Untitled draft',content:textFromBlocks(blocks),metadata:{excerpt,tags,category,sourceType:'article-draft'}}}
+            draft={textFromBlocks(blocks)}
+            title={title}
+            tags={tags.split(',').map(x=>x.trim()).filter(Boolean)}
+            audience="general"
+            onInsert={(text,mode)=>{
+              if(mode==='replace-draft'){ setBlocks([{type:'paragraph',content:text} as ArticleContentBlock]); return; }
+              const additions=text.split(/\n\n+/).map(part=>part.trim()).filter(Boolean).map(part=>({type:'paragraph',content:part} as ArticleContentBlock));
+              setBlocks(prev=>[...prev,...additions]);
+            }}
+          />
 
           <section className="border-4 border-black bg-[var(--color-primary)] p-4 neo-shadow-sm space-y-3">
             <div className="flex items-center justify-between gap-3"><div><div className="font-mono text-[9px] font-black uppercase">V79 CREATOR AI</div><h3 className="font-display font-black text-xl uppercase">AI WHILE WRITING</h3><p className="text-xs mt-1">Use AI on this draft. Nothing is published automatically.</p></div><Wand2 className="w-5 h-5"/></div>

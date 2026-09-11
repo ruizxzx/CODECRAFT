@@ -5,6 +5,7 @@ import { createDiscussion, createQuoteDiscussion, createThread, DiscussionSource
 import { MediaUploadButton } from './MediaUploadButton';
 import { notifyToast } from '../lib/toast';
 import { MentionTextarea } from './MentionAutocomplete';
+import { AIWriterAssistant } from './AIWriterAssistant';
 
 export type DiscussionComposerMode = 'discussion' | 'quote' | 'remix' | 'thread';
 interface Props {
@@ -120,6 +121,7 @@ export const DiscussionComposer: React.FC<Props> = ({ user, mode = 'discussion',
             <input value={threadTopic} onChange={e => setThreadTopic(e.target.value)} placeholder="THREAD TOPIC / HEADLINE" maxLength={120} className="w-full border-2 border-black p-3 font-display font-black" />
             <div className="flex gap-2 items-center"><input value={threadCover} onChange={e => setThreadCover(e.target.value)} placeholder="THREAD COVER URL (optional)" className="flex-1 border-2 border-black p-2 font-mono text-xs" /><MediaUploadButton folder="posts" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" label="UPLOAD COVER" compact onUploaded={setThreadCover} /></div>
           </div>
+          <AIWriterAssistant context={{contentType:'thread-draft',contentId:`thread:${user?.uid||'guest'}`,title:threadTopic||'Thread',content:parts[0]?.content||'',metadata:{sourceType:'thread',partCount:parts.length}}} draft={parts[0]?.content||''} title={threadTopic||'Thread'} audience="general" onInsert={(text,mode)=>setParts(prev=>{const next=[...prev]; next[0]={...next[0],content:mode==='replace-draft'?text:(next[0]?.content?`${next[0].content}\n\n${text}`:text)}; return next;})}/>
           <div className="flex items-center justify-between gap-3"><div className="font-mono text-[10px] font-black uppercase">{parts.length} PARTS · DRAG/REORDER READY</div><button onClick={addPart} className="border-2 border-black bg-[var(--color-primary)] px-3 py-2 font-mono text-xs font-black"><Plus className="inline w-4 h-4"/> ADD PART</button></div>
           <div className="space-y-3">
             {parts.map((part, index) => <div key={index} draggable onDragStart={() => setDragIndex(index)} onDragOver={e => e.preventDefault()} onDrop={() => { if (dragIndex !== null && dragIndex !== index) movePart(dragIndex, index); setDragIndex(null); }} className="border-4 border-black bg-white p-4 space-y-3">
@@ -135,6 +137,13 @@ export const DiscussionComposer: React.FC<Props> = ({ user, mode = 'discussion',
           </div>}
           {isQuote && original && <div className="border-4 border-black bg-neutral-50 p-4 space-y-3"><div className="font-mono text-[9px] font-black uppercase">{mode === 'remix' ? 'REMIX SOURCE' : 'QUOTED SOURCE'}</div><div className="font-display text-xl font-black uppercase">{original.title}</div><div className="text-sm whitespace-pre-wrap line-clamp-6">{original.content}</div>{selectedText && <div className="border-2 border-black bg-[var(--color-primary)] p-3 italic">“{selectedText}”</div>}</div>}
           {isQuote && <div className="flex gap-2 flex-wrap"><button type="button" onClick={()=>insert('**','**')} className="border-2 border-black px-2 py-1 font-mono text-xs font-black">B</button><button type="button" onClick={()=>insert('[','](https://)')} className="border-2 border-black px-2 py-1 font-mono text-xs">LINK</button><button type="button" onClick={()=>insert('> ','')} className="border-2 border-black px-2 py-1 font-mono text-xs">QUOTE</button></div>}
+          {!isQuote && <AIWriterAssistant
+            context={{contentType:'discussion-draft',contentId:`draft:${user?.uid||'guest'}`,title:title||'Discussion',content,metadata:{communityId,sourceType:'discussion'}}}
+            draft={content}
+            title={title}
+            audience="general"
+            onInsert={(text,mode)=>setContent(v=>mode==='replace-draft'?text:(v?`${v}\n\n${text}`:text))}
+          />}
           {!isQuote && <div className="flex flex-wrap gap-2"><button type="button" onClick={()=>insert('**','**')} className="border-2 border-black px-2 py-1 font-mono text-xs font-black">B</button><button type="button" onClick={()=>insert('`','`')} className="border-2 border-black px-2 py-1 font-mono text-xs">CODE</button><button type="button" onClick={()=>insert('[','](https://)')} className="border-2 border-black px-2 py-1 font-mono text-xs">LINK</button><button type="button" onClick={()=>insert('> ','')} className="border-2 border-black px-2 py-1 font-mono text-xs">QUOTE</button></div>}
           <MentionTextarea textareaRef={textRef} value={content} setValue={setContent} placeholder={isQuote ? 'Add your take… Use @username to mention people.' : 'WHAT DO YOU THINK? Use @username to mention people.'} rows={10} maxLength={maxContent} className="w-full border-2 border-black p-3" />
           {!isQuote && <>

@@ -39,6 +39,11 @@ function writeCache(key:string,value:unknown,ttlMs=24*60*60*1000){ try { localSt
 export type AIChatMessage = { role: 'user' | 'assistant'; content: string; createdAt?: string };
 
 const AI_HISTORY_NAMESPACE = 'offscrpt:ai:conversations:v1';
+const AI_USAGE_NAMESPACE = 'offscrpt:ai:usage:v1';
+
+function aiUsageKey(uid?: string | null) { return `${AI_USAGE_NAMESPACE}:${uid || auth.currentUser?.uid || 'guest'}:${new Date().toISOString().slice(0,10)}`; }
+export function getAIUsageToday(uid?: string | null) { try { return Number(localStorage.getItem(aiUsageKey(uid)) || 0); } catch { return 0; } }
+function incrementAIUsage(uid?: string | null) { try { const key=aiUsageKey(uid); const next=getAIUsageToday(uid)+1; localStorage.setItem(key,String(next)); return next; } catch { return getAIUsageToday(uid); } }
 
 function safeStorageKey(input: AIContentInput) {
   const id = `${auth.currentUser?.uid || 'guest'}:${input.contentType}:${input.contentId || input.title}`;
@@ -95,6 +100,7 @@ export async function requestAI<T=any>(task:AITask,input:AIContentInput,options:
     const retryAfter=Number(response.headers.get('retry-after')||3);
     await new Promise<void>(resolve=>setTimeout(resolve,Math.min(6000,Math.max(1000,retryAfter*1000))));
   }
+  incrementAIUsage(user.uid);
   writeCache(key,data,task==='ask'?6*60*60*1000:7*24*60*60*1000); return data as T;
 }
 

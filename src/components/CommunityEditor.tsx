@@ -5,6 +5,7 @@ import { X, Send, Loader2, BookOpen, MessageSquare, AtSign, Info, WifiOff } from
 import { getDraftSnapshot, saveDraftSnapshot, deleteDraftSnapshot } from '../lib/account';
 import { MentionTextarea } from './MentionAutocomplete';
 import { MediaUploadButton } from './MediaUploadButton';
+import { AIWriterAssistant } from './AIWriterAssistant';
 
 interface CommunityEditorProps {
   profile: CommunityUser;
@@ -134,6 +135,14 @@ export const CommunityEditor: React.FC<CommunityEditorProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
+          <AIWriterAssistant
+            context={{contentType:type==='blog'?'community-blog-draft':'discussion-draft',contentId:`draft:${profile.uid}`,title:title||'Untitled draft',content,metadata:{author:profile.username,sourceType:type}}}
+            draft={content}
+            title={title}
+            tags={[]}
+            audience="general"
+            onInsert={(text,mode)=>{ if(mode==='replace-draft') setContent(text); else setContent(v=>v?`${v}\n\n${text}`:text); }}
+          />
           {/* Format Selector */}
           <div>
             <label className="block font-mono text-xs font-bold uppercase mb-2">

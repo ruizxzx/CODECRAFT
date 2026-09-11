@@ -68,6 +68,7 @@ import {
   getUserVerificationByUsername
 } from '../lib/community';
 import { SocialAdminPanel } from './SocialAdminPanel';
+import { AIWriterAssistant } from './AIWriterAssistant';
 import { CarouselBuilder } from './CarouselBuilder';
 import { AdminControlPanel } from './AdminControlPanel';
 import { createSeries, deleteSeries, getSeriesList, updateSeries } from '../lib/series';
@@ -1884,6 +1885,19 @@ export const AdminStudioModal: React.FC<AdminStudioModalProps> = ({
                       {newCoverImage && <img src={newCoverImage} alt="Cover preview" className="w-full h-40 object-cover border-2 border-black" />}
                       <p className="font-mono text-[10px] text-neutral-500 uppercase">Upload to OFFSCRPT media storage or paste a public image URL.</p>
                     </div>
+
+                    <AIWriterAssistant
+                      context={{contentType:'article-draft',contentId:editingArticleId||`draft:${auth.currentUser?.uid||'admin'}`,title:newTitle||'Untitled article',content:contentBlocks.map((b:any)=>b.content||b.codeBlock?.code||b.items?.join(' ')||'').filter(Boolean).join('\n\n'),metadata:{excerpt:newExcerpt,category:newCategory,tags:newTags,sourceType:'article-draft'}}}
+                      draft={contentBlocks.map((b:any)=>b.content||b.codeBlock?.code||b.items?.join(' ')||'').filter(Boolean).join('\n\n')}
+                      title={newTitle}
+                      tags={newTags.split(',').map((x:string)=>x.trim()).filter(Boolean)}
+                      audience="general"
+                      onInsert={(text,mode)=>{
+                        if(mode==='replace-draft'){ setContentBlocks([{type:'paragraph' as const,content:text}]); return; }
+                        const additions=text.split(/\n\n+/).map((part:string)=>part.trim()).filter(Boolean).map((part:string)=>({type:'paragraph' as const,content:part}));
+                        setContentBlocks(prev=>[...prev,...additions]);
+                      }}
+                    />
 
                     {/* Advanced Block Editor */}
                     <div className="border-4 border-black bg-neutral-50 p-4 space-y-4">
