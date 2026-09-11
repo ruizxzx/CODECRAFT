@@ -79,3 +79,56 @@ export function knowledgeShareUrl(kind: string, id: string) {
   const map: Record<string, string> = { article: 'article', post: 'community/post', discussion: 'community/post', question: 'question', series: 'series', topic: 'topic' };
   return `${window.location.origin}/#${map[kind] || kind}/${encodeURIComponent(id)}`;
 }
+
+
+export interface KnowledgeIndexManifest {
+  schemaVersion: 84;
+  generatedAt: string;
+  documentCount: number;
+  chunkCount: number;
+  contentTypes: Record<string, number>;
+  newestUpdatedAt: string | null;
+  oldestPublishedAt: string | null;
+}
+
+export function buildKnowledgeIndexManifest(entities: ContentEntity[]): KnowledgeIndexManifest {
+  const contentTypes: Record<string, number> = {};
+  let newest = 0;
+  let oldest = Number.POSITIVE_INFINITY;
+  let chunkCount = 0;
+  for (const entity of entities) {
+    contentTypes[entity.type] = (contentTypes[entity.type] || 0) + 1;
+    const updated = Date.parse(String(entity.updatedAt || entity.createdAt || ''));
+    const published = Date.parse(String(entity.publishedAt || entity.createdAt || ''));
+    if (updated) newest = Math.max(newest, updated);
+    if (published) oldest = Math.min(oldest, published);
+    const words = entity.body.split(/\s+/).filter(Boolean).length;
+    chunkCount += words ? Math.ceil(words / 180) : 0;
+  }
+  return {
+    schemaVersion: 84,
+    generatedAt: new Date().toISOString(),
+    documentCount: entities.length,
+    chunkCount,
+    contentTypes,
+    newestUpdatedAt: newest ? new Date(newest).toISOString() : null,
+    oldestPublishedAt: Number.isFinite(oldest) ? new Date(oldest).toISOString() : null,
+  };
+}
+
+export function knowledgeRetrievalHealth(): {
+  mode: 'firestore-fallback' | 'external-index';
+  semanticReady: boolean;
+  externalIndexConfigured: boolean;
+  note: string;
+} {
+  const externalIndexConfigured = typeof import.meta !== 'undefined' && Boolean((import.meta as any).env?.VITE_OFFSCRPT_VECTOR_ENDPOINT);
+  return {
+    mode: externalIndexConfigured ? 'external-index' : 'firestore-fallback',
+    semanticReady: externalIndexConfigured,
+    externalIndexConfigured,
+    note: externalIndexConfigured
+      ? 'External semantic provider configured; server retrieval remains permission-filtered.'
+      : 'Firestore-backed retrieval fallback active. Configure the server semantic provider for vector retrieval.',
+  };
+}

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { buildKnowledgeIndexManifest } from '../lib/knowledgeEngine';
 import { Article, CommunityPost, CommunityUser, PageView, Series } from '../types';
 import { auth } from '../lib/firebase';
 import { buildKnowledgeSnapshot, buildLearningPath, searchKnowledge } from '../lib/knowledgeEngine';

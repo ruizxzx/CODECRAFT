@@ -1,0 +1,39 @@
+OFFSCRPT V84.0.0 — BUILD VALIDATION
+
+PASSED
+- V84 knowledge engine structural checker
+- V83 mobile regression checker (adapted to accept V84 as downstream regression)
+- V83.1 hardening regression checker (adapted to accept V84 as downstream regression)
+- deployment configuration
+- import validation
+- export validation
+- identifier validation
+- Firebase validation
+- Firestore rules validation
+- schema validation
+- runtime pattern validation
+- recommendations validation
+- handle/identity validation
+- public profile access validation
+- comments validation
+- site synchronization validation
+- V78 hardening validation
+- AI gateway validation
+- V80 intelligence validation
+- V81 knowledge validation
+- V81 navigation/branding validation
+- V82 AI theme validation
+- TypeScript/TSX syntax parsing: 115 files, 0 parse diagnostics
+- API TypeScript syntax parsing for V84 endpoints
+- V84 server knowledge smoke: chunking works; provider fallback correctly reports unconfigured
+
+NOT RUN / BLOCKED
+- npm ci / dependency restoration: transport timeout in the execution environment
+- dependency-backed tsc project typecheck: complete node_modules unavailable
+- dependency-backed Vite production build: complete node_modules unavailable
+
+IMPORTANT
+V84 includes a vendor-neutral server-side embedding/vector adapter and a worker indexing endpoint, but no third-party vector provider credentials are embedded in the archive. Until OFFSCRPT_EMBEDDING_ENDPOINT + OFFSCRPT_VECTOR_ENDPOINT (and their server-side keys) are configured and indexing is run, OFFSCRPT continues to use its existing Firestore-backed lexical retrieval fallback. This is intentional and is not represented as a fully live external vector deployment.
+
+FIRESTORE
+No new Firestore collections or rules were required for the V84 package. Existing Firestore remains the canonical source of truth. The existing intelligenceConfig/global feature flags are extended safely with V84 defaults; existing rules already restrict writes to admin users.

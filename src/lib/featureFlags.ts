@@ -10,11 +10,17 @@ export interface IntelligenceFeatureFlags {
   personalizedFeed: boolean;
   activityEngine: boolean;
   contentGraph: boolean;
+  knowledgeEngine: boolean;
+  semanticRetrieval: boolean;
+  hybridSearch: boolean;
+  aiGrounding: boolean;
+  researchMode: boolean;
+  knowledgeGraph: boolean;
   updatedAt?: unknown;
 }
 
 export const DEFAULT_INTELLIGENCE_FLAGS: IntelligenceFeatureFlags = {
-  unifiedSearch: true, semanticSearch: false, aiRetrieval: true, recommendations: true, personalizedFeed: true, activityEngine: true, contentGraph: true,
+  unifiedSearch: true, semanticSearch: false, aiRetrieval: true, recommendations: true, personalizedFeed: true, activityEngine: true, contentGraph: true, knowledgeEngine: true, semanticRetrieval: false, hybridSearch: true, aiGrounding: true, researchMode: true, knowledgeGraph: true,
 };
 
 export function subscribeIntelligenceFlags(callback: (flags: IntelligenceFeatureFlags) => void) {

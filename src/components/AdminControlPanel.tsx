@@ -391,6 +391,23 @@ export const AdminControlPanel: React.FC<Props> = ({ onSiteConfigRestored, isMod
       {section==='recommendations' && <div className="space-y-4"><div className="border-2 border-black p-4"><h3 className="font-display font-black uppercase">RECOMMENDATION SOURCE HEALTH</h3><p className="font-mono text-[10px] mt-1">This does not fabricate recommendation records. It verifies cloud source inventory used by the recommendation engine.</p><button onClick={()=>void runRecommendations()} className={`${pill(false)} mt-3`}>CHECK FIRESTORE SOURCES</button></div>{recommendationHealth&&<><div className="grid md:grid-cols-3 gap-3">{Object.entries(recommendationHealth.sourceCounts).map(([k,v])=><div key={k} className="border-4 border-black p-4"><div className="font-mono text-[9px]">{k.toUpperCase()}</div><div className="font-display text-3xl font-black">{v}</div></div>)}</div><div className="border-2 border-black p-4 font-mono text-xs">{recommendationHealth.note}</div><div className="space-y-2">{recommendationHealth.topCloudArticles.map(x=><div key={x.slug} className="border-2 border-black p-3"><span className="font-display font-black">{x.title}</span><span className="font-mono text-[9px]"> · {x.slug} · {x.views} views</span></div>)}</div></>}</div>}
 
       {section==='intelligence' && <div className="space-y-4">
+        <div className="border-2 border-black p-4 bg-neutral-50">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div><h3 className="font-display font-black uppercase">KNOWLEDGE ENGINE · V84</h3><p className="font-mono text-[9px] mt-1">Canonical content inventory and semantic-provider readiness. Counts are source inventory, not fabricated vector-index counts.</p></div>
+            <div className="border-2 border-black bg-white px-3 py-2 font-mono text-[9px] font-black">SCHEMA 84</div>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+            <div className="border-2 border-black p-3"><div className="font-mono text-[8px]">ARTICLES</div><div className="font-display font-black text-2xl">{articles.filter(a=>a.isPublished!==false&&a.mainPublicationStatus!=='unpublished').length}</div></div>
+            <div className="border-2 border-black p-3"><div className="font-mono text-[8px]">POSTS</div><div className="font-display font-black text-2xl">{posts.filter(p=>(p as any).isPublished!==false&&(p as any).mainPublicationStatus!=='unpublished').length}</div></div>
+            <div className="border-2 border-black p-3"><div className="font-mono text-[8px]">QUESTIONS</div><div className="font-display font-black text-2xl">{questions.length}</div></div>
+            <div className="border-2 border-black p-3"><div className="font-mono text-[8px]">SERIES</div><div className="font-display font-black text-2xl">{series.filter((x:any)=>x.visibility!=='private'&&x.status!=='archived').length}</div></div>
+          </div>
+          <div className="grid md:grid-cols-2 gap-3 mt-4">
+            <div className="border-2 border-black p-3"><div className="font-mono text-[8px] font-black">INDEX PIPELINE</div><div className="font-display font-black mt-1">NORMALIZE → CHUNK → EMBED → INDEX</div><div className="font-mono text-[8px] mt-2 text-neutral-600">Firestore remains canonical. External embedding/vector services are optional and configured server-side.</div></div>
+            <div className="border-2 border-black p-3"><div className="font-mono text-[8px] font-black">SEMANTIC PROVIDER</div><div className="font-display font-black mt-1">{(typeof import.meta!=='undefined' && (import.meta as any).env?.VITE_OFFSCRPT_VECTOR_ENDPOINT)?'CONFIGURED':'NOT CONFIGURED'}</div><div className="font-mono text-[8px] mt-2 text-neutral-600">No external provider is claimed unless the deployment actually supplies its endpoints.</div></div>
+          </div>
+        </div>
+
         <div className="border-2 border-black p-4 space-y-4">
           <div>
             <h3 className="font-display font-black uppercase">AI CONTROL · APPEARANCE</h3>
