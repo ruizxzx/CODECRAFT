@@ -59,6 +59,7 @@ import { resolveMasterAccess } from './lib/masterControl';
 import { reportRuntimeError } from './lib/runtime';
 import { LearnView } from './components/LearnView';
 import { KnowledgeView } from './components/KnowledgeView';
+import { applyAIThemeToDocument } from './lib/aiTheme';
 
 const SAVED_SLUGS_GUEST_KEY = 'offscrpt_saved_slugs_guest_v1';
 const SAVED_COMMUNITY_GUEST_KEY = 'offscrpt_saved_community_guest_v1';
@@ -124,6 +125,8 @@ export default function App() {
 
   const [siteConfig, setSiteConfig] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
   const [bentoLinks, setBentoLinks] = useState<BentoLink[]>(DEFAULT_BENTO_LINKS);
+
+  useEffect(() => { applyAIThemeToDocument(siteConfig.aiTheme); }, [siteConfig.aiTheme]);
 
   // Real-time Firestore Subscriptions for Cloud CMS Data
   useEffect(() => {

@@ -263,7 +263,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
             
             {/* Site-wide AI */}
-            <button onClick={openAskOffscrpt} className="hidden md:flex px-2.5 py-1.5 sm:px-3 sm:py-2 bg-[var(--color-primary)] text-black border-2 border-black neo-shadow-sm hover:bg-white items-center space-x-1.5 font-display text-xs font-black uppercase" title="OFFSCRPT AI">
+            <button onClick={openAskOffscrpt} className="hidden md:flex px-2.5 py-1.5 sm:px-3 sm:py-2 bg-[var(--ai-primary)] text-[var(--ai-button-text)] border-2 border-black neo-shadow-sm hover:bg-[var(--ai-hover)] items-center space-x-1.5 font-display text-xs font-black uppercase" title="OFFSCRPT AI">
               <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4"/><span>OFFSCRPT AI</span>
             </button>
 
@@ -375,7 +375,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
         <button
           onClick={openAskOffscrpt}
-          className="mobile-nav-action bg-[var(--color-primary)]"
+          className="mobile-nav-action bg-[var(--ai-primary)] text-[var(--ai-button-text)]"
           aria-label="OFFSCRPT AI"
           title="OFFSCRPT AI"
         >
@@ -482,12 +482,12 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Reader Library */}
           <div>
-            <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">OFFSCRPT AI</h3>
+            <h3 className="font-mono text-xs font-bold uppercase text-neutral-500 mb-2">AI & KNOWLEDGE</h3>
             <div className="flex flex-col gap-2">
-              <button onClick={() => handleNavClick('knowledge')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'knowledge' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Sparkles className="w-4 h-4"/> Ask OFFSCRPT</span><ArrowRight className="w-4 h-4"/></button>
+              <button onClick={() => handleNavClick('knowledge')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'knowledge' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Sparkles className="w-4 h-4"/> OFFSCRPT AI</span><ArrowRight className="w-4 h-4"/></button>
               <button onClick={() => handleNavClick('vault')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'vault' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Bookmark className="w-4 h-4"/> My Vault</span><ArrowRight className="w-4 h-4"/></button>
               <button onClick={() => handleNavClick('research')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'research' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Sparkles className="w-4 h-4"/> Research</span><ArrowRight className="w-4 h-4"/></button>
-              {onOpenSiteAI && <button onClick={() => { handleNavClick('knowledge'); }} className="w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between bg-white hover:bg-neutral-100"><span className="flex items-center gap-2"><Sparkles className="w-4 h-4"/> OFFSCRPT AI</span><ArrowRight className="w-4 h-4"/></button>}
+              
             </div>
           </div>
 

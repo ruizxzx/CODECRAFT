@@ -40,6 +40,8 @@ import { notifyToast } from '../lib/toast';
 import { MediaUploadButton } from './MediaUploadButton';
 import { ProblemReport, ChangelogEntry, getProblemReportsForAdmin, updateProblemReport, ProblemStatus, getChangelogEntriesForAdmin, createChangelogEntry, updateChangelogEntry, deleteChangelogEntry } from '../lib/siteFeatures';
 import { DEFAULT_INTELLIGENCE_FLAGS, IntelligenceFeatureFlags, subscribeIntelligenceFlags, setIntelligenceFlags } from '../lib/featureFlags';
+import { AI_THEME_KEYS, DEFAULT_AI_THEME, validateAITheme, saveAITheme } from '../lib/aiTheme';
+import type { AIThemeConfig } from '../types';
 
 interface Props { onSiteConfigRestored?: () => Promise<void> | void; isModerator?: boolean; }
 type Section = 'dashboard'|'access'|'users'|'posts'|'communities'|'questions'|'topics'|'messages'|'moderators'|'reports'|'comments'|'content'|'site'|'navigation'|'backups'|'moderation'|'config'|'analytics'|'recommendations'|'intelligence'|'system'|'audit'|'changelog';
@@ -98,6 +100,8 @@ export const AdminControlPanel: React.FC<Props> = ({ onSiteConfigRestored, isMod
   const [problemCommentDrafts, setProblemCommentDrafts] = useState<Record<string,string>>({});
   const [changelogEntries, setChangelogEntries] = useState<Array<ChangelogEntry & {id:string}>>([]);
   const [changelogDraft, setChangelogDraft] = useState({id:'',version:'',date:'',title:'',changes:'',kind:'feature' as any});
+  const [aiThemeDraft, setAiThemeDraft] = useState<AIThemeConfig>(DEFAULT_AI_THEME);
+  const [savedAiTheme, setSavedAiTheme] = useState<AIThemeConfig>(DEFAULT_AI_THEME);
 
   const msg = (text: string, type: 'success'|'error' = 'success') => { setNotice(text); notifyToast(text, type); };
 
@@ -118,6 +122,9 @@ export const AdminControlPanel: React.FC<Props> = ({ onSiteConfigRestored, isMod
       const [siteResult,userResult,postResult,communityResult,reportResult,articleResult,seriesResult] = results;
       if (siteResult.status==='fulfilled') {
         const siteData=siteResult.value;
+        const loadedAITheme = siteData.aiTheme ? { ...DEFAULT_AI_THEME, ...siteData.aiTheme } as AIThemeConfig : DEFAULT_AI_THEME;
+        setAiThemeDraft(loadedAITheme);
+        setSavedAiTheme(loadedAITheme);
         setSite(siteData);
         setControls({ ...DEFAULT_EMERGENCY_CONTROLS, ...siteData } as EmergencyControls);
         setNavTop(siteData.topNavigation?.length ? siteData.topNavigation : DEFAULT_TOP_NAVIGATION);
@@ -246,6 +253,40 @@ export const AdminControlPanel: React.FC<Props> = ({ onSiteConfigRestored, isMod
   const runRecommendations = async () => { try { setRecommendationHealth(await getRecommendationHealth()); msg('Recommendation source health checked against Firestore.'); } catch(e:any){ msg(e?.message||'Recommendation health failed.','error'); } };
   const runActivityHealth = async () => { try { setActivityHealth(await getIntelligenceActivityHealth()); msg('V80 activity-event health loaded from Firestore.'); } catch(e:any){ msg(e?.message||'Activity health failed.','error'); } };
   const saveIntelligenceFlag = async (key: keyof IntelligenceFeatureFlags, value: boolean) => { try { await setIntelligenceFlags({[key]: value}); msg(`${String(key)} intelligence flag saved server-side.`); } catch(e:any){ msg(e?.message||'Intelligence flag save failed.','error'); } };
+  const updateAIThemeDraft = (key: keyof AIThemeConfig, value: string) => { setAiThemeDraft(prev => ({ ...prev, [key]: value })); };
+  const saveAIThemeSettings = async () => {
+    if (!site) return;
+    const checked = validateAITheme(aiThemeDraft);
+    if (!checked.valid) { msg(checked.errors.join(' '), 'error'); return; }
+    setSaving(true);
+    try {
+      await saveAITheme(checked.theme);
+      const next = { ...site, aiTheme: checked.theme };
+      setSite(next);
+      setAiThemeDraft(checked.theme);
+      setSavedAiTheme(checked.theme);
+      msg('AI appearance saved to Firestore and synchronized site-wide.');
+    } catch (e:any) { msg(e?.message || 'AI appearance save failed.', 'error'); }
+    finally { setSaving(false); }
+  };
+  const resetAIThemeSettings = () => setAiThemeDraft(DEFAULT_AI_THEME);
+  const cancelAIThemeChanges = () => setAiThemeDraft(savedAiTheme);
+  const applyAIPreset = (name: string) => {
+    const presets: Record<string, AIThemeConfig> = {
+      DEFAULT: DEFAULT_AI_THEME,
+      NEON: { ...DEFAULT_AI_THEME, primary:'#FF00E5', assistantMessage:'#FF00E5', header:'#FF00E5', active:'#00E0FF', hover:'#FFD600' },
+      MONOCHROME: { ...DEFAULT_AI_THEME, primary:'#111111', secondary:'#555555', accent:'#999999', background:'#FFFFFF', surface:'#F3F3F3', border:'#000000', text:'#000000', mutedText:'#555555', buttonText:'#FFFFFF', hover:'#DDDDDD', active:'#333333', inputBackground:'#FFFFFF', inputBorder:'#000000', userMessage:'#FFFFFF', assistantMessage:'#E8E8E8', source:'#D6D6D6', link:'#111111', icon:'#000000', header:'#111111' },
+      BLUE: { ...DEFAULT_AI_THEME, primary:'#2563EB', secondary:'#0EA5E9', accent:'#38BDF8', assistantMessage:'#DBEAFE', header:'#2563EB', active:'#1D4ED8', hover:'#BAE6FD', link:'#1D4ED8' },
+      PURPLE: { ...DEFAULT_AI_THEME, primary:'#7C3AED', secondary:'#A855F7', accent:'#D946EF', assistantMessage:'#F3E8FF', header:'#7C3AED', active:'#6D28D9', hover:'#E9D5FF', link:'#6D28D9' },
+      GREEN: { ...DEFAULT_AI_THEME, primary:'#16A34A', secondary:'#22C55E', accent:'#84CC16', assistantMessage:'#DCFCE7', header:'#16A34A', active:'#15803D', hover:'#D9F99D', link:'#166534' },
+      RED: { ...DEFAULT_AI_THEME, primary:'#DC2626', secondary:'#F97316', accent:'#FB7185', assistantMessage:'#FEE2E2', header:'#DC2626', active:'#B91C1C', hover:'#FED7AA', link:'#B91C1C' },
+      AMBER: { ...DEFAULT_AI_THEME, primary:'#F59E0B', secondary:'#FBBF24', accent:'#FDE047', assistantMessage:'#FEF3C7', header:'#F59E0B', active:'#D97706', hover:'#FEF08A', link:'#B45309' },
+    };
+    if (presets[name]) setAiThemeDraft(presets[name]);
+  };
+  const luminance = (hex:string) => { const rgb=hex.replace('#','').match(/.{2}/g)?.map(v=>parseInt(v,16)/255) || [0,0,0]; const mapped=rgb.map(v=>v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)); return 0.2126*mapped[0]+0.7152*mapped[1]+0.0722*mapped[2]; };
+  const contrastRatio = (a:string,b:string) => { const l1=luminance(a), l2=luminance(b); return (Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05); };
+
   const runHealth = async () => { try { setHealth(await runClientHealthChecks()); setPresence(await getActivePresenceCount()); } catch(e:any){ msg(e?.message||'Health check failed.','error'); } };
   const loadAudit = async () => { try { const {getAuditLog}=await import('../lib/masterControl'); setAudit(await getAuditLog()); } catch(e:any){ msg(e?.message||'Audit log failed.','error'); } };
   const loadComments = async () => { try { setComments(await getRecentCommentsForMaster()); } catch(e:any){ msg(e?.message||'Comment load failed.','error'); } };
@@ -350,6 +391,53 @@ export const AdminControlPanel: React.FC<Props> = ({ onSiteConfigRestored, isMod
       {section==='recommendations' && <div className="space-y-4"><div className="border-2 border-black p-4"><h3 className="font-display font-black uppercase">RECOMMENDATION SOURCE HEALTH</h3><p className="font-mono text-[10px] mt-1">This does not fabricate recommendation records. It verifies cloud source inventory used by the recommendation engine.</p><button onClick={()=>void runRecommendations()} className={`${pill(false)} mt-3`}>CHECK FIRESTORE SOURCES</button></div>{recommendationHealth&&<><div className="grid md:grid-cols-3 gap-3">{Object.entries(recommendationHealth.sourceCounts).map(([k,v])=><div key={k} className="border-4 border-black p-4"><div className="font-mono text-[9px]">{k.toUpperCase()}</div><div className="font-display text-3xl font-black">{v}</div></div>)}</div><div className="border-2 border-black p-4 font-mono text-xs">{recommendationHealth.note}</div><div className="space-y-2">{recommendationHealth.topCloudArticles.map(x=><div key={x.slug} className="border-2 border-black p-3"><span className="font-display font-black">{x.title}</span><span className="font-mono text-[9px]"> · {x.slug} · {x.views} views</span></div>)}</div></>}</div>}
 
       {section==='intelligence' && <div className="space-y-4">
+        <div className="border-2 border-black p-4 space-y-4">
+          <div>
+            <h3 className="font-display font-black uppercase">AI CONTROL · APPEARANCE</h3>
+            <p className="font-mono text-[9px] mt-1">Centralized AI theme. Changes are stored in siteConfig/global and consumed live by AI surfaces through shared tokens.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {AI_THEME_KEYS.map(key => (
+              <label key={String(key)} className="border-2 border-black p-3 bg-white block">
+                <div className="font-mono text-[9px] font-black uppercase">{String(key).replace(/[A-Z]/g, m => ` ${m}`)}</div>
+                <div className="flex gap-2 mt-2">
+                  <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(String(aiThemeDraft[key])) ? String(aiThemeDraft[key]) : "#000000"} onChange={e=>updateAIThemeDraft(key,e.target.value)} className="w-12 h-10 border-2 border-black shrink-0" aria-label={`${String(key)} color`}/>
+                  <input value={String(aiThemeDraft[key])} onChange={e=>updateAIThemeDraft(key,e.target.value)} className="min-w-0 flex-1 border-2 border-black px-2 font-mono text-[10px] uppercase" maxLength={7} spellCheck={false}/>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-end gap-3 border-2 border-black p-3">
+            <label className="font-mono text-[9px] font-black uppercase">Preset
+              <select onChange={e=>applyAIPreset(e.target.value)} defaultValue="" className="block border-2 border-black bg-white px-3 py-2 mt-1 font-mono text-[10px]">
+                <option value="">CUSTOM</option><option>DEFAULT</option><option>NEON</option><option>MONOCHROME</option><option>BLUE</option><option>PURPLE</option><option>GREEN</option><option>RED</option><option>AMBER</option>
+              </select>
+            </label>
+            <div className="font-mono text-[9px] font-black uppercase">Contrast<br/><span className={contrastRatio(aiThemeDraft.text, aiThemeDraft.background) >= 4.5 ? 'text-green-700' : contrastRatio(aiThemeDraft.text, aiThemeDraft.background) >= 3 ? 'text-amber-700' : 'text-red-700'}>{contrastRatio(aiThemeDraft.text, aiThemeDraft.background).toFixed(2)}:1 · {contrastRatio(aiThemeDraft.text, aiThemeDraft.background) >= 4.5 ? 'GOOD' : contrastRatio(aiThemeDraft.text, aiThemeDraft.background) >= 3 ? 'LOW' : 'POOR'}</span></div>
+            <div className="font-mono text-[9px] font-black uppercase">Button<br/><span className={contrastRatio(aiThemeDraft.buttonText, aiThemeDraft.primary) >= 4.5 ? 'text-green-700' : contrastRatio(aiThemeDraft.buttonText, aiThemeDraft.primary) >= 3 ? 'text-amber-700' : 'text-red-700'}>{contrastRatio(aiThemeDraft.buttonText, aiThemeDraft.primary).toFixed(2)}:1</span></div>
+            <div className="font-mono text-[9px] font-black uppercase">Assistant<br/><span className={contrastRatio(aiThemeDraft.text, aiThemeDraft.assistantMessage) >= 4.5 ? 'text-green-700' : contrastRatio(aiThemeDraft.text, aiThemeDraft.assistantMessage) >= 3 ? 'text-amber-700' : 'text-red-700'}>{contrastRatio(aiThemeDraft.text, aiThemeDraft.assistantMessage).toFixed(2)}:1</span></div>
+          </div>
+          <div className="border-2 border-black p-4" style={{
+            ['--ai-primary' as any]: aiThemeDraft.primary, ['--ai-secondary' as any]: aiThemeDraft.secondary, ['--ai-accent' as any]: aiThemeDraft.accent,
+            ['--ai-background' as any]: aiThemeDraft.background, ['--ai-surface' as any]: aiThemeDraft.surface, ['--ai-border' as any]: aiThemeDraft.border,
+            ['--ai-text' as any]: aiThemeDraft.text, ['--ai-muted-text' as any]: aiThemeDraft.mutedText, ['--ai-button-text' as any]: aiThemeDraft.buttonText,
+            ['--ai-hover' as any]: aiThemeDraft.hover, ['--ai-active' as any]: aiThemeDraft.active, ['--ai-input-background' as any]: aiThemeDraft.inputBackground,
+            ['--ai-input-border' as any]: aiThemeDraft.inputBorder, ['--ai-user-message' as any]: aiThemeDraft.userMessage, ['--ai-assistant-message' as any]: aiThemeDraft.assistantMessage,
+            ['--ai-source' as any]: aiThemeDraft.source, ['--ai-link' as any]: aiThemeDraft.link, ['--ai-icon' as any]: aiThemeDraft.icon, ['--ai-header' as any]: aiThemeDraft.header,
+          }}>
+            <div className="font-mono text-[9px] font-black uppercase mb-2">LIVE PREVIEW</div>
+            <div className="ai-themed border-2 border-black bg-white text-black" style={{ ['--ai-primary' as any]: aiThemeDraft.primary, ['--ai-secondary' as any]: aiThemeDraft.secondary, ['--ai-accent' as any]: aiThemeDraft.accent, ['--ai-background' as any]: aiThemeDraft.background, ['--ai-surface' as any]: aiThemeDraft.surface, ['--ai-border' as any]: aiThemeDraft.border, ['--ai-text' as any]: aiThemeDraft.text, ['--ai-muted-text' as any]: aiThemeDraft.mutedText, ['--ai-button-text' as any]: aiThemeDraft.buttonText, ['--ai-hover' as any]: aiThemeDraft.hover, ['--ai-active' as any]: aiThemeDraft.active, ['--ai-input-background' as any]: aiThemeDraft.inputBackground, ['--ai-input-border' as any]: aiThemeDraft.inputBorder, ['--ai-user-message' as any]: aiThemeDraft.userMessage, ['--ai-assistant-message' as any]: aiThemeDraft.assistantMessage, ['--ai-source' as any]: aiThemeDraft.source, ['--ai-link' as any]: aiThemeDraft.link, ['--ai-icon' as any]: aiThemeDraft.icon, ['--ai-header' as any]: aiThemeDraft.header }}>
+              <div className="ai-preview-header p-3 border-b-2 border-black font-display font-black uppercase">OFFSCRPT AI <button className="float-right border-2 border-black bg-white px-2 py-1 font-mono text-[8px] font-black">ASK</button></div>
+              <div className="p-3 space-y-2"><div className="ai-preview-user border-2 border-black p-2 font-mono text-[9px]">YOU · What is OFFSCRPT?</div><div className="ai-preview-assistant border-2 border-black p-2 text-sm">This is a live preview of your AI theme.</div><div className="ai-preview-source border-2 border-black p-2 font-mono text-[9px]">SOURCE · OFFSCRPT SCRPT</div><input className="w-full border-2 border-black p-2 text-sm" placeholder="Ask OFFSCRPT…"/></div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className={pill(false)} onClick={resetAIThemeSettings}>RESET DEFAULTS</button>
+            <button className={pill(false)} onClick={cancelAIThemeChanges} disabled={saving}>CANCEL</button>
+            <button className={pill(false)} disabled={saving} onClick={()=>void saveAIThemeSettings()}><Save className="inline w-3 h-3 mr-1"/> {saving?'SAVING…':'SAVE AI APPEARANCE'}</button>
+            <div className="font-mono text-[8px] text-neutral-500">Saves to Firestore · Master Admin only</div>
+          </div>
+        </div>
         <div className="border-2 border-black p-4"><h3 className="font-display font-black uppercase">V80 INTELLIGENCE CORE · FEATURE FLAGS</h3><p className="font-mono text-[9px] mt-1">Flags are stored in intelligenceConfig/global. Master-only writes; client surfaces subscribe to the same source. AI retrieval is also re-checked server-side by the gateway.</p></div>
         <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">{(Object.keys(DEFAULT_INTELLIGENCE_FLAGS) as Array<keyof IntelligenceFeatureFlags>).filter(k=>k!=='updatedAt').map(key=><label key={String(key)} className="border-2 border-black p-4 flex items-start gap-3 font-mono text-[10px] font-black"><input type="checkbox" checked={!!intelligenceFlags[key]} onChange={e=>void saveIntelligenceFlag(key,e.target.checked)} /><span><span className="block uppercase">{String(key).replace(/([A-Z])/g,' $1')}</span><span className="block mt-1 text-[8px] font-normal text-neutral-500">{key==='aiRetrieval'?'Server-enforced emergency switch.':key==='semanticSearch'?'V80 architecture flag; vector backend remains foundation-only.':'Shared platform switch.'}</span></span></label>)}</div>
         <div className="border-2 border-black p-4"><div className="flex justify-between gap-3 items-center"><h3 className="font-display font-black uppercase">ACTIVITY EVENT HEALTH</h3><button onClick={()=>void runActivityHealth()} className={pill(false)}>REFRESH</button></div>{activityHealth?<><div className="grid md:grid-cols-3 gap-2 mt-3"><div className="border-2 border-black p-3"><div className="font-mono text-[8px]">SAMPLED EVENTS</div><div className="font-display text-2xl font-black">{activityHealth.totalEvents}</div></div><div className="border-2 border-black p-3"><div className="font-mono text-[8px]">LAST 24H</div><div className="font-display text-2xl font-black">{activityHealth.recent24h}</div></div><div className="border-2 border-black p-3"><div className="font-mono text-[8px]">LATEST</div><div className="font-mono text-[9px] mt-1">{activityHealth.latestAt||'—'}</div></div></div><div className="font-mono text-[9px] mt-3">{Object.entries(activityHealth.eventTypes).sort((a,b)=>b[1]-a[1]).slice(0,20).map(([k,v])=>`${k}:${v}`).join(' · ')}</div></>:<div className="font-mono text-[9px] mt-2 text-neutral-500">No standardized event sample loaded yet.</div>}</div>

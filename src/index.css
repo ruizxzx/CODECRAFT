@@ -268,3 +268,57 @@ html.dark .bg-black { background:#f5f5f5 !important; color:#0b0b0b !important; }
 html.dark .divide-black > :not([hidden]) ~ :not([hidden]) { border-color:#f5f5f5 !important; }
 html.dark img { color-scheme: dark; }
 @keyframes toastbar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+
+/* Centralized AI theme tokens. AI surfaces opt into .ai-themed so site colors remain unchanged. */
+:root {
+  --ai-primary: #FF00E5;
+  --ai-secondary: #2457FF;
+  --ai-accent: #00E0FF;
+  --ai-background: #FFFFFF;
+  --ai-surface: #FFFFFF;
+  --ai-border: #000000;
+  --ai-text: #000000;
+  --ai-muted-text: #525252;
+  --ai-button-text: #000000;
+  --ai-hover: #FFD600;
+  --ai-active: #2457FF;
+  --ai-input-background: #FFFFFF;
+  --ai-input-border: #000000;
+  --ai-user-message: #FFFFFF;
+  --ai-assistant-message: #FF00E5;
+  --ai-source: #E9E9E9;
+  --ai-link: #2457FF;
+  --ai-icon: #000000;
+  --ai-header: #FF00E5;
+}
+
+.ai-themed {
+  --color-primary: var(--ai-primary);
+  --color-secondary: var(--ai-secondary);
+  --color-accent: var(--ai-accent);
+  --color-success: var(--ai-active);
+  color: var(--ai-text);
+  background-color: var(--ai-background);
+}
+
+.ai-themed .bg-white { background-color: var(--ai-surface); }
+.ai-themed .bg-neutral-50 { background-color: var(--ai-background); }
+.ai-themed .border-black { border-color: var(--ai-border); }
+.ai-themed .text-black { color: var(--ai-text); }
+.ai-themed .text-neutral-500,
+.ai-themed .text-neutral-600 { color: var(--ai-muted-text); }
+.ai-themed .bg-black { background-color: var(--ai-primary); color: var(--ai-button-text); }
+.ai-themed .text-white { color: var(--ai-button-text); }
+.ai-themed input,
+.ai-themed textarea,
+.ai-themed select { background-color: var(--ai-input-background); color: var(--ai-text); border-color: var(--ai-input-border); }
+.ai-themed input:focus,
+.ai-themed textarea:focus,
+.ai-themed select:focus { outline: 2px solid var(--ai-active); outline-offset: 1px; }
+.ai-themed a { color: var(--ai-link); }
+.ai-themed svg { color: var(--ai-icon); }
+.ai-themed button:hover { background-color: var(--ai-hover); }
+.ai-themed .ai-preview-header { background-color: var(--ai-header); }
+.ai-themed .ai-preview-user { background-color: var(--ai-user-message); }
+.ai-themed .ai-preview-assistant { background-color: var(--ai-assistant-message); }
+.ai-themed .ai-preview-source { background-color: var(--ai-source); }

@@ -95,7 +95,7 @@ export const AIWriterAssistant: React.FC<Props> = ({ context, draft, title = '',
     setOpen(false);
   };
 
-  return <div className="border-2 border-black bg-[var(--color-primary)] p-3 space-y-3">
+  return <div className="ai-themed border-2 border-black bg-[var(--color-primary)] p-3 space-y-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="font-mono text-[10px] font-black uppercase inline-flex items-center gap-2"><Wand2 className="w-4 h-4"/> AI WRITING ASSISTANT</div>
       <button type="button" onClick={()=>setOpen(v=>!v)} className="border-2 border-black bg-white px-2 py-1 font-mono text-[9px] font-black">{open ? 'HIDE' : 'OPEN'}</button>

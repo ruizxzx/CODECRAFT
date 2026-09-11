@@ -33,7 +33,7 @@ export const LearnView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+    <div className="ai-themed max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       <header className="border-4 border-black bg-black text-white p-6 neo-shadow-lg">
         <div className="font-mono text-[9px] text-[var(--color-primary)] font-black uppercase">V79 · AI LEARNING DASHBOARD</div>
         <h1 className="font-display font-black text-5xl uppercase mt-2">LEARN</h1>

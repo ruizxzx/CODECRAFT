@@ -146,6 +146,30 @@ export interface BlogHeaderConfig {
   essayCountLabel: string;
 }
 
+export interface AIThemeConfig {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  surface: string;
+  border: string;
+  text: string;
+  mutedText: string;
+  buttonText: string;
+  hover: string;
+  active: string;
+  inputBackground: string;
+  inputBorder: string;
+  userMessage: string;
+  assistantMessage: string;
+  source: string;
+  link: string;
+  icon: string;
+  header: string;
+  updatedAt?: unknown;
+  updatedBy?: string;
+}
+
 export interface SiteConfig {
   logoImageUrl: string;
   logoPart1: string;
@@ -171,6 +195,7 @@ export interface SiteConfig {
   themeSuccessColor?: string;
   readingProgressPageColor?: string;
   readingProgressPersistentColor?: string;
+  aiTheme?: AIThemeConfig;
 
   // Global site presentation controls
   marqueeItems?: MarqueeItem[];

@@ -58,6 +58,32 @@ service cloud.firestore {
     function userMayReact(uid) { return userMayWrite(uid) && reactionsEnabled() && !userRestricted(uid, 'restrictReactions'); }
     function userMayFollow(uid) { return userMayWrite(uid) && followingEnabled() && !userRestricted(uid, 'restrictFollowing'); }
     function userMayCommunity(uid) { return userMayWrite(uid) && !userRestricted(uid, 'restrictCommunities'); }
+    function isValidHexColor(value) { return value is string && value.matches('^#[0-9a-fA-F]{6}$'); }
+    function isValidAITheme(theme) {
+      return theme is map
+        && theme.keys().hasOnly(['primary','secondary','accent','background','surface','border','text','mutedText','buttonText','hover','active','inputBackground','inputBorder','userMessage','assistantMessage','source','link','icon','header','updatedAt','updatedBy'])
+        && isValidHexColor(theme.get('primary', '#FF00E5'))
+        && isValidHexColor(theme.get('secondary', '#2457FF'))
+        && isValidHexColor(theme.get('accent', '#00E0FF'))
+        && isValidHexColor(theme.get('background', '#FFFFFF'))
+        && isValidHexColor(theme.get('surface', '#FFFFFF'))
+        && isValidHexColor(theme.get('border', '#000000'))
+        && isValidHexColor(theme.get('text', '#000000'))
+        && isValidHexColor(theme.get('mutedText', '#525252'))
+        && isValidHexColor(theme.get('buttonText', '#000000'))
+        && isValidHexColor(theme.get('hover', '#FFD600'))
+        && isValidHexColor(theme.get('active', '#2457FF'))
+        && isValidHexColor(theme.get('inputBackground', '#FFFFFF'))
+        && isValidHexColor(theme.get('inputBorder', '#000000'))
+        && isValidHexColor(theme.get('userMessage', '#FFFFFF'))
+        && isValidHexColor(theme.get('assistantMessage', '#FF00E5'))
+        && isValidHexColor(theme.get('source', '#E9E9E9'))
+        && isValidHexColor(theme.get('link', '#2457FF'))
+        && isValidHexColor(theme.get('icon', '#000000'))
+        && isValidHexColor(theme.get('header', '#FF00E5'))
+        && (!theme.keys().hasAny(['updatedAt']) || theme.updatedAt is timestamp)
+        && (!theme.keys().hasAny(['updatedBy']) || (theme.updatedBy is string && theme.updatedBy.size() <= 128));
+    }
 
 
     match /runtimeErrors/{errorId} {
@@ -1017,8 +1043,8 @@ service cloud.firestore {
 
     match /siteConfig/{docId} {
       allow read: if true;
-      allow create: if isAdmin() && (isBootstrapAdmin() || incoming().get('emergencyAdminLock', false) == false);
-      allow update: if isBootstrapAdmin() || (isAdmin() && !emergencyAdminLock());
+      allow create: if isAdmin() && (isBootstrapAdmin() || incoming().get('emergencyAdminLock', false) == false) && (!incoming().keys().hasAny(['aiTheme']) || isValidAITheme(incoming().aiTheme));
+      allow update: if isBootstrapAdmin() || (isAdmin() && !emergencyAdminLock() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['aiTheme']) || isValidAITheme(request.resource.data.aiTheme)));
       allow delete: if isBootstrapAdmin();
     }
 
