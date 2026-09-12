@@ -42,6 +42,14 @@ export const CommerceProductView:React.FC<Props>=({productId,userProfile,onNavig
   },[productId]);
 
   const primaryPrice=useMemo(()=>prices[0]||null,[prices]);
+  // Keep every hook unconditional: this component renders loading/error states
+  // before the product data arrives, so gallery must be derived before any
+  // early return to preserve React hook order.
+  const gallery=useMemo(()=>{
+    const values=[...(product?.gallery||[])];
+    if(product?.thumbnail && !values.includes(product.thumbnail)) values.unshift(product.thumbnail);
+    return values.filter(Boolean).slice(0,12);
+  },[product]);
 
   const purchase=async()=>{
     if(!product||!primaryPrice)return notifyToast('This product is not currently purchasable.','error');
@@ -59,11 +67,6 @@ export const CommerceProductView:React.FC<Props>=({productId,userProfile,onNavig
   if(loading)return <div className="max-w-5xl mx-auto px-4 py-24 text-center font-mono text-xs uppercase">LOADING PRODUCT…</div>;
   if(!product)return <div className="max-w-3xl mx-auto px-4 py-24"><div className="border-4 border-black bg-white p-8 text-center"><div className="font-mono text-[10px] font-black">{error||'PRODUCT NOT FOUND.'}</div><button onClick={()=>onNavigate('creators')} className="mt-5 border-2 border-black bg-[var(--color-primary)] px-4 py-2 font-mono text-[10px] font-black uppercase">BACK TO CREATORS</button></div></div>;
 
-  const gallery=useMemo(()=>{
-    const values=[...(product.gallery||[])];
-    if(product.thumbnail && !values.includes(product.thumbnail)) values.unshift(product.thumbnail);
-    return values.filter(Boolean).slice(0,12);
-  },[product]);
   const currentImage=gallery[activeImage]||'';
 
   return <div className="min-h-screen bg-[#f6f6f3]">
