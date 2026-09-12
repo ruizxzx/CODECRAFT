@@ -806,6 +806,28 @@ service cloud.firestore {
       allow delete: if isSignedIn() && request.auth.uid == userId;
     }
 
+    match /users/{userId}/upvotes/{postId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if userMayReact(request.auth.uid) && request.auth.uid == userId
+        && incoming().postId == postId
+        && incoming().createdAt is timestamp;
+      allow update: if userMayReact(request.auth.uid) && request.auth.uid == userId
+        && existing().postId == postId && incoming().postId == postId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt','createdAt']);
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/reposts/{postId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if userMayReact(request.auth.uid) && request.auth.uid == userId
+        && incoming().postId == postId
+        && incoming().createdAt is timestamp;
+      allow update: if userMayReact(request.auth.uid) && request.auth.uid == userId
+        && existing().postId == postId && incoming().postId == postId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt']);
+      allow delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
     match /users/{userId}/collections/{collectionId} {
       allow read: if isSignedIn() && request.auth.uid == userId;
       allow create: if isSignedIn() && request.auth.uid == userId
@@ -1475,5 +1497,67 @@ service cloud.firestore {
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }
     }
+
+    // V86 Commerce Foundation. Financial mutations are server-authoritative via
+    // the commerce API; browser clients receive only tightly scoped reads.
+    match /commerceProducts/{productId} {
+      allow read: if (resource.data.status == 'active' && resource.data.visibility == 'public')
+        || (isSignedIn() && resource.data.creatorId == request.auth.uid)
+        || isAdmin();
+      allow write: if false;
+    }
+
+    match /commercePrices/{priceId} {
+      allow read: if resource.data.active == true
+        || (isSignedIn() && get(/databases/$(database)/documents/commerceProducts/$(resource.data.productId)).data.creatorId == request.auth.uid)
+        || isAdmin();
+      allow write: if false;
+    }
+
+    match /commerceOrders/{orderId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /commercePayments/{paymentId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /commerceRefunds/{refundId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.customerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    match /entitlements/{entitlementId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /creatorRevenue/{ledgerEntryId} {
+      allow read: if isSignedIn() && resource.data.creatorId == request.auth.uid;
+      allow write: if false;
+    }
+
+    match /creatorPayouts/{payoutId} {
+      allow read: if isSignedIn() && (resource.data.creatorId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+
+    match /commerceAuditLogs/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /commerceWebhookEvents/{eventId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /commerceIdempotency/{idempotencyId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
   }
 }

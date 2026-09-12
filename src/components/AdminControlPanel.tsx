@@ -3,7 +3,7 @@ import {
   Activity, AlertTriangle, BarChart3, CheckCircle2, Database, FileText, Flag, Globe,
   History, Lock, MessageSquare, RefreshCw, Save, Search, Server, Settings2, Shield,
   Trash2, UserCog, Users, Wrench, XCircle, UserCheck, UserX, EyeOff, RotateCcw,
-  Copy, Pin, Archive, Unlock, Ban, KeyRound, Radio, UploadCloud, Brain
+  Copy, Pin, Archive, Unlock, Ban, KeyRound, Radio, UploadCloud, Brain, CircleDollarSign
 } from 'lucide-react';
 import { auth, checkIsAdmin } from '../lib/firebase';
 import { getAllCommunityUsers, adminChangeUserHandle } from '../lib/community';
@@ -41,10 +41,11 @@ import { MediaUploadButton } from './MediaUploadButton';
 import { ProblemReport, ChangelogEntry, getProblemReportsForAdmin, updateProblemReport, ProblemStatus, getChangelogEntriesForAdmin, createChangelogEntry, updateChangelogEntry, deleteChangelogEntry } from '../lib/siteFeatures';
 import { DEFAULT_INTELLIGENCE_FLAGS, IntelligenceFeatureFlags, subscribeIntelligenceFlags, setIntelligenceFlags } from '../lib/featureFlags';
 import { AI_THEME_KEYS, DEFAULT_AI_THEME, validateAITheme, saveAITheme } from '../lib/aiTheme';
+import { CommerceAdminPanel } from './CommerceAdminPanel';
 import type { AIThemeConfig } from '../types';
 
 interface Props { onSiteConfigRestored?: () => Promise<void> | void; isModerator?: boolean; }
-type Section = 'dashboard'|'access'|'users'|'posts'|'communities'|'questions'|'topics'|'messages'|'moderators'|'reports'|'comments'|'content'|'site'|'navigation'|'backups'|'moderation'|'config'|'analytics'|'recommendations'|'intelligence'|'system'|'audit'|'changelog';
+type Section = 'dashboard'|'access'|'users'|'posts'|'communities'|'questions'|'topics'|'messages'|'moderators'|'reports'|'comments'|'content'|'site'|'navigation'|'backups'|'moderation'|'config'|'analytics'|'recommendations'|'intelligence'|'commerce'|'system'|'audit'|'changelog';
 const pill = (active = false) => `border-2 border-black px-3 py-2 font-mono text-[10px] font-black ${active ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`;
 const danger = `border-2 border-black bg-red-100 px-3 py-2 font-mono text-[10px] font-black hover:bg-red-200`;
 
@@ -314,7 +315,7 @@ export const AdminControlPanel: React.FC<Props> = ({ onSiteConfigRestored, isMod
   if (!master && !isModerator) return <div className="p-8 border-4 border-red-600 bg-red-50 font-mono text-xs font-black">ACCESS DENIED — MASTER/STAFF ACCOUNT REQUIRED.</div>;
 
   const tabs: Array<[Section,string,any,boolean]> = [
-    ['dashboard','DASHBOARD',Database,true],['access','ACCESS',Shield,master],['users','USERS',Users,master],['posts','POSTS',FileText,master],['communities','COMMUNITIES',Globe,master],['questions','QUESTIONS',FileText,master],['topics','TOPICS',Search,master],['reports','REPORTS',Flag,master],['messages','MESSAGES',MessageSquare,master],['moderators','MODERATORS',UserCog,master],['comments','COMMENTS',MessageSquare,master],['content','CONTENT',FileText,master],['site','SITE CONTROL',Settings2,master],['navigation','NAVIGATION',Settings2,master],['backups','BACKUPS',RotateCcw,master],['analytics','ANALYTICS',BarChart3,master],['recommendations','RECOMMENDATIONS',Activity,master],['intelligence','INTELLIGENCE',Brain,master],['system','SYSTEM',Server,master],['audit','AUDIT',Lock,master],['changelog','CHANGELOG',History,master]
+    ['dashboard','DASHBOARD',Database,true],['commerce','COMMERCE',CircleDollarSign,master],['access','ACCESS',Shield,master],['users','USERS',Users,master],['posts','POSTS',FileText,master],['communities','COMMUNITIES',Globe,master],['questions','QUESTIONS',FileText,master],['topics','TOPICS',Search,master],['reports','REPORTS',Flag,master],['messages','MESSAGES',MessageSquare,master],['moderators','MODERATORS',UserCog,master],['comments','COMMENTS',MessageSquare,master],['content','CONTENT',FileText,master],['site','SITE CONTROL',Settings2,master],['navigation','NAVIGATION',Settings2,master],['backups','BACKUPS',RotateCcw,master],['analytics','ANALYTICS',BarChart3,master],['recommendations','RECOMMENDATIONS',Activity,master],['intelligence','INTELLIGENCE',Brain,master],['system','SYSTEM',Server,master],['audit','AUDIT',Lock,master],['changelog','CHANGELOG',History,master]
   ];
   const kpi = analytics ? [
     ['USERS',analytics.users.total],['ARTICLES',analytics.content.articles],['POSTS',analytics.content.posts],['COMMENTS',analytics.content.comments],['COMMUNITIES',analytics.content.communities],['SERIES',analytics.content.series],['ANALYTICS EVENTS',analytics.engagement.analyticsEvents],['OPEN REPORTS',analytics.engagement.reportsOpen]
@@ -461,6 +462,7 @@ export const AdminControlPanel: React.FC<Props> = ({ onSiteConfigRestored, isMod
         <div className="border-2 border-black p-4 font-mono text-[10px]"><div>CONFIG PATH: intelligenceConfig/global</div><div>AI RETRIEVAL: {intelligenceFlags.aiRetrieval?'ENABLED':'DISABLED'}</div><div>SEMANTIC SEARCH: {intelligenceFlags.semanticSearch?'ENABLED':'FOUNDATION ONLY'}</div><div>RECOMMENDATIONS: {intelligenceFlags.recommendations?'ENABLED':'DISABLED'}</div></div>
       </div>}
 
+      {section==='commerce' && <CommerceAdminPanel/>}
       {section==='system' && <div className="space-y-4"><div className="grid md:grid-cols-2 gap-3">{health.map(h=><div key={h.name} className="border-2 border-black p-4"><div className="flex items-center justify-between"><div className="font-display font-black uppercase">{h.name}</div>{h.status==='healthy'?<CheckCircle2 className="w-5 h-5"/>:h.status==='degraded'?<AlertTriangle className="w-5 h-5"/>:<XCircle className="w-5 h-5"/>}</div><div className="font-mono text-[9px] mt-2">{h.detail}{h.latencyMs!==undefined?` · ${h.latencyMs}ms`:''}</div></div>)}</div><div className="grid md:grid-cols-2 gap-3"><div className="border-2 border-black p-4"><h3 className="font-display font-black uppercase">SESSION / SECURITY</h3><div className="font-mono text-[10px] mt-2">UID: {auth.currentUser?.uid||'signed out'}</div><div className="font-mono text-[10px]">EMAIL: {auth.currentUser?.email||'n/a'}</div><div className="font-mono text-[10px]">LAST SIGN-IN: {auth.currentUser?.metadata.lastSignInTime||'n/a'}</div><div className="font-mono text-[10px]">MASTER ACCESS: {master?'YES':'NO'}</div></div><div className="border-2 border-black p-4"><h3 className="font-display font-black uppercase">REALTIME PRESENCE</h3><div className="font-display font-black text-3xl mt-1">{presence?.activeUsers??'—'}</div><div className="font-mono text-[9px]">Unique active users across the presence member collections at last check. Expired heartbeats are excluded.</div></div></div><div className="border-2 border-black p-4 flex items-center justify-between"><div className="font-display font-black">SUMMARY: {health.length ? buildHealthSummary(health).toUpperCase() : 'NOT CHECKED'}</div><button onClick={()=>void runHealth()} className={pill(false)}>RUN REAL CHECKS</button></div></div>}
 
       {section==='audit' && <div className="space-y-2"><div className="flex justify-between"><div className="font-display font-black uppercase">PRIVILEGED AUDIT LOG</div><button onClick={()=>void loadAudit()} className={pill(false)}>LOAD AUDIT</button></div>{audit.map(a=><div key={a.id} className="border-2 border-black p-3"><div className="font-mono text-[9px] font-black">{a.action} · {a.createdAt||'pending'}</div><div className="font-display font-black">{a.target}</div><div className="font-mono text-[9px]">ACTOR: {a.actorEmail||a.actorId} · RESULT: recorded</div></div>)}{!audit.length&&<div className="border-2 border-dashed border-black p-8 font-mono text-xs">NO AUDIT EVENTS LOADED.</div>}</div>}

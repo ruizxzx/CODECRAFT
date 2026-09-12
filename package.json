@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.85.4",
+  "version": "0.86.0",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -19,7 +19,7 @@
     "check:schema": "node scripts/check-schema.mjs",
     "check:runtime": "node scripts/check-runtime-patterns.mjs",
     "health:deployment": "node scripts/deployment-health.mjs",
-    "verify": "npm run check:deployment-config && npm run typecheck && npm run build && npm run check:syntax && npm run check:imports && npm run check:exports && npm run check:identifiers && npm run check:firebase && npm run check:rules && npm run check:schema && npm run check:runtime && npm run check:recommendations && npm run check:handles && npm run check:handle-propagation && npm run check:identity-sync && npm run check:public-profile && npm run check:comments && npm run check:site-sync && npm run check:v80 && npm run check:v81 && npm run check:v81-navigation",
+    "verify": "npm run check:deployment-config && npm run check:commerce && npm run typecheck && npm run build && npm run check:syntax && npm run check:imports && npm run check:exports && npm run check:identifiers && npm run check:firebase && npm run check:rules && npm run check:schema && npm run check:runtime && npm run check:recommendations && npm run check:handles && npm run check:handle-propagation && npm run check:identity-sync && npm run check:public-profile && npm run check:comments && npm run check:site-sync && npm run check:v80 && npm run check:v81 && npm run check:v81-navigation",
     "check:deployment-config": "node scripts/check-deployment-config.mjs",
     "check:recommendations": "node scripts/check-recommendations.mjs",
     "check:handles": "node scripts/check-handles.mjs",
@@ -38,7 +38,8 @@
     "check:v83-mobile": "node scripts/check-v83-mobile.mjs",
     "check:v83-1": "node scripts/check-v83-1-hardening.mjs",
     "check:v84": "node scripts/check-v84-knowledge-engine.mjs",
-    "check:v85": "node scripts/check-v85-discovery.mjs"
+    "check:v85": "node scripts/check-v85-discovery.mjs",
+    "check:commerce": "node scripts/check-commerce.mjs"
   },
   "dependencies": {
     "@sanity/client": "^8.5.0",

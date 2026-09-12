@@ -23,5 +23,5 @@ for (const token of ['filterAuthorizedContent', 'parseDiscoveryQuery', 'freshnes
 const rec = fs.readFileSync(path.join(root, 'src/lib/recommendationEngine.ts'), 'utf8');
 if (!rec.includes("from './discovery'")) throw new Error('Recommendation engine is not connected to Discovery Core');
 const version = fs.readFileSync(path.join(root, 'VERSION.md'), 'utf8');
-if (!/^OFFSCRPT_VERSION=85\./m.test(version)) throw new Error('VERSION.md is not a V85 release.');
+if (!/^OFFSCRPT_VERSION=(?:85\.|86\.)/m.test(version)) throw new Error('VERSION.md is not a compatible V85/V86 release.');
 console.log('V85 DISCOVERY CHECK PASS');

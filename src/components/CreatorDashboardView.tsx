@@ -9,6 +9,7 @@ import { getSeriesArticles, createArticleRevision, getArticleRevisions, restoreA
 import { notifyToast } from '../lib/toast';
 import { CreatorWorkflowPanel } from './CreatorWorkflowPanel';
 import { getCreatorCollaboratorInvites, acceptCreatorCollaboratorInvite, declineCreatorCollaboratorInvite } from '../lib/creatorWorkspace';
+import { CommerceFoundationPanel } from './CommerceFoundationPanel';
 
 interface Props {
   articles: Article[];
@@ -39,6 +40,7 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
   const [compareSlugs, setCompareSlugs] = useState<string[]>([]);
   const [selectedFunnelStage, setSelectedFunnelStage] = useState<'opened'|'p25'|'p50'|'p75'|'completed'>('opened');
   const [collabInvites,setCollabInvites]=useState<any[]>([]);
+  const [studioSection,setStudioSection]=useState<'analytics'|'commerce'>('analytics');
 
   const mine = useMemo(
     () =>
@@ -196,6 +198,12 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
         <p className="mt-3 max-w-3xl text-neutral-300">Aggregate reader analytics from real Firestore sessions and engagement events. Reader identities are never surfaced here.</p>
       </header>
 
+      <section className="border-2 border-black bg-white p-2 flex flex-wrap gap-2">
+        <button onClick={()=>setStudioSection('analytics')} className={`border-2 border-black px-4 py-2 font-mono text-[10px] font-black uppercase ${studioSection==='analytics'?'bg-[var(--color-primary)]':'bg-white'}`}>ANALYTICS</button>
+        <button onClick={()=>setStudioSection('commerce')} className={`border-2 border-black px-4 py-2 font-mono text-[10px] font-black uppercase ${studioSection==='commerce'?'bg-[var(--color-primary)]':'bg-white'}`}>MONETIZATION</button>
+      </section>
+
+      {studioSection === 'commerce' ? <CommerceFoundationPanel userProfile={userProfile}/> : <>
       <section className="border-2 border-black bg-white p-4 flex flex-wrap items-center gap-2">
         <span className="font-mono text-[9px] font-black uppercase mr-2">RANGE</span>
         {[['7D', 7], ['30D', 30], ['90D', 90], ['6M', 180], ['1Y', 365], ['ALL', 'all']].map(([label, value]) => (
@@ -301,6 +309,7 @@ export const CreatorDashboardView: React.FC<Props> = ({ articles, userProfile, o
       {selected?.startsWith('rev:') && <section className="border-4 border-black bg-white p-5"><div className="flex justify-between"><h2 className="font-display font-black text-2xl uppercase">VERSION HISTORY</h2><button onClick={() => setSelected(null)}>✕</button></div><div className="mt-4 space-y-2">{revisions.map((revision: any) => <div key={revision.id} className="border-2 border-black p-3 flex flex-wrap items-center gap-2"><div className="flex-1 font-mono text-[10px]">{revision.createdAt?.toDate?.()?.toLocaleString?.() || 'CLOUD REVISION'} · {revision.action || 'revision'}</div><button onClick={() => void restore(revision.id)} className="border-2 border-black px-2 py-1 font-mono text-[9px] font-black">RESTORE</button></div>)}{!revisions.length && <div className="font-mono text-xs">NO REVISIONS YET.</div>}</div></section>}
 
       {selected && !selected.startsWith('rev:') && <section className="border-4 border-black bg-white p-5"><div className="flex justify-between"><div><div className="font-mono text-[9px] uppercase">SERIES ANALYTICS</div><h2 className="font-display font-black text-2xl uppercase">{series.find((item) => item.id === selected)?.title}</h2></div><button onClick={() => setSelected(null)}>✕</button></div>{seriesBusy ? <div className="py-8 text-center font-mono text-xs">LOADING SERIES DATA…</div> : <div className="mt-5 space-y-3">{seriesData.map((row, index) => <div key={row.article.slug} className="border-2 border-black p-3"><div className="flex justify-between font-mono text-[9px] font-black"><span>PART {String(index + 1).padStart(2, '0')} · {row.article.title}</span><span>{row.views.toLocaleString()} OPENS</span></div><div className="grid grid-cols-3 gap-2 mt-3 font-mono text-[9px]"><span>50%+ {row.fiftyPlus.toLocaleString()}</span><span>COMPLETE {row.completed.toLocaleString()}</span><span>RATE {row.completionRate}%</span></div><div className="h-3 bg-neutral-100 border-2 border-black mt-2"><div className="h-full bg-[var(--color-primary)]" style={{ width: `${Math.max(2, Math.min(100, row.views / Math.max(1, seriesData[0]?.views || 1) * 100))}%` }} /></div><div className="font-mono text-[9px] mt-2">{row.drop ? `DROP-OFF FROM PREVIOUS PART: ${row.drop.toLocaleString()}` : 'START OF SERIES'}{index>0 ? ` · RETAINED ${(row.views/Math.max(1,seriesData[index-1]?.views||1)*100).toFixed(1)}%` : ''}</div></div>)}</div>}</section>}
+      </> }
     </div>
   );
 };

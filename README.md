@@ -1,4 +1,4 @@
-## Current release: OFFSCRPT V85.1.2 — Full Backend Sync + Runtime Hardening
+## Current release: OFFSCRPT V86.0.0 — Commerce Foundation + Entitlement Engine
 
 # OFFSCRPT — V80.0.0 Intelligence Core
 
