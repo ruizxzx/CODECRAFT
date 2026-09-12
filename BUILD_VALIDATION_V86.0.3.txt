@@ -1,0 +1,18 @@
+OFFSCRPT V86.0.3 BUILD VALIDATION
+
+TEST | STATUS | REASON
+Commerce admin authorization patch | PASSED | Backend diagnostics now accepts the canonical bootstrap admin emails (when email is verified), configured master-admin UID records, and configured master-admin email records.
+Diagnostics authorization status | PASSED | Unauthorized diagnostics requests return HTTP 403 instead of generic 400.
+Authentication identity retrieval | PASSED | Commerce API retrieves Firebase account UID, email, and emailVerified from the authenticated ID token lookup and passes them to diagnostics authorization.
+Existing Commerce product/purchase/refund paths | PASSED | Patch changes only diagnostics authorization and HTTP error semantics; financial mutation code paths are unchanged.
+Firestore rules checker | PASSED | Canonical root firestore.rules passes repository validation.
+Commerce checker | PASSED | Commerce foundation/rules/index/duplicate-rule checks pass.
+Single canonical firestore.rules | PASSED | Only ./firestore.rules exists in the packaged repository.
+Frontend CommonJS scan | PASSED | No browser-side require()/module.exports/exports. found in active src tree.
+Import checker | PASSED | Active source import scan passes.
+Runtime-pattern checker | PASSED | Active source runtime-pattern scan passes.
+Package/version consistency | PASSED | package.json, package-lock.json, VERSION.md and V86.0.3 release docs are aligned to V86.0.3.
+Full dependency-backed TypeScript typecheck | BLOCKED | Dependencies are not installed in the workspace; run npm ci then npm run typecheck in CI/deployment environment.
+Vite production build | BLOCKED | Vite dependency is not installed in the workspace.
+Live Vercel diagnostics request | BLOCKED | Requires redeploying V86.0.3 and authenticating against production.
+Live Firebase authorization/rules verification | BLOCKED | Requires deployed Firebase state and live authenticated accounts.
