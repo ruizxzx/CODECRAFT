@@ -1,0 +1,25 @@
+OFFSCRPT V88.0.6 BUILD VALIDATION
+
+TypeScript/TSX syntax parse: PASS — 140 files, 0 parse diagnostics.
+Import check: PASS.
+Firebase configuration check: PASS.
+Firestore rules check: PASS.
+Schema check: PASS.
+Runtime pattern check: PASS.
+Commerce regression check: PASS.
+V87 storefront regression check: PASS.
+V88 digital product check: PASS.
+Deployment configuration check: PASS.
+
+New purchase/download checks:
+- #purchases / #my-purchases routes present.
+- Account dashboard PURCHASES shortcut present.
+- Authenticated navigation drawer PURCHASES shortcut present.
+- Server listPurchases action present.
+- Server downloadFile action present.
+- Download endpoint verifies active entitlement before signing GET URL.
+- R2 GET presigned URLs use 5-minute expiry.
+- R2 response-content-disposition is signed for attachment downloads.
+- Upload completion requires the exact server-derived storage key.
+
+No live Firebase/R2/Vercel integration test was executed in the build environment.

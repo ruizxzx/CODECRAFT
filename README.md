@@ -1,3 +1,6 @@
+## V88.0.6
+My Purchases and secure digital-product downloads are available from `#purchases` / the authenticated account drawer.
+
 ## Current release: OFFSCRPT V86.0.0 — Commerce Foundation + Entitlement Engine
 
 # OFFSCRPT — V80.0.0 Intelligence Core

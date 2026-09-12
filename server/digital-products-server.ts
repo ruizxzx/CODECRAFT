@@ -173,7 +173,7 @@ export function r2ProductConfig() {
   return {accountId,bucket,accessKey,secretKey,endpoint};
 }
 
-export function r2PresignedUrl(input:{method:'PUT'|'HEAD'|'GET';bucket:string;key:string;expiresIn:number}) {
+export function r2PresignedUrl(input:{method:'PUT'|'HEAD'|'GET';bucket:string;key:string;expiresIn:number;responseContentDisposition?:string}) {
   const cfg = r2ProductConfig();
   const now = new Date();
   const date = amzDate(now);
@@ -189,6 +189,7 @@ export function r2PresignedUrl(input:{method:'PUT'|'HEAD'|'GET';bucket:string;ke
     'X-Amz-Expires':String(input.expiresIn),
     'X-Amz-SignedHeaders':'host'
   });
+  if (input.responseContentDisposition) params.set('response-content-disposition', input.responseContentDisposition);
   const canonicalQuery = [...params.entries()].sort(([a],[b])=>a.localeCompare(b))
     .map(([k,v])=>`${awsEncode(k)}=${awsEncode(v)}`).join('&');
   const canonicalHeaders = `host:${host}\n`;

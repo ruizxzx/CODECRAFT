@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, Bell, BookOpen, Bookmark, CheckCircle2, Clock3, ExternalLink, History, ListTodo, Loader2, Settings, Sparkles, Trash2, User } from 'lucide-react';
+import { Activity, Bell, BookOpen, Bookmark, CheckCircle2, Clock3, ExternalLink, History, ListTodo, Loader2, Settings, Sparkles, Trash2, User, Package } from 'lucide-react';
 import { useAuthUser } from '../lib/useAuthUser';
 import { loginWithGoogle } from '../lib/firebase';
 import { getUserSaves, getUserNotifications } from '../lib/community';
@@ -84,6 +84,7 @@ export const AccountDashboardView: React.FC<Props> = ({ onNavigate, articles, us
     {loading ? <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin"/></div> : <>
       {continueArticle && <button onClick={()=>onNavigate('article', continueArticle)} className="w-full mb-8 border-4 border-black bg-black text-white p-5 text-left neo-shadow-lg hover:bg-[var(--color-primary)] hover:text-black"><div className="font-mono text-[10px] uppercase text-[var(--color-primary)]">CONTINUE READING</div><div className="font-display font-black text-2xl uppercase mt-1">{continueTitle || continueArticle}</div><div className="font-mono text-[10px] mt-2">RESUME FROM YOUR LAST CLOUD CHECKPOINT →</div></button>}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        <button onClick={()=>onNavigate('purchases')} className="border-2 border-black p-4 text-left bg-black text-white hover:bg-[var(--color-primary)] hover:text-black"><Package className="w-5 h-5"/><div className="font-mono text-[9px] uppercase mt-4">PURCHASES</div><div className="font-display font-black text-2xl uppercase mt-2">MY LIBRARY</div><div className="font-mono text-[9px] mt-1">DIGITAL DOWNLOADS</div></button>
         <button onClick={()=>onNavigate('saved')} className="border-2 border-black p-4 text-left bg-white hover:bg-[var(--color-primary)]"><Bookmark className="w-5 h-5"/><div className="font-mono text-[9px] uppercase mt-4">SAVED</div><div className="font-display font-black text-3xl">{saved.length}</div><div className="font-mono text-[9px] mt-1">{savedArticleCount} ARTICLES</div></button>
         <button onClick={()=>onNavigate('history')} className="border-2 border-black p-4 text-left bg-white hover:bg-[var(--color-secondary)]"><History className="w-5 h-5"/><div className="font-mono text-[9px] uppercase mt-4">HISTORY</div><div className="font-display font-black text-3xl">{history.length}</div><div className="font-mono text-[9px] mt-1">NO DUPLICATE OPENS</div></button>
         <button onClick={()=>onNavigate('notifications')} className="border-2 border-black p-4 text-left bg-white hover:bg-[var(--color-accent)]"><Bell className="w-5 h-5"/><div className="font-mono text-[9px] uppercase mt-4">NOTIFICATIONS</div><div className="font-display font-black text-3xl">{unread}</div><div className="font-mono text-[9px] mt-1">UNREAD</div></button>

@@ -82,3 +82,22 @@ export async function listMyDigitalProducts(){
 export async function publishDigitalProduct(productId:string){return api<{product:DigitalProduct}>('publishProduct',{productId});}
 export async function publishDigitalProductVersion(productId:string,versionId:string){return api<{product:DigitalProduct;version:DigitalProductVersion}>('publishVersion',{productId,versionId});}
 export async function archiveDigitalProduct(productId:string){return api<{product:DigitalProduct}>('archiveProduct',{productId});}
+
+
+export interface PurchasedDigitalProductFile {
+  id:string; productId:string; versionId:string; originalFilename:string; safeFilename:string;
+  mimeType:string; sizeBytes:number; role:DigitalProductFile['role']; status:DigitalProductFile['status'];
+}
+export interface DigitalPurchase {
+  id:string; entitlementId:string; orderId:string; purchasedAt?:string; entitlementStatus:string; canDownload:boolean;
+  product:{id:string;title:string;subtitle?:string;thumbnail?:string;gallery?:string[];creatorId:string;creatorUsername?:string;creatorDisplayName?:string;status:string};
+  order:{status:string;currency:string;total:number};
+  files:PurchasedDigitalProductFile[];
+}
+
+export async function listMyDigitalPurchases(){
+  return api<{purchases:DigitalPurchase[]}>('listPurchases');
+}
+export async function downloadMyDigitalProductFile(fileId:string){
+  return api<{downloadUrl:string;expiresIn:number;file:{id:string;filename:string;mimeType:string;sizeBytes:number;productId:string}}>('downloadFile',{fileId});
+}

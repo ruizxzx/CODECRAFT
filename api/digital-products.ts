@@ -139,7 +139,8 @@ async function completeUpload(adminToken:string,uid:string,b:any){
   const product=await fsGet(adminToken,`commerceProducts/${productId}`), version=await fsGet(adminToken,`digitalProductVersions/${versionId}`);
   if(!product||!version) throw new Error('Product or version not found.');
   if(product.fields.creatorId!==uid||version.fields.creatorId!==uid||version.fields.productId!==productId) throw new Error('Upload ownership check failed.');
-  if(!/^digital-products\/[A-Za-z0-9_-]{1,180}\/[A-Za-z0-9-]{1,180}\/[A-Za-z0-9-]{1,180}\/[A-Za-z0-9-]{1,180}-/.test(objectKey)) throw new Error('Invalid storage reference.');
+  const expectedKey=storageKey(uid,productId,versionId,fileId,safeName(String(b.fileName||'file')));
+  if(objectKey!==expectedKey) throw new Error('Invalid storage reference.');
   const cfg=r2ProductConfig();
   const headUrl=r2PresignedUrl({method:'HEAD',bucket:cfg.bucket,key:objectKey,expiresIn:300});
   const head=await fetch(headUrl,{method:'HEAD'});
@@ -176,6 +177,72 @@ async function listMine(adminToken:string,uid:string){
     versions:versions.map(x=>({id:x.name.split('/').pop(),...x.fields})),
     files:files.map(x=>({id:x.name.split('/').pop(),...x.fields}))
   };
+}
+
+function entitlementIsActive(fields:any){
+  if(String(fields?.status||'')!=='active') return false;
+  const now=Date.now();
+  const startsRaw=fields?.startsAt?.toDate?.()?.getTime?.();
+  const starts=Number.isFinite(startsRaw)?startsRaw:(fields?.startsAt?Date.parse(String(fields.startsAt)):0);
+  const expiresRaw=fields?.expiresAt?.toDate?.()?.getTime?.();
+  const expires=Number.isFinite(expiresRaw)?expiresRaw:(fields?.expiresAt?Date.parse(String(fields.expiresAt)):NaN);
+  return (!starts||starts<=now)&&(!Number.isFinite(expires)||expires>now);
+}
+
+async function listPurchases(adminToken:string,uid:string){
+  const entitlements=await fsQuery(adminToken,'entitlements',[{field:{fieldPath:'userId'},op:'EQUAL',value:{stringValue:uid}}]);
+  const purchases:any[]=[];
+  for(const entitlement of entitlements.slice(0,100)){
+    const ef:any=entitlement.fields||{};
+    if(String(ef.resourceType||'')!=='product' || !ef.resourceId) continue;
+    const product=await fsGet(adminToken,`commerceProducts/${String(ef.resourceId)}`);
+    if(!product) continue;
+    const orderId=String(ef.orderId||ef.sourceId||'');
+    const order=orderId?await fsGet(adminToken,`commerceOrders/${orderId}`):null;
+    const items=Array.isArray(order?.fields?.items)?order?.fields?.items:[];
+    const item=items.find((x:any)=>String(x.productId||'')===String(ef.resourceId)) || items[0] || {};
+    const currentVersionId=String(product.fields.currentVersionId||'');
+    let files:any[]=[];
+    if(currentVersionId){
+      const version=await fsGet(adminToken,`digitalProductVersions/${currentVersionId}`);
+      const ids=Array.isArray(version?.fields?.fileIds)?version.fields.fileIds.map((x:any)=>String(x)).filter(Boolean):[];
+      files=(await Promise.all(ids.slice(0,50).map(async(fileId:string)=>{
+        const f=await fsGet(adminToken,`digitalProductFiles/${fileId}`);
+        if(!f || f.fields.creatorId!==product.fields.creatorId || f.fields.status!=='ready') return null;
+        return {id:fileId,...f.fields};
+      }))).filter(Boolean);
+    }
+    purchases.push({
+      id:entitlement.name.split('/').pop(), entitlementId:entitlement.name.split('/').pop(), orderId,
+      purchasedAt:String(ef.grantedAt||order?.fields?.paidAt||order?.fields?.createdAt||''),
+      entitlementStatus:String(ef.status||'unknown'),
+      canDownload:entitlementIsActive(ef),
+      product:{id:String(ef.resourceId),title:String(product.fields.title||item.title||'Digital Product'),subtitle:String(product.fields.subtitle||''),thumbnail:String(product.fields.thumbnail||''),gallery:Array.isArray(product.fields.gallery)?product.fields.gallery.slice(0,12):[],creatorId:String(product.fields.creatorId||''),creatorUsername:String(product.fields.creatorUsername||''),creatorDisplayName:String(product.fields.creatorDisplayName||''),status:String(product.fields.status||'')},
+      order:{status:String(order?.fields?.status||''),currency:String(order?.fields?.currency||item.currency||'INR'),total:Number(order?.fields?.total||item.lineTotal||item.unitAmount||0)},
+      files:entitlementIsActive(ef)?files:[]
+    });
+  }
+  purchases.sort((a,b)=>String(b.purchasedAt||'').localeCompare(String(a.purchasedAt||'')));
+  return {purchases};
+}
+
+async function downloadFile(adminToken:string,uid:string,b:any){
+  const fileId=String(b.fileId||'').trim();
+  if(!fileId) throw new Error('fileId is required.');
+  const file=await fsGet(adminToken,`digitalProductFiles/${fileId}`);
+  if(!file) throw new Error('Purchased file not found.');
+  if(String(file.fields.status||'')!=='ready') throw new Error('This file is not available for download.');
+  const productId=String(file.fields.productId||'');
+  if(!productId) throw new Error('Purchased file is missing its product reference.');
+  const entitlements=await fsQuery(adminToken,'entitlements',[{field:{fieldPath:'userId'},op:'EQUAL',value:{stringValue:uid}}]);
+  const entitlement=entitlements.find(x=>String(x.fields?.resourceType||'')==='product'&&String(x.fields?.resourceId||'')===productId&&entitlementIsActive(x.fields));
+  if(!entitlement) throw new Error('You do not have an active purchase for this product.');
+  const objectKey=String(file.fields.objectKey||'');
+  const cfg=r2ProductConfig();
+  const filename=safeName(String(file.fields.safeFilename||file.fields.originalFilename||'download'));
+  const disposition=`attachment; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  const downloadUrl=r2PresignedUrl({method:'GET',bucket:cfg.bucket,key:objectKey,expiresIn:300,responseContentDisposition:disposition});
+  return {downloadUrl,expiresIn:300,file:{id:fileId,filename,mimeType:String(file.fields.mimeType||'application/octet-stream'),sizeBytes:Number(file.fields.sizeBytes||0),productId}};
 }
 
 async function publishProduct(adminToken:string,uid:string,b:any){
@@ -232,6 +299,8 @@ export default async function handler(req:VercelRequest,res:VercelResponse){
       case 'requestUpload': result=await requestUpload(adminToken,authUser.uid,body); break;
       case 'completeUpload': result=await completeUpload(adminToken,authUser.uid,body); break;
       case 'listMine': result=await listMine(adminToken,authUser.uid); break;
+      case 'listPurchases': result=await listPurchases(adminToken,authUser.uid); break;
+      case 'downloadFile': result=await downloadFile(adminToken,authUser.uid,body); break;
       case 'publishProduct': result=await publishProduct(adminToken,authUser.uid,body); break;
       case 'publishVersion': result=await publishVersion(adminToken,authUser.uid,body); break;
       case 'archiveProduct': result=await archiveProduct(adminToken,authUser.uid,body); break;

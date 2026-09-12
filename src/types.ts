@@ -290,7 +290,7 @@ export interface BentoLink {
   order: number;
 }
 
-export type PageView = 'product' | 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'question' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'activity' | 'creator_studio' | 'creators' | 'preferences' | 'health' | 'changelog' | 'learn' | 'knowledge' | 'vault' | 'research';
+export type PageView = 'purchases' | 'product' | 'home' | 'blog' | 'article' | 'about' | 'contact' | 'cms' | 'links' | 'community' | 'community_post' | 'community_profile' | 'question' | 'saved' | 'history' | 'notifications' | 'explore' | 'social' | 'series' | 'creator' | 'topic' | 'dashboard' | 'activity' | 'creator_studio' | 'creators' | 'preferences' | 'health' | 'changelog' | 'learn' | 'knowledge' | 'vault' | 'research';
 
 export interface CommunityUser {
   uid: string;

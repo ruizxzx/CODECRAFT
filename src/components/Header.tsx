@@ -30,7 +30,8 @@ import {
   Layers,
   History as HistoryIcon,
   Activity,
-  BarChart3
+  BarChart3,
+  Package
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -141,6 +142,7 @@ export const Header: React.FC<HeaderProps> = ({
     history: HistoryIcon,
     dashboard: User,
     preferences: Settings,
+    purchases: Package,
   };
 
   // Keep the primary header intentionally fixed and compact. Existing CMS navigation
@@ -565,6 +567,9 @@ export const Header: React.FC<HeaderProps> = ({
                   <div className="space-y-3">
                     <button onClick={() => handleNavClick('dashboard')} className="w-full py-3 px-4 bg-black text-[var(--color-primary)] border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between neo-shadow-sm">
                       <span>MY OFFSCRPT</span><ArrowRight className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleNavClick('purchases')} className="w-full py-3 px-4 bg-[var(--color-primary)] text-black border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between neo-shadow-sm">
+                      <span>MY PURCHASES</span><Package className="w-4 h-4" />
                     </button>
                     <button onClick={() => handleNavClick('preferences')} className="w-full py-3 px-4 bg-white border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between hover:bg-neutral-100">
                       <span>SETTINGS & APPEARANCE</span><Settings className="w-4 h-4" />

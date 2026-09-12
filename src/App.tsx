@@ -31,6 +31,7 @@ import { backfillPublicProfilesForAllUsers } from './lib/community';
 import { SavedView } from './components/SavedView';
 import { NotificationsView } from './components/NotificationsView';
 import { AccountDashboardView } from './components/AccountDashboardView';
+import { PurchasesView } from './components/PurchasesView';
 import { ActivityCenterView } from './components/ActivityCenterView';
 import { CreatorDashboardView } from './components/CreatorDashboardView';
 import { PreferencesView } from './components/PreferencesView';
@@ -507,6 +508,9 @@ export default function App() {
       } else if (hash === 'history') {
         setCurrentPage('history');
         setActiveArticleSlug(null);
+      } else if (hash === 'purchases' || hash === 'my-purchases') {
+        setCurrentPage('purchases');
+        setActiveArticleSlug(null);
       } else if (hash === 'dashboard' || hash === 'my') {
         setCurrentPage('dashboard');
         setActiveArticleSlug(null);
@@ -611,6 +615,8 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('creator');
       window.location.hash = `creator/${param}`;
+    } else if (page === 'purchases') {
+      setActiveArticleSlug(null); setCurrentPage('purchases'); window.location.hash='purchases';
     } else if (page === 'knowledge') {
       setActiveArticleSlug(null); setCurrentPage('knowledge'); window.location.hash='knowledge';
     } else if (page === 'vault') {
@@ -874,6 +880,10 @@ export default function App() {
 
             {currentPage === 'dashboard' && (
               <AccountDashboardView articles={articles} userProfile={userProfile} onNavigate={navigateTo} />
+            )}
+
+            {currentPage === 'purchases' && (
+              <PurchasesView onNavigate={navigateTo} />
             )}
 
             {currentPage === 'activity' && (
