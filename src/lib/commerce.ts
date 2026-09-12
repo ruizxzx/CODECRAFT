@@ -72,26 +72,26 @@ export async function checkCommerceAccess(userId:string, resourceType:string, re
 
 export async function listCreatorCommerceProducts(userId: string): Promise<CommerceProduct[]> {
   if (!userId || auth.currentUser?.uid !== userId) return [];
-  const snap = await getDocs(query(collection(db,'commerceProducts'), where('creatorId','==',userId), orderBy('updatedAt','desc'), limit(100)));
-  return snap.docs.map(d => ({id:d.id,...d.data()} as CommerceProduct));
+  const snap = await getDocs(query(collection(db,'commerceProducts'), where('creatorId','==',userId), limit(100)));
+  return snap.docs.map(d => ({id:d.id,...d.data()} as CommerceProduct)).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
 }
 export async function listActiveCommerceProducts(limitCount=50): Promise<CommerceProduct[]> {
-  const snap = await getDocs(query(collection(db,'commerceProducts'), where('status','==','active'), orderBy('updatedAt','desc'), limit(limitCount)));
-  return snap.docs.map(d => ({id:d.id,...d.data()} as CommerceProduct));
+  const snap = await getDocs(query(collection(db,'commerceProducts'), where('status','==','active'), limit(limitCount)));
+  return snap.docs.map(d => ({id:d.id,...d.data()} as CommerceProduct)).sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
 }
 export async function listUserCommerceOrders(userId:string):Promise<CommerceOrder[]> {
   if (!userId || auth.currentUser?.uid !== userId) return [];
-  const snap = await getDocs(query(collection(db,'commerceOrders'), where('customerId','==',userId), orderBy('createdAt','desc'), limit(100)));
-  return snap.docs.map(d => ({id:d.id,...d.data()} as CommerceOrder));
+  const snap = await getDocs(query(collection(db,'commerceOrders'), where('customerId','==',userId), limit(100)));
+  return snap.docs.map(d => ({id:d.id,...d.data()} as CommerceOrder)).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
 }
 export async function listUserEntitlements(userId:string):Promise<CommerceEntitlement[]> {
   if (!userId || auth.currentUser?.uid !== userId) return [];
-  const snap = await getDocs(query(collection(db,'entitlements'), where('userId','==',userId), orderBy('grantedAt','desc'), limit(100)));
-  return snap.docs.map(d => ({id:d.id,...d.data()} as CommerceEntitlement));
+  const snap = await getDocs(query(collection(db,'entitlements'), where('userId','==',userId), limit(100)));
+  return snap.docs.map(d => ({id:d.id,...d.data()} as CommerceEntitlement)).sort((a,b)=>String(b.grantedAt||'').localeCompare(String(a.grantedAt||'')));
 }
 export async function hasCommerceAccess(userId:string, resourceType:string, resourceId:string):Promise<boolean> {
   if (!userId || auth.currentUser?.uid !== userId) return false;
-  const snap = await getDocs(query(collection(db,'entitlements'), where('userId','==',userId), where('resourceType','==',resourceType), where('resourceId','==',resourceId), limit(50)));
+  const snap = await getDocs(query(collection(db,'entitlements'), where('userId','==',userId), limit(100)));
   const now=Date.now();
   return snap.docs.some(d => { const x:any=d.data(); if(x.status!=='active') return false; const startsRaw=x.startsAt?.toDate?.()?.getTime?.(); const starts=Number.isFinite(startsRaw)?startsRaw:(x.startsAt?Date.parse(x.startsAt):0); const expiresRaw=x.expiresAt?.toDate?.()?.getTime?.(); const expires=Number.isFinite(expiresRaw)?expiresRaw:(x.expiresAt?Date.parse(x.expiresAt):NaN); return (!starts || starts<=now) && (!Number.isFinite(expires) || expires>now); });
 }

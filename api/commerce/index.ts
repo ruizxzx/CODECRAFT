@@ -23,18 +23,39 @@ async function fsGet(token:string,name:string){const r=await fetch(`${firestoreB
 async function fsCreate(token:string,name:string,obj:any){const parent=name.split('/').slice(0,-1).join('/'); const id=name.split('/').pop()!; const r=await fetch(`${firestoreBase()}/${parent}?documentId=${encodeURIComponent(id)}`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({fields:fields(obj)})}); if(r.status===409)return false; if(!r.ok)throw new Error(`Firestore create failed: ${r.status}`); return true;}
 async function fsPatch(token:string,name:string,obj:any){const params=new URLSearchParams(); for(const k of Object.keys(obj))params.append('updateMask.fieldPaths',k); const r=await fetch(`${firestoreBase()}/${name}?${params.toString()}`,{method:'PATCH',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({fields:fields(obj)})}); if(!r.ok)throw new Error(`Firestore update failed: ${r.status}`); return true;}
 function firestoreResourceName(name:string){
+  const restPrefix='https://firestore.googleapis.com/v1/';
   const base=firestoreBase() + '/';
-  if(name.startsWith(base)) return name.slice(base.length);
+  if(name.startsWith(restPrefix)){
+    const resource=name.slice(restPrefix.length);
+    if(resource.startsWith(`projects/${projectId()}/databases/(default)/documents/`)) return resource;
+  }
   if(name.startsWith('projects/')) return name;
+  if(name.startsWith(base)) return `projects/${projectId()}/databases/(default)/documents/${name.slice(base.length)}`;
+  if(!name.includes('/')) return `projects/${projectId()}/databases/(default)/documents/${name}`;
+  if(/^(commerceProducts|commercePrices|commerceOrders|commercePayments|commerceRefunds|entitlements|creatorRevenue|creatorPayouts|commerceAuditLogs|commerceWebhookEvents|commerceIdempotency|users)\//.test(name)) return `projects/${projectId()}/databases/(default)/documents/${name}`;
   throw new Error(`Invalid Firestore document path: ${name}`);
 }
 function normalizeCommitWrites(writes:any[]){
   return writes.map((write:any)=>{
-    const out:any={...write};
-    for(const op of ['create','update','delete']){
-      if(out[op]?.name) out[op]={...out[op],name:firestoreResourceName(String(out[op].name))};
+    if(write?.create?.name){
+      const create=write.create;
+      return {
+        update:{...create,name:firestoreResourceName(String(create.name))},
+        currentDocument:{exists:false}
+      };
     }
-    return out;
+    if(write?.update?.name){
+      const update={...write.update,name:firestoreResourceName(String(write.update.name))};
+      const fieldPaths=Object.keys(update.fields||{});
+      return fieldPaths.length ? {update,updateMask:{fieldPaths}} : {update};
+    }
+    if(write?.delete){
+      return {delete:firestoreResourceName(String(write.delete))};
+    }
+    if(write?.transform?.document){
+      return {transform:{...write.transform,document:firestoreResourceName(String(write.transform.document))}};
+    }
+    return write;
   });
 }
 async function fsCommit(token:string,writes:any[]){
@@ -44,6 +65,19 @@ async function fsCommit(token:string,writes:any[]){
   return r.json();
 }
 async function fsRunQuery(token:string, from:string, filters:any[]){const where=filters.length===1?{fieldFilter:filters[0]}:{compositeFilter:{op:'AND',filters:filters.map(fieldFilter=>({fieldFilter}))}}; const r=await fetch(`${firestoreBase()}:runQuery`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({structuredQuery:{from:[{collectionId:from}],where}})}); if(!r.ok)throw new Error(`Firestore query failed: ${r.status}`); const rows:any[]=await r.json(); return rows.filter(x=>x.document).map(x=>({name:x.document.name,fields:decodeFields(x.document.fields)}));}
+async function fsCount(token:string, collectionId:string){
+  const r=await fetch(`${firestoreBase()}:runAggregationQuery`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({structuredAggregationQuery:{structuredQuery:{from:[{collectionId}]},aggregations:[{alias:'count',count:{}}]}})});
+  if(!r.ok){const text=await r.text();throw new Error(`Firestore count failed: ${r.status} ${text.slice(0,300)}`);}
+  const rows:any[]=await r.json();
+  const raw=rows?.[0]?.result?.aggregateFields?.count?.integerValue;
+  return Number(raw||0);
+}
+async function verifyCommerceAdmin(token:string,uid:string){
+  const user=await fsGet(token,`users/${uid}`);
+  if(user?.fields?.platformRole==='master_admin') return true;
+  const admin=await fsGet(token,`masterAdmins/${uid}`);
+  return Boolean(admin);
+}
 async function verifyFirebaseToken(idToken:string){ if(!idToken) throw new Error('Authentication required.'); if(!apiKey()) throw new Error('FIREBASE_WEB_API_KEY is not configured on the server.'); const r=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey())}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({idToken})}); const j:any=await r.json(); if(!r.ok||!j.users?.[0]?.localId) throw new Error('Invalid authentication token.'); return String(j.users[0].localId); }
 function authHeader(req:VercelRequest){return String(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim();}
 function testMode(){return String(process.env.COMMERCE_PAYMENT_MODE||'test').toLowerCase()==='test';}
@@ -111,7 +145,14 @@ async function refundTest(token:string,uid:string,b:any){
   if(!testMode())throw new Error('Refund test mode is disabled. Configure a payment provider before production refunds.'); const orderId=String(b.orderId||''); const order=await fsGet(token,`commerceOrders/${orderId}`); if(!order||order.fields.customerId!==uid)throw new Error('Order not found.'); if(order.fields.status!=='paid'&&order.fields.status!=='partially_refunded')throw new Error('Only paid orders can be refunded.'); const key=String(b.idempotencyKey||'').trim(); if(key.length<8||key.length>200)throw new Error('Valid idempotencyKey is required.'); const eventId=idempotencyId(uid,`refund:${key}`),existingEvent=await fsGet(token,`commerceIdempotency/${eventId}`); if(existingEvent){return {refundId:String(existingEvent.fields.refundId||''),status:'completed',orderStatus:'refunded',entitlementStatus:'refunded'};} const eid=Array.isArray(order.fields.entitlementIds)?String(order.fields.entitlementIds[0]||''):''; const refundId=crypto.randomUUID(),ledgerId=crypto.randomUUID(); const ent=eid?await fsGet(token,`entitlements/${eid}`):null; const writes:any[]=[{create:{name:`${firestoreBase()}/commerceRefunds/${refundId}`,fields:fields({orderId,customerId:uid,amount:Number(order.fields.total||0),currency:order.fields.currency,status:'completed',reason:String(b.reason||'Customer requested refund').slice(0,500),createdAt:nowIso(),completedAt:nowIso()})}},{update:{name:`${firestoreBase()}/commerceOrders/${orderId}`,fields:fields({status:'refunded',refundedAt:nowIso(),updatedAt:nowIso()})}},{update:{name:`${firestoreBase()}/commercePayments/${String(order.fields.paymentId||'')}`,fields:fields({status:'refunded',refundedAt:nowIso(),updatedAt:nowIso()})}},{create:{name:`${firestoreBase()}/creatorRevenue/${ledgerId}`,fields:fields({creatorId:String(order.fields.creatorId||''),orderId,transactionId:refundId,gross:0,discounts:0,tax:0,paymentFees:0,platformFee:0,refundAmount:Number(order.fields.total||0),netCreatorAmount:-Number(order.fields.total||0),type:'refund',status:'posted',currency:String(order.fields.currency||'INR'),createdAt:nowIso()})}},{create:{name:`${firestoreBase()}/commerceAuditLogs/${crypto.randomUUID()}`,fields:fields({actorId:uid,actorType:'customer',targetType:'order',targetId:orderId,event:'refundCompleted',timestamp:nowIso(),metadata:{refundId}})}},{create:{name:`${firestoreBase()}/commerceIdempotency/${eventId}`,fields:fields({userId:uid,orderId,refundId,createdAt:nowIso()})}},{create:{name:`${firestoreBase()}/users/${uid}/notifications/commerce_${crypto.randomUUID()}`,fields:fields({type:'commerce_refund',actorId:uid,actorUsername:'',actorName:'OFFSCRPT Commerce',actorAvatar:'',message:'Your test refund was completed.',targetType:'commerce_order',targetId:orderId,read:false,createdAt:nowIso()})}}]; if(ent){writes.push({update:{name:`${firestoreBase()}/entitlements/${eid}`,fields:fields({status:'refunded',revokedAt:nowIso()})}});} await fsCommit(token,writes); return {refundId,status:'completed',orderStatus:'refunded',entitlementStatus:ent?'refunded':undefined};
 }
 
+async function commerceDiagnostics(token:string,uid:string){
+  if(!(await verifyCommerceAdmin(token,uid))) throw new Error('Administrator access required.');
+  const names=['commerceProducts','commercePrices','commerceOrders','commercePayments','commerceRefunds','entitlements','creatorRevenue','creatorPayouts','commerceAuditLogs','commerceWebhookEvents'];
+  const entries=await Promise.all(names.map(async name=>{try{return [name,await fsCount(token,name),null] as const;}catch(error:any){return [name,null,String(error?.message||'Count failed')] as const;}}));
+  return {generatedAt:nowIso(),counts:Object.fromEntries(entries.map(([name,count])=>[name,count??0])),errors:Object.fromEntries(entries.filter(([,count,error])=>count===null).map(([name,,error])=>[name,error]))};
+}
+
 export default async function handler(req:VercelRequest,res:VercelResponse){
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
-  try{const uid=await verifyFirebaseToken(authHeader(req)), token=await serviceToken(), action=String(req.query.action||'').trim(); const body:any=req.body||{}; let out:any; if(action==='createProduct')out=await createProduct(token,uid,body); else if(action==='createPrice')out=await createPrice(token,uid,body); else if(action==='setProductStatus')out=await setProductStatus(token,uid,body); else if(action==='createCheckout')out=await createCheckout(token,uid,body); else if(action==='confirmTestPayment')out=await confirmTestPayment(token,uid,body); else if(action==='refundTestPayment')out=await refundTest(token,uid,body); else if(action==='checkAccess')out=await checkAccess(token,uid,body); else return res.status(400).json({error:'Unknown commerce action.'}); return res.status(200).json(out);}catch(e:any){return res.status(400).json({error:e?.message||'Commerce request failed.'});}
+  try{const uid=await verifyFirebaseToken(authHeader(req)), token=await serviceToken(), action=String(req.query.action||'').trim(); const body:any=req.body||{}; let out:any; if(action==='createProduct')out=await createProduct(token,uid,body); else if(action==='createPrice')out=await createPrice(token,uid,body); else if(action==='setProductStatus')out=await setProductStatus(token,uid,body); else if(action==='createCheckout')out=await createCheckout(token,uid,body); else if(action==='confirmTestPayment')out=await confirmTestPayment(token,uid,body); else if(action==='refundTestPayment')out=await refundTest(token,uid,body); else if(action==='checkAccess')out=await checkAccess(token,uid,body); else if(action==='diagnostics')out=await commerceDiagnostics(token,uid); else return res.status(400).json({error:'Unknown commerce action.'}); return res.status(200).json(out);}catch(e:any){return res.status(400).json({error:e?.message||'Commerce request failed.'});}
 }

@@ -1,0 +1,22 @@
+OFFSCRPT V86.0.2 — BUILD VALIDATION
+
+TEST | STATUS | REASON
+SOURCE: corrected Commit create/update encoding | PASSED | New Firestore documents are encoded as update writes with exists=false; partial updates receive updateMask.
+SOURCE: no active src/firestore.rules | PASSED | Canonical root firestore.rules only.
+SOURCE: Commerce API static audit | PASSED | Expected commerce handlers and server-authoritative paths present. Commit normalization and diagnostics endpoint checked.
+SOURCE: Client composite-query hardening | PASSED | Current Commerce foundation listing queries avoid orderBy composite-index dependency; bounded client-side sorting is used.
+SOURCE: Admin diagnostics hardening | PASSED | Commerce admin counters use server-authoritative diagnostics endpoint; browser aggregate permission errors removed.
+SOURCE: Firestore rules source | PASSED | Commerce and existing security rule blocks present; syntax must still be deployed/verified against live project.
+SOURCE: Firestore indexes source | PASSED | Existing commerce and previously required indexes remain in firestore.indexes.json.
+SOURCE: Existing V85 feature preservation | PASSED | V86.0.2 patch is limited to commerce infrastructure/query handling/admin diagnostics.
+SOURCE: TypeScript dependency-backed typecheck | BLOCKED | node_modules are not included in the release workspace; dependency installation/build verification requires network/package install in the user's environment.
+SOURCE: Vite production build | BLOCKED | Same dependency-install limitation.
+LIVE: Firebase rules deployed and READY | BLOCKED | Requires access to the target Firebase project after deployment.
+LIVE: Firebase indexes deployed and READY | BLOCKED | Requires access to the target Firebase project after deployment.
+LIVE: Vercel createProduct end-to-end | BLOCKED | Requires deployment of V86.0.2 and the configured production service-account environment.
+LIVE: Test purchase/refund end-to-end | BLOCKED | Requires deployment and live browser/Firebase execution.
+
+SOURCE: TypeScript syntax parser | PASSED | 124 active TS/TSX files parsed with TypeScript 5.8.3.
+SOURCE: Export parser | PASSED | 124 active source files scanned.
+SOURCE: Identifier parser | PASSED | 124 active source files scanned.
+SOURCE: Runtime pattern scan | PASSED | 124 active source files scanned.

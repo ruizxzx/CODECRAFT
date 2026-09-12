@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Activity, CircleDollarSign, Database, RefreshCw, ShieldCheck } from 'lucide-react';
-import { collection, getCountFromServer } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 import { notifyToast } from '../lib/toast';
 
 const collections = [
@@ -16,10 +15,16 @@ export const CommerceAdminPanel: React.FC = () => {
   const refresh=useCallback(async()=>{
     setLoading(true);
     try{
-      const results=await Promise.allSettled(collections.map(([name])=>getCountFromServer(collection(db,name))));
-      const next:Record<string,number>={}; results.forEach((r,i)=>{if(r.status==='fulfilled')next[collections[i][0]]=r.value.data().count;});
-      setCounts(next); if(results.some(r=>r.status==='rejected'))notifyToast('Some commerce counters could not be loaded.','error');
-    }finally{setLoading(false);}
+      const user=auth.currentUser;
+      if(!user) throw new Error('Sign in required.');
+      const token=await user.getIdToken();
+      const response=await fetch('/api/commerce?action=diagnostics',{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:'{}'});
+      const payload:any=await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error(String(payload?.error||'Commerce diagnostics unavailable.'));
+      setCounts(payload.counts||{});
+      if(payload.errors && Object.keys(payload.errors).length) notifyToast('Some commerce diagnostics could not be loaded.','error');
+    }catch(e:any){ notifyToast(e?.message||'Commerce diagnostics unavailable.','error'); }
+    finally{setLoading(false);}
   },[]);
   useEffect(()=>{void refresh();},[refresh]);
   const cards=collections.map(([name,label])=>({name,label,value:counts[name] ?? 0}));
