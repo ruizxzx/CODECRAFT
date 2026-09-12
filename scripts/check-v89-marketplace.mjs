@@ -9,8 +9,8 @@ const pass = (msg) => console.log(`PASS: ${msg}`);
 let failures = 0;
 
 const pkg = JSON.parse(read('package.json'));
-if (pkg.version !== '0.89.0') fail(`package.json version is ${pkg.version}, expected 0.89.0`); else pass('package version 0.89.0');
-if (read('VERSION.md').trim() !== 'V89.0.0') fail('VERSION.md is not V89.0.0'); else pass('VERSION.md V89.0.0');
+if (pkg.version !== '0.89.1') fail(`package.json version is ${pkg.version}, expected 0.89.1`); else pass('package version 0.89.1');
+if (read('VERSION.md').trim() !== 'V89.0.1') fail('VERSION.md is not V89.0.1'); else pass('VERSION.md V89.0.1');
 
 for (const rel of [
   'src/components/MarketplaceView.tsx',
@@ -21,8 +21,9 @@ for (const rel of [
   'src/lib/marketplace.ts',
   'scripts/check-v89-marketplace.mjs',
   'V89.0.0_MARKETPLACE_BUYER_EXPERIENCE.md',
-  'V89.0.0_RELEASE.md',
-  'BUILD_VALIDATION_V89.0.0.txt',
+  'V89.0.1_MARKETPLACE_INDEX_HOTFIX.md',
+  'V89.0.1_RELEASE.md',
+  'BUILD_VALIDATION_V89.0.1.txt',
 ]) if (!exists(rel)) fail(`missing required V89 file: ${rel}`); else pass(`required file present: ${rel}`);
 
 const app = read('src/App.tsx');
@@ -61,6 +62,8 @@ for (const marker of ['category?: string','tags?: string[]','whatIsIncluded?: st
 }
 
 const api = read('api/commerce/index.ts');
+if (!api.includes("fsRunQueryAdvanced(token,'commerceProducts',[fsFilter('status','EQUAL',{stringValue:'active'})]")) fail('marketplace does not use the index-light active-product query'); else pass('marketplace uses index-light active-product query');
+if (!api.includes("orderBy:[{fieldPath:'__name__',direction:'ASCENDING'}]")) fail('marketplace active query lacks deterministic bounded ordering'); else pass('marketplace active query uses deterministic document ordering');
 for (const marker of ['publicProductProjection','status','visibility','marketplaceList','marketplaceHome','marketplaceByIds']) {
   if (!api.includes(marker)) fail(`commerce API missing ${marker}`);
 }

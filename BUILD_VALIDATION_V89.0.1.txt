@@ -1,0 +1,13 @@
+OFFSCRPT V89.0.1 — Marketplace Index Hotfix Validation
+
+Scope: Firestore marketplace read-path hotfix for production FAILED_PRECONDITION index errors.
+
+Implemented:
+- Bounded commerceProducts marketplace query using status == active + deterministic __name__ ordering.
+- Server-side visibility == public enforcement.
+- Server-side category/subcategory/type/creator filtering.
+- Retained prior marketplace composite index declaration.
+- Added collection-group compatibility index declaration.
+- Version bumped to 0.89.1 / V89.0.1.
+- No /api/lib directory reintroduced.
+- No browser exposure of R2 secret environment variables.

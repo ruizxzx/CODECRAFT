@@ -206,10 +206,14 @@ function marketplaceTrendScore(p:any){
 
 async function loadPublicMarketplaceProducts(token:string, filters:any = {}){
   const category=String(filters.category||'').trim(); const subcategory=String(filters.subcategory||'').trim(); const type=String(filters.type||'').trim(); const creatorId=String(filters.creatorId||'').trim();
-  const queryFilters=[fsFilter('status','EQUAL',{stringValue:'active'}),fsFilter('visibility','EQUAL',{stringValue:'public'})];
-  if(creatorId) queryFilters.push(fsFilter('creatorId','EQUAL',{stringValue:creatorId}));
-  const rows=await fsRunQueryAdvanced(token,'commerceProducts',queryFilters,{orderBy:[{fieldPath:'publishedAt',direction:'DESCENDING'}],limit:250});
-  let products=rows.map(x=>publicProductProjection({id:x.name.split('/').pop(),...x.fields}));
+  // Keep the discovery query index-light: only the canonical active-status equality is sent to Firestore.
+  // Visibility and secondary marketplace filters are enforced on the server after retrieval, while
+  // ordering by document name provides a bounded, deterministic query without requiring a
+  // status+visibility+publishedAt composite index to be present in every environment.
+  const rows=await fsRunQueryAdvanced(token,'commerceProducts',[fsFilter('status','EQUAL',{stringValue:'active'})],{orderBy:[{fieldPath:'__name__',direction:'ASCENDING'}],limit:300});
+  let products=rows.map(x=>publicProductProjection({id:x.name.split('/').pop(),...x.fields}))
+    .filter(p=>String(p.visibility||'').toLowerCase()==='public');
+  if(creatorId) products=products.filter(p=>String(p.creatorId||'')===creatorId);
   if(category) products=products.filter(p=>String(p.category||'').toLowerCase()===category.toLowerCase());
   if(subcategory) products=products.filter(p=>String(p.subcategory||'').toLowerCase()===subcategory.toLowerCase());
   if(type) products=products.filter(p=>String(p.type||'').toLowerCase()===type.toLowerCase());
