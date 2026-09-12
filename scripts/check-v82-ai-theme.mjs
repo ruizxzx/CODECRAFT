@@ -7,7 +7,7 @@ const required = [
   ['src/App.tsx', 'applyAIThemeToDocument'],
   ['src/index.css', '--ai-primary'],
   ['src/components/AdminControlPanel.tsx', 'AI CONTROL · APPEARANCE'],
-  ['src/firestore.rules', 'isValidAITheme'],
+  ['firestore.rules', 'isValidAITheme'],
 ];
 for (const [file, needle] of required) {
   const text = fs.readFileSync(path.resolve(file), 'utf8');

@@ -6,7 +6,7 @@ const required=[
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){console.error('V80 missing:',missing.join(', '));process.exit(1);}
-const rules=fs.readFileSync(path.join(root,'src/firestore.rules'),'utf8');
+const rules=fs.readFileSync(path.join(root,'firestore.rules'),'utf8');
 for(const marker of ['activityEvents','indexSyncQueue','contentRelationships','intelligenceConfig']) if(!rules.includes(marker)){console.error('V80 Firestore rule marker missing:',marker);process.exit(1);}
 const gateway=fs.readFileSync(path.join(root,'api/ai/gateway.ts'),'utf8');
 if(!gateway.includes('retrieveOffscrpt') || !gateway.includes('SERVER-VERIFIED OFFSCRPT RETRIEVAL')){console.error('V80 AI retrieval gateway integration missing');process.exit(1);}

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 const rec=fs.readFileSync('src/lib/recommendations.ts','utf8');
 const component=fs.readFileSync('src/components/PersonalizedHomeSections.tsx','utf8');
 const series=fs.readFileSync('src/lib/series.ts','utf8');
-const rules=fs.readFileSync('src/firestore.rules','utf8');
+const rules=fs.readFileSync('firestore.rules','utf8');
 const required=[
   ['reading history',rec.includes("'history'"),],
   ['search behavior',rec.includes("'searches'"),],
