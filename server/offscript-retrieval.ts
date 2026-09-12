@@ -20,11 +20,11 @@ function fromValue(v: any): any {
   return v;
 }
 
-function decodeDocument(doc: any) {
+function decodeDocument(doc: any): Record<string, any> {
   const fields = Object.fromEntries(Object.entries(doc.fields || {}).map(([k, v]) => [k, fromValue(v)]));
   const path = String(doc.name || '').split('/documents/')[1] || '';
   const pieces = path.split('/');
-  return { id: pieces.at(-1) || '', path, ...fields };
+  return { id: pieces.at(-1) || '', path, ...fields } as Record<string, any>;
 }
 
 async function firestoreRequest(token: string, url: string, init: RequestInit = {}) {
@@ -162,8 +162,9 @@ export async function retrieveOffscrpt(token: string, request: RetrievalRequest)
       fetched.forEach(item => { if (item) rows.push(item.row); });
       // If the external index cannot resolve any source documents, use the safe Firestore lexical fallback.
       if (!rows.length) semanticMatches = [];
-    } catch (error) {
-      console.warn('OFFSCRPT semantic retrieval unavailable; using lexical fallback:', error?.message || error);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('OFFSCRPT semantic retrieval unavailable; using lexical fallback:', message);
       semanticMatches = [];
     }
   }

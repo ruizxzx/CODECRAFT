@@ -1,0 +1,19 @@
+OFFSCRPT V88.0.2 — VERCEL DEPLOYMENT HARDENING VALIDATION
+
+PASS:
+- 9 active files under api/ (below the 12-function Hobby limit shown in the Vercel failure).
+- No api/lib directory in the build package.
+- .vercelignore excludes api/lib/** as defense against stale tracked files in an existing Git repository.
+- R2 presigned URL uses input.expiresIn; no free expiresIn identifier remains.
+- decodeDocument returns Record<string, any>, fixing intelligence flag property typing.
+- semantic retrieval catch block uses safe Error narrowing.
+- package.json and package-lock.json both version 0.88.2.
+- TypeScript parser check: 139 TS/TSX files, 0 parse diagnostics.
+- Existing deployment/commerce/V87/V88/runtime/Firebase/rules/schema checks pass.
+
+NOT CLAIMED:
+- A full npm/Vercel production build was not executed in this offline build environment.
+- A live Firebase/R2/Vercel integration test was not executed here.
+
+CRITICAL DEPLOYMENT NOTE:
+The previous Vercel log referenced api/lib/digital-products-server.ts and api/lib/offscript-retrieval.ts, proving the GitHub repository still contained stale helper files after the previous V88.0.1 update. Those files must be removed from the repository permanently. V88.0.2 also contains .vercelignore api/lib/** so they cannot be included in the Vercel deployment while cleanup is pending.

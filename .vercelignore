@@ -1,0 +1,8 @@
+# V88 server helpers must never be deployed as API routes.
+# This also protects Git-based deployments if an older checkout still contains them.
+api/lib/**
+
+# Local/build artifacts
+node_modules/**
+dist/**
+coverage/**
