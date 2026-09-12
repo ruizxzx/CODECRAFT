@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 const source = fs.readFileSync('src/lib/community.ts','utf8');
 const admin = fs.readFileSync('src/components/AdminControlPanel.tsx','utf8');
-const rules = fs.readFileSync('src/firestore.rules','utf8');
+const rules = fs.readFileSync('firestore.rules','utf8');
 const required = [
   "runTransaction(db",
   "syncUserIdentityAcrossContent",

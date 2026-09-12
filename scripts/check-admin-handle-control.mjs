@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 const master=fs.readFileSync('src/lib/masterControl.ts','utf8');
 const panel=fs.readFileSync('src/components/AdminControlPanel.tsx','utf8');
-const rules=fs.readFileSync('src/firestore.rules','utf8');
+const rules=fs.readFileSync('firestore.rules','utf8');
 const checks=[
   [master.includes('changeUserHandleAsMaster'), 'master handle-change helper missing'],
   [master.includes('runTransaction(db'), 'master handle change is not transactional'],

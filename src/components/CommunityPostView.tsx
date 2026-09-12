@@ -42,6 +42,7 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   const [localSaved, setLocalSaved] = useState(false);
   const [isReposted, setIsReposted] = useState(false);
   const [isReposting, setIsReposting] = useState(false);
+  const [isVoting, setIsVoting] = useState(false);
   const [isModerator, setIsModerator] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -131,18 +132,18 @@ export const CommunityPostView: React.FC<CommunityPostViewProps> = ({
   };
 
   const handleVote = async (voteType: 'up' | 'down') => {
-    if (!userAuth) {
-      await loginWithGoogle();
-      return;
-    }
+    if (isVoting) return;
+    if (!userAuth) { await loginWithGoogle(); return; }
     if (!post) return;
+    setIsVoting(true);
     try {
       const res = await toggleVote(postId, userAuth.uid, post.upvotesCount, post.downvotesCount, voteType, vote);
       setVote(res.vote);
-      setPost({ ...post, upvotesCount: res.upvotesCount, downvotesCount: res.downvotesCount });
-    } catch (e) {
-      console.error(e);
-    }
+      setPost(current => current ? { ...current, upvotesCount: res.upvotesCount, downvotesCount: res.downvotesCount } : current);
+    } catch (e:any) {
+      console.error('Failed to update vote:', e);
+      notifyToast('Failed to update vote: ' + (e?.message || 'Permission denied'));
+    } finally { setIsVoting(false); }
   };
 
   const handleToggleRepost = async () => {

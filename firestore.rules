@@ -452,7 +452,12 @@ service cloud.firestore {
           && invitationId == incoming().inviteeId
           && incoming().communityId == communityId
           && incoming().inviteeId is string
+          && incoming().inviteeUsername is string
           && incoming().inviterId == request.auth.uid
+          && incoming().inviterUsername is string
+          && exists(/databases/$(database)/documents/usernames/$(incoming().inviteeUsername))
+          && get(/databases/$(database)/documents/usernames/$(incoming().inviteeUsername)).data.uid == incoming().inviteeId
+          && !userBlocked(incoming().inviteeId)
           && incoming().status == 'pending'
           && incoming().createdAt is timestamp && incoming().updatedAt is timestamp;
         allow update: if isSignedIn() && (
@@ -521,6 +526,30 @@ service cloud.firestore {
             (incoming().get('editReviewStatus', '') == 'pending' && incoming().get('editReviewRequestedAt', null) is timestamp && incoming().get('editReviewedAt', null) == null && incoming().get('editReviewedBy', null) == null)
           ))
           || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName','authorAvatar','authorUsername','isVerified','verificationColor','updatedAt']))
+          || (userMayReact(request.auth.uid) && communityMember(communityId)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount','downvotesCount','updatedAt'])
+              && incoming().updatedAt is timestamp
+              && (
+                (getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).exists()
+                  && (!exists(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid))
+                    || get(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).data.get('type','') != getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).data.get('type',''))
+                  && getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).data.uid == request.auth.uid
+                  && ((getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).data.type == 'up'
+                    && incoming().upvotesCount == existing().upvotesCount + 1
+                    && (incoming().downvotesCount == existing().downvotesCount || incoming().downvotesCount == existing().downvotesCount - 1))
+                    || (getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).data.type == 'down'
+                    && incoming().downvotesCount == existing().downvotesCount + 1
+                    && (incoming().upvotesCount == existing().upvotesCount || incoming().upvotesCount == existing().upvotesCount - 1))))
+                || (!getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).exists()
+                  && exists(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid))
+                  && get(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).data.uid == request.auth.uid
+                  && ((get(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).data.type == 'up'
+                    && incoming().upvotesCount == existing().upvotesCount - 1
+                    && incoming().downvotesCount == existing().downvotesCount)
+                    || (get(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/votes/$(request.auth.uid)).data.type == 'down'
+                    && incoming().downvotesCount == existing().downvotesCount - 1
+                    && incoming().upvotesCount == existing().upvotesCount)))
+              ))
         );
         allow update: if isSignedIn()
           && incoming().diff(existing()).affectedKeys().hasOnly(['poll','updatedAt'])
@@ -532,6 +561,16 @@ service cloud.firestore {
           && incoming().get('viewsCount', 0) == existing().get('viewsCount', 0) + 1
           && incoming().updatedAt is timestamp
           && (!isSignedIn() || userMayWrite(request.auth.uid));
+        allow update: if userMayReact(request.auth.uid)
+          && communityMember(communityId)
+          && incoming().diff(existing()).affectedKeys().hasOnly(['repostsCount','updatedAt'])
+          && incoming().updatedAt is timestamp
+          && ((getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/reposts/$(request.auth.uid)).exists()
+              && !exists(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/reposts/$(request.auth.uid))
+              && incoming().get('repostsCount',0) == existing().get('repostsCount',0) + 1)
+            || (!getAfter(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/reposts/$(request.auth.uid)).exists()
+              && exists(/databases/$(database)/documents/communities/$(communityId)/posts/$(postId)/reposts/$(request.auth.uid))
+              && incoming().get('repostsCount',0) == existing().get('repostsCount',0) - 1));
         allow delete: if isSignedIn() && (isAdmin() || hasModeratorPermission('moderatePosts') || isCommunityModerator(communityId) || request.auth.uid == existing().authorId);
         match /views/{viewId} {
           allow read: if isAdmin();
@@ -544,6 +583,11 @@ service cloud.firestore {
         match /votes/{userId} {
           allow read: if true;
           allow create, update: if isSignedIn() && request.auth.uid == userId && incoming().uid == request.auth.uid && incoming().type in ['up','down'];
+          allow delete: if isSignedIn() && (request.auth.uid == userId || isStaff() || isCommunityModerator(communityId));
+        }
+        match /reposts/{userId} {
+          allow read: if true;
+          allow create: if userMayReact(request.auth.uid) && request.auth.uid == userId && incoming().userId == request.auth.uid;
           allow delete: if isSignedIn() && (request.auth.uid == userId || isStaff() || isCommunityModerator(communityId));
         }
         match /followers/{userId} {
@@ -1010,9 +1054,42 @@ service cloud.firestore {
           || (request.auth.uid == existing().authorId && incoming().diff(existing()).affectedKeys().hasOnly(['authorName', 'authorAvatar', 'authorUsername', 'isVerified', 'verificationColor', 'updatedAt']))
           || (incoming().diff(existing()).affectedKeys().hasOnly(['viewsCount','updatedAt'])
               && incoming().get('viewsCount', 0) == existing().get('viewsCount', 0) + 1)
-          || (incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt']))
-          || (incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt']) && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
-          || (incoming().diff(existing()).affectedKeys().hasOnly(['repostsCount', 'updatedAt']))
+          || (userMayReact(request.auth.uid)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['upvotesCount', 'downvotesCount', 'updatedAt'])
+              && incoming().updatedAt == request.time
+              && (
+                (getAfter(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).exists()
+                  && (!exists(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid))
+                    || get(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).data.get('type','') != getAfter(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).data.get('type',''))
+                  && getAfter(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).data.uid == request.auth.uid
+                  && ((getAfter(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).data.type == 'up'
+                    && incoming().upvotesCount == existing().upvotesCount + 1
+                    && (incoming().downvotesCount == existing().downvotesCount || incoming().downvotesCount == existing().downvotesCount - 1))
+                    || (getAfter(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).data.type == 'down'
+                    && incoming().downvotesCount == existing().downvotesCount + 1
+                    && (incoming().upvotesCount == existing().upvotesCount || incoming().upvotesCount == existing().upvotesCount - 1))))
+                || (!getAfter(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).exists()
+                  && exists(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid))
+                  && get(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).data.uid == request.auth.uid
+                  && ((get(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).data.type == 'up'
+                    && incoming().upvotesCount == existing().upvotesCount - 1
+                    && incoming().downvotesCount == existing().downvotesCount)
+                    || (get(/databases/$(database)/documents/posts/$(postId)/votes/$(request.auth.uid)).data.type == 'down'
+                    && incoming().downvotesCount == existing().downvotesCount - 1
+                    && incoming().upvotesCount == existing().upvotesCount)))
+              ))
+          || (userMayReact(request.auth.uid)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['commentsCount', 'updatedAt'])
+              && (incoming().commentsCount == existing().commentsCount + 1 || incoming().commentsCount == existing().commentsCount - 1))
+          || (userMayReact(request.auth.uid)
+              && incoming().diff(existing()).affectedKeys().hasOnly(['repostsCount', 'updatedAt'])
+              && incoming().updatedAt == request.time
+              && ((getAfter(/databases/$(database)/documents/posts/$(postId)/reposts/$(request.auth.uid)).exists()
+                  && !exists(/databases/$(database)/documents/posts/$(postId)/reposts/$(request.auth.uid))
+                  && incoming().repostsCount == existing().get('repostsCount',0) + 1)
+                || (!getAfter(/databases/$(database)/documents/posts/$(postId)/reposts/$(request.auth.uid)).exists()
+                  && exists(/databases/$(database)/documents/posts/$(postId)/reposts/$(request.auth.uid))
+                  && incoming().repostsCount == existing().get('repostsCount',0) - 1)))
         ));
       // Poll voting is an atomic user-scoped write: the vote document must be
       // created/updated in the same batch as the post counter update.

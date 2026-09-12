@@ -1543,46 +1543,59 @@ export async function blockUser(uid: string, isBlocked: boolean) {
 }
 
 export async function toggleVote(postId: string, userId: string, currentUpvotes: number, currentDownvotes: number, voteType: 'up' | 'down', currentVote: 'up' | 'down' | null) {
+  void currentUpvotes; void currentDownvotes; void currentVote;
   const p = `posts/${postId}/votes/${userId}`;
   try {
+    if (!userId || auth.currentUser?.uid !== userId) throw new Error('Authentication required.');
     const postRef = await resolvePostLocation(postId);
     if (!postRef) throw new Error('Post no longer exists.');
-    const batch = writeBatch(db);
-    const voteRef = doc(postRef, 'votes', userId);
-    const upvoteRef = doc(db, 'users', userId, 'upvotes', postId);
-    if (currentVote === voteType) {
-      batch.delete(voteRef);
-      batch.update(postRef, { [voteType === 'up' ? 'upvotesCount' : 'downvotesCount']: increment(-1), updatedAt: serverTimestamp() });
-      if (voteType === 'up') batch.delete(upvoteRef);
-    } else {
-      const updates:any = { updatedAt: serverTimestamp() };
-      if (currentVote === 'up') updates.upvotesCount = increment(-1);
-      if (currentVote === 'down') updates.downvotesCount = increment(-1);
-      if (voteType === 'up') { updates.upvotesCount = currentVote === 'up' ? updates.upvotesCount : increment(1); batch.set(upvoteRef, { postId, createdAt: serverTimestamp() }); }
-      else { updates.downvotesCount = increment(1); batch.delete(upvoteRef); }
-      batch.set(voteRef, { postId, userId, type: voteType, createdAt: serverTimestamp() });
-      batch.update(postRef, updates);
-    }
-    await batch.commit();
-    if (voteType === 'up' && currentVote !== 'up') {
+    let nextVote: 'up' | 'down' | null = null;
+    let nextUpvotes = 0;
+    let nextDownvotes = 0;
+    await runTransaction(db, async tx => {
+      const postSnap = await tx.get(postRef);
+      const voteRef = doc(postRef, 'votes', userId);
+      const voteSnap = await tx.get(voteRef);
+      if (!postSnap.exists()) throw new Error('Post no longer exists.');
+      const existingVote = voteSnap.exists() ? String(voteSnap.data()?.type || '') as 'up' | 'down' : null;
+      const up = Math.max(0, Number(postSnap.data()?.upvotesCount ?? postSnap.data()?.score ?? 0));
+      const down = Math.max(0, Number(postSnap.data()?.downvotesCount || 0));
+      nextUpvotes = up; nextDownvotes = down;
+      if (existingVote === voteType) {
+        tx.delete(voteRef);
+        if (existingVote === 'up') nextUpvotes = Math.max(0, up - 1);
+        else nextDownvotes = Math.max(0, down - 1);
+        nextVote = null;
+        if (existingVote === 'up') tx.delete(doc(db, 'users', userId, 'upvotes', postId));
+      } else {
+        tx.set(voteRef, { postId, userId, uid: userId, type: voteType, createdAt: voteSnap.exists() ? (voteSnap.data()?.createdAt || serverTimestamp()) : serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+        if (existingVote === 'up') nextUpvotes = Math.max(0, up - 1);
+        if (existingVote === 'down') nextDownvotes = Math.max(0, down - 1);
+        if (voteType === 'up') {
+          nextUpvotes += 1;
+          tx.set(doc(db, 'users', userId, 'upvotes', postId), { postId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
+        } else {
+          nextDownvotes += 1;
+          tx.delete(doc(db, 'users', userId, 'upvotes', postId));
+        }
+        nextVote = voteType;
+      }
+      tx.update(postRef, { upvotesCount: nextUpvotes, downvotesCount: nextDownvotes, updatedAt: serverTimestamp() });
+    });
+    if (nextVote === 'up') {
       try { const post = await getPost(postId); const actor = await getCommunityProfile(userId); if (post && actor) await createNotification(post.authorId, { type: 'upvote', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'upvoted your post', targetType: 'post', targetId: postId }); } catch (notificationError) { console.warn('Upvote notification failed:', notificationError); }
     }
-    return {
-      vote: currentVote === voteType ? null : voteType,
-      upvotesCount: Math.max(0, currentUpvotes + ((currentVote === 'up' ? -1 : 0) + (currentVote !== 'up' && voteType === 'up' ? 1 : 0))),
-      downvotesCount: Math.max(0, currentDownvotes + ((currentVote === 'down' ? -1 : 0) + (currentVote !== 'down' && voteType === 'down' ? 1 : 0)))
-    };
+    return { vote: nextVote, upvotesCount: nextUpvotes, downvotesCount: nextDownvotes };
   } catch (error) { handleFirestoreError(error, OperationType.WRITE, p); throw error; }
 }
 
 export async function getUserVote(postId: string, userId: string): Promise<'up' | 'down' | null> {
   const p = `posts/${postId}/votes/${userId}`;
   try {
-    const snap = await getDoc(doc(db, 'posts', postId, 'votes', userId));
-    if (snap.exists()) {
-      return snap.data().type as 'up' | 'down';
-    }
-    return null;
+    const postRef = await resolvePostLocation(postId);
+    if (!postRef) return null;
+    const snap = await getDoc(doc(postRef, 'votes', userId));
+    return snap.exists() ? (snap.data()?.type as 'up' | 'down') : null;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, p);
     return null;
@@ -1877,24 +1890,33 @@ export async function getUserComments(userId: string, username?: string): Promis
 }
 
 export async function toggleRepost(postId: string, userId: string, isReposted: boolean): Promise<boolean> {
+  void isReposted;
+  if (!userId || auth.currentUser?.uid !== userId) throw new Error('Authentication required.');
   const postRef = await resolvePostLocation(postId);
   if (!postRef) throw new Error('Post no longer exists.');
-  const batch = writeBatch(db);
-  const repostRef = doc(db, 'users', userId, 'reposts', postId);
-  const reverseRef = doc(postRef, 'reposts', userId);
-  if (isReposted) {
-    batch.delete(repostRef); batch.delete(reverseRef);
-    batch.update(postRef, { repostsCount: increment(-1), updatedAt: serverTimestamp() });
-  } else {
-    const post = await getPost(postId);
-    if (!post) throw new Error('Post no longer exists.');
-    batch.set(repostRef, { postId, title: post.title, authorId: post.authorId, authorUsername: post.authorUsername, createdAt: serverTimestamp() });
-    batch.set(reverseRef, { userId, createdAt: serverTimestamp() });
-    batch.update(postRef, { repostsCount: increment(1), updatedAt: serverTimestamp() });
-  }
-  await batch.commit();
-  if (!isReposted) { try { const actor = await getCommunityProfile(userId); const target = await getPost(postId); if (actor && target) await createNotification(target.authorId, { type: 'repost', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'reposted your post', targetType: 'post', targetId: postId }); } catch (e) { console.warn('Repost notification failed:', e); } }
-  return !isReposted;
+  let next = false;
+  await runTransaction(db, async tx => {
+    const postSnap = await tx.get(postRef);
+    const repostRef = doc(db, 'users', userId, 'reposts', postId);
+    const reverseRef = doc(postRef, 'reposts', userId);
+    const personal = await tx.get(repostRef);
+    const reverse = await tx.get(reverseRef);
+    if (!postSnap.exists()) throw new Error('Post no longer exists.');
+    const currently = personal.exists() || reverse.exists();
+    next = !currently;
+    const count = Math.max(0, Number(postSnap.data()?.repostsCount || 0));
+    if (currently) {
+      tx.delete(repostRef); tx.delete(reverseRef);
+      tx.update(postRef, { repostsCount: Math.max(0, count - 1), updatedAt: serverTimestamp() });
+    } else {
+      const post = postSnap.data() as any;
+      tx.set(repostRef, { postId, title: post.title || '', authorId: post.authorId || '', authorUsername: post.authorUsername || '', createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      tx.set(reverseRef, { userId, createdAt: serverTimestamp() });
+      tx.update(postRef, { repostsCount: count + 1, updatedAt: serverTimestamp() });
+    }
+  });
+  if (next) { try { const actor = await getCommunityProfile(userId); const target = await getPost(postId); if (actor && target) await createNotification(target.authorId, { type: 'repost', actorId: actor.uid, actorUsername: actor.username, actorName: actor.displayName, actorAvatar: actor.photoURL || '', message: 'reposted your post', targetType: 'post', targetId: postId }); } catch (e) { console.warn('Repost notification failed:', e); } }
+  return next;
 }
 
 export async function quoteRepost(postId: string, user: CommunityUser, quoteText: string): Promise<CommunityPost> {

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 const community=fs.readFileSync('src/lib/community.ts','utf8');
-const rules=fs.readFileSync('src/firestore.rules','utf8');
+const rules=fs.readFileSync('firestore.rules','utf8');
 const prefs=fs.readFileSync('src/components/PreferencesView.tsx','utf8');
 const profile=fs.readFileSync('src/components/CommunityProfileView.tsx','utf8');
 const admin=fs.readFileSync('src/components/AdminControlPanel.tsx','utf8');

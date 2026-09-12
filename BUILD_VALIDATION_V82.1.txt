@@ -16,7 +16,7 @@ IMPLEMENTED
 - Existing desktop styling is preserved outside the mobile breakpoint.
 
 FIRESTORE
-- src/firestore.rules unchanged from V82.0.0.
+- firestore.rules unchanged from V82.0.0.
 - firestore.indexes.json unchanged from V82.0.0.
 - firebase.json unchanged from V82.0.0.
 - No database migration required.

@@ -7,7 +7,7 @@ beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: 'demo-test',
     firestore: {
-      rules: readFileSync('src/firestore.rules', 'utf8'),
+      rules: readFileSync('firestore.rules', 'utf8'),
     },
   });
 });

@@ -28,7 +28,7 @@ editing anything** — it documents a real failure mode this codebase has hit mo
 - Deployed as a static SPA to **Vercel** (see `vercel.json`)
 
 There is no server component. All reads/writes go directly from the client to Firestore,
-authorized entirely by `src/firestore.rules`. Treat that rules file as a second copy of your
+authorized entirely by `firestore.rules`. Treat that rules file as a second copy of your
 application's authorization logic — a feature isn't done until the rules permit exactly the
 read/write shape the client code actually sends.
 
@@ -73,14 +73,14 @@ sanity, Firestore rules structure, schema presence, and runtime-pattern checks. 
 checks are also available separately (`npm run check:identifiers`, `npm run check:rules`,
 etc. — see `scripts/`).
 
-If you change `src/firestore.rules`, also run the actual rules simulator:
+If you change `firestore.rules`, also run the actual rules simulator:
 
 ```bash
 npm test   # or: npx vitest run firestore.rules.test.ts
 ```
 
 This spins up the Firestore emulator's rules engine (`@firebase/rules-unit-testing`) and
-asserts real allow/deny behavior against `src/firestore.rules`, rather than just checking the
+asserts real allow/deny behavior against `firestore.rules`, rather than just checking the
 file contains certain strings.
 
 ### When you add a new Firestore collection
@@ -89,7 +89,7 @@ Three things need to agree, or the write will silently fail (Firestore denies by
 succeed with a shape nothing else expects:
 
 1. The client write (whatever calls `addDoc`/`setDoc`)
-2. `src/firestore.rules` — add a `match` block with a validation function describing the exact
+2. `firestore.rules` — add a `match` block with a validation function describing the exact
    field shape the client sends. Copy the pattern of an existing collection (e.g.
    `runtimeErrors`, `reports`) rather than starting from scratch.
 3. If it's read from an admin/moderator surface, confirm the permission function used
@@ -115,7 +115,7 @@ Required env vars (see `.env.example`): `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_
 `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`. Do not set a
 `VITE_FIREBASE_DATABASE_ID` — this app uses Firestore's default database.
 
-To deploy Firestore security rule changes, publish `src/firestore.rules` via the Firebase
+To deploy Firestore security rule changes, publish `firestore.rules` via the Firebase
 Console (Firestore Database → Rules) or the Firebase CLI. The app will not enforce new
 permissions until this is done — the rules file in the repo is not automatically synced to
 your Firebase project.
