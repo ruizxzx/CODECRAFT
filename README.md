@@ -1,4 +1,4 @@
-## Current release: OFFSCRPT V85.1.1 — Scheduling Deployment Fix
+## Current release: OFFSCRPT V85.1.2 — Full Backend Sync + Runtime Hardening
 
 # OFFSCRPT — V80.0.0 Intelligence Core
 

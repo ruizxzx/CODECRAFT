@@ -57,20 +57,7 @@ function slugifyHeading(value: string): string {
     .replace(/^-|-$/g, '') || 'section';
 }
 
-function renderInlineHighlightText(text:string, highlights:VaultHighlight[], blockId:string){
-  const active=highlights.filter(h=>h.anchorStatus!=='unavailable' && (!h.blockId || h.blockId===blockId) && h.quote);
-  if(!active.length)return <RichText text={text}/>;
-  let value=text;
-  const parts:Array<{text:string;mark?:boolean;id?:string}>=[];
-  const ranges:{start:number;end:number;h:VaultHighlight}[]=[];
-  for(const h of active){const i=value.indexOf(h.quote);if(i>=0)ranges.push({start:i,end:i+h.quote.length,h});}
-  ranges.sort((a,b)=>a.start-b.start);
-  let cursor=0;
-  for(const r of ranges){if(r.start<cursor)continue;if(r.start>cursor)parts.push({text:value.slice(cursor,r.start)});parts.push({text:value.slice(r.start,r.end),mark:true,id:r.h.id});cursor=r.end;}
-  if(cursor<value.length)parts.push({text:value.slice(cursor)});
-  if(!parts.length)return <RichText text={text}/>;
-  return <>{parts.map((part,i)=>part.mark?<mark key={`${part.id}-${i}`} data-vault-highlight-id={part.id} className="bg-[var(--color-primary)] px-0.5 rounded-sm">{part.text}</mark>:<RichText key={i} text={part.text}/>)}</>;
-}
+function renderInlineHighlightText(text:string, highlights:VaultHighlight[], blockId:string){const active=highlights.filter(h=>h.anchorStatus!=='unavailable'&&h.quote&&(!h.blockId||h.blockId===blockId));if(!active.length)return <RichText text={text}/>;const ranges:{start:number;end:number;h:VaultHighlight}[]=[];for(const h of active){let i=-1;if(h.blockId===blockId&&typeof h.startOffset==='number'&&typeof h.endOffset==='number'&&text.slice(h.startOffset,h.endOffset)===h.quote)i=h.startOffset;if(i<0)i=text.indexOf(h.quote);if(i<0&&h.prefix&&h.suffix){const c=text.indexOf(h.prefix+h.quote+h.suffix);if(c>=0)i=c+h.prefix.length;}if(i>=0)ranges.push({start:i,end:i+h.quote.length,h});}ranges.sort((a,b)=>a.start-b.start||b.end-a.end);const parts:Array<{text:string;mark?:boolean;id?:string}>=[];let cursor=0;for(const r of ranges){if(r.start<cursor)continue;if(r.start>cursor)parts.push({text:text.slice(cursor,r.start)});parts.push({text:text.slice(r.start,r.end),mark:true,id:r.h.id});cursor=r.end;}if(cursor<text.length)parts.push({text:text.slice(cursor)});return <>{parts.map((part,i)=>part.mark?<mark key={`${part.id}-${i}`} data-vault-highlight-id={part.id} className="bg-[var(--color-primary)] px-0.5 rounded-sm" title="Saved highlight">{part.text}</mark>:<RichText key={i} text={part.text}/>)}</>;}
 
 function getVideoEmbedUrl(url: string): string | null {
   const value = String(url || '').trim();

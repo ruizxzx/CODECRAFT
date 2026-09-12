@@ -1,0 +1,46 @@
+OFFSCRPT V85.1.2 BUILD VALIDATION
+================================
+
+TEST	STATUS	REASON
+Browser CommonJS scan	PASSED	No require(), module.exports or exports. found in active src TS/TSX source.
+TypeScript/TSX parse scan	PASSED	121 active TS/TSX files parsed by scripts/check-syntax.mjs.
+Identifier scan	PASSED	121 active TS/TSX files passed scripts/check-identifiers.mjs.
+Import scan	PASSED	121 active source files passed scripts/check-imports.mjs.
+Export scan	PASSED	121 active source files passed scripts/check-exports.mjs.
+Runtime pattern scan	PASSED	121 active source files passed scripts/check-runtime-patterns.mjs.
+Firestore rules structural check	PASSED	Rules version/default deny/balancing checks passed.
+Deployment config check	PASSED	Vite and Vercel both target repository-root dist/.
+Path conflict check	PASSED	No duplicate root frontend tree detected.
+Firebase source check	PASSED	Client initialization and root firestore.rules were detected.
+Schema check	PASSED	12 blueprint entities validated.
+Discovery check	PASSED	V85 Discovery Core feature checks passed; historical-doc requirement removed from current-release validation.
+Knowledge Engine check	PASSED	V84 knowledge checks passed.
+V81 navigation/branding check	PASSED	SCRPTS branding, unified AI entry and /#blog compatibility passed.
+Mobile regression static check	PASSED	Current version-independent V83 mobile checks passed.
+V83.1 hardening static check	PASSED	Current version-independent V83.1 checks passed.
+Recommendation checks	PASSED	16 requirements satisfied.
+Identity sync check	PASSED	Identity sync checks passed.
+Public profile check	PASSED	Public profile access checks passed.
+Comments check	PASSED	8 requirements satisfied.
+Site sync check	PASSED	6 requirements satisfied.
+Firestore index source check	PASSED	posts.authorId, answers.authorId and following.uid collection-group indexes are present in firestore.indexes.json.
+Article view receipt rule check	PASSED	Owner-scoped receipt rule exists in both src/firestore.rules and root firestore.rules.
+Community invitation rules	PASSED	Explicit invitation path with recipient/manager transition restrictions is present.
+Community join-request rules	PASSED	Explicit request path and manager/requester transition restrictions are present.
+Community membership enforcement	PASSED	Public, private, invite-only and approval-required membership paths are guarded in source rules.
+Community Wiki/FAQ/resource rules	PASSED	Explicit private/member-aware write rules exist; resource URLs require HTTP(S).
+Vault collection ownership rules	PASSED	Canonical users/{uid}/collections path is owner-scoped.
+Vault collection-item rules	PASSED	Owner-only access plus same-user collection/highlight/note reference checks are present.
+Collaborator authorization rules	PASSED	Article collaborator subcollection is role-scoped; editor/reviewer/publication paths are restricted.
+Scheduler source hardening	PASSED	Hobby-compatible GitHub Actions cadence retained; secret comparison handles malformed lengths; scheduled publication and unpublish states are processed; failed transitions are marked failed.
+Vercel Analytics integration	PASSED	Existing Analytics integration retained without adding a duplicate mount.
+Version/package consistency	PASSED	VERSION.md, src/VERSION.md, package.json and package-lock.json updated for V85.1.2 / 0.85.4.
+Source-level functional UI tests	BLOCKED	No browser automation/runtime session was available in this build environment.
+Firestore emulator cross-account tests	BLOCKED	Firebase emulator/service-account credentials and a running test environment were not available.
+Production scheduler live test	BLOCKED	Live Vercel/Firebase credentials are not available from the build environment.
+Full dependency-backed npm typecheck/build	BLOCKED	npm ci could not complete because registry access timed out; offline cache lacked required packages. Global tsc also lacked project type definitions.
+Live Firebase index READY verification	BLOCKED	Repository source confirms required indexes, but actual Firebase project deployment state cannot be observed here.
+
+Validation policy:
+- BLOCKED means the check was not honestly executable in this environment; it is not treated as PASSED.
+- The ZIP contains the source-of-truth rules/indexes/workflow artifacts required for deployment.

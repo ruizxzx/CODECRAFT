@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 const root=process.cwd();
 const required=[
- 'src/lib/intelligence/types.ts','src/lib/content.ts','src/lib/activity.ts','src/lib/permissions.ts','src/lib/contentGraph.ts','src/lib/unifiedSearch.ts','src/lib/recommendationEngine.ts','src/lib/featureFlags.ts','src/lib/readingIntelligence.ts','src/lib/indexSync.ts','api/lib/offscript-retrieval.ts','api/ai/offscript-retrieve.ts','V80.0.0_INTELLIGENCE_CORE.md'
+ 'src/lib/intelligence/types.ts','src/lib/content.ts','src/lib/activity.ts','src/lib/permissions.ts','src/lib/contentGraph.ts','src/lib/unifiedSearch.ts','src/lib/recommendationEngine.ts','src/lib/featureFlags.ts','src/lib/readingIntelligence.ts','src/lib/indexSync.ts','api/lib/offscript-retrieval.ts','api/ai/offscript-retrieve.ts','README.md'
 ];
 const missing=required.filter(f=>!fs.existsSync(path.join(root,f)));
 if(missing.length){console.error('V80 missing:',missing.join(', '));process.exit(1);}
