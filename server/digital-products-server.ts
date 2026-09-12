@@ -182,16 +182,31 @@ export function r2PresignedUrl(input:{method:'PUT'|'HEAD'|'GET';bucket:string;ke
   const service = 's3';
   const scope = `${day}/${region}/${service}/aws4_request`;
   const host = new URL(cfg.endpoint).host;
-  const params = new URLSearchParams({
-    'X-Amz-Algorithm':'AWS4-HMAC-SHA256',
-    'X-Amz-Credential':`${cfg.accessKey}/${scope}`,
-    'X-Amz-Date':date,
-    'X-Amz-Expires':String(input.expiresIn),
-    'X-Amz-SignedHeaders':'host'
-  });
-  if (input.responseContentDisposition) params.set('response-content-disposition', input.responseContentDisposition);
-  const canonicalQuery = [...params.entries()].sort(([a],[b])=>a.localeCompare(b))
-    .map(([k,v])=>`${awsEncode(k)}=${awsEncode(v)}`).join('&');
+
+  // IMPORTANT: AWS SigV4 query sorting is byte/ASCII based, not localeCompare based.
+  // Also build the final query manually so values are RFC3986-encoded exactly once.
+  const rawParams:Array<[string,string]> = [
+    ['X-Amz-Algorithm','AWS4-HMAC-SHA256'],
+    ['X-Amz-Credential',`${cfg.accessKey}/${scope}`],
+    ['X-Amz-Date',date],
+    ['X-Amz-Expires',String(input.expiresIn)],
+    ['X-Amz-SignedHeaders','host']
+  ];
+  if (input.responseContentDisposition) rawParams.push(['response-content-disposition', input.responseContentDisposition]);
+
+  const encodeQuery = (value:string) => awsEncode(value);
+  const sortAws = (a:[string,string],b:[string,string]) => {
+    const ak=encodeQuery(a[0]), bk=encodeQuery(b[0]);
+    if (ak<bk) return -1;
+    if (ak>bk) return 1;
+    const av=encodeQuery(a[1]), bv=encodeQuery(b[1]);
+    if (av<bv) return -1;
+    if (av>bv) return 1;
+    return 0;
+  };
+  const canonicalQuery = [...rawParams].sort(sortAws)
+    .map(([k,v])=>`${encodeQuery(k)}=${encodeQuery(v)}`).join('&');
+
   const canonicalHeaders = `host:${host}\n`;
   const canonicalPath = `/${cfg.bucket}/${cfgKeyPath(input.key)}`;
   const canonicalRequest = [input.method,canonicalPath,canonicalQuery,canonicalHeaders,'host','UNSIGNED-PAYLOAD'].join('\n');
@@ -200,8 +215,9 @@ export function r2PresignedUrl(input:{method:'PUT'|'HEAD'|'GET';bucket:string;ke
   const kRegion = hmac(kDate,region);
   const kService = hmac(kRegion,service);
   const kSigning = hmac(kService,'aws4_request');
-  params.set('X-Amz-Signature',crypto.createHmac('sha256',kSigning).update(stringToSign).digest('hex'));
-  return `${cfg.endpoint.replace(/\/$/,'')}/${encodeURIComponent(cfg.bucket)}/${input.key.split('/').map(awsEncode).join('/')}?${params.toString()}`;
+  const signature = crypto.createHmac('sha256',kSigning).update(stringToSign).digest('hex');
+  const finalQuery = `${canonicalQuery}&X-Amz-Signature=${encodeQuery(signature)}`;
+  return `${cfg.endpoint.replace(/\/$/,'')}/${encodeQuery(cfg.bucket)}/${input.key.split('/').map(encodeQuery).join('/')}?${finalQuery}`;
 }
 function cfgKeyPath(key:string) { return key.split('/').map(awsEncode).join('/'); }
 

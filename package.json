@@ -1,7 +1,7 @@
 {
   "name": "react-example",
   "private": true,
-  "version": "0.88.6",
+  "version": "0.88.7",
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
@@ -40,7 +40,8 @@
     "check:v84": "node scripts/check-v84-knowledge-engine.mjs",
     "check:v85": "node scripts/check-v85-discovery.mjs",
     "check:commerce": "node scripts/check-commerce.mjs",
-    "check:v87-storefront": "node scripts/check-v87-storefront.mjs"
+    "check:v87-storefront": "node scripts/check-v87-storefront.mjs",
+    "check:v88-07": "node scripts/check-v88-07-r2-signing.mjs"
   },
   "dependencies": {
     "@sanity/client": "^8.5.0",

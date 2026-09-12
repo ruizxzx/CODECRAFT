@@ -240,7 +240,7 @@ async function downloadFile(adminToken:string,uid:string,b:any){
   const objectKey=String(file.fields.objectKey||'');
   const cfg=r2ProductConfig();
   const filename=safeName(String(file.fields.safeFilename||file.fields.originalFilename||'download'));
-  const disposition=`attachment; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  const disposition=`attachment; filename*=UTF-8''${filename}`;
   const downloadUrl=r2PresignedUrl({method:'GET',bucket:cfg.bucket,key:objectKey,expiresIn:300,responseContentDisposition:disposition});
   return {downloadUrl,expiresIn:300,file:{id:fileId,filename,mimeType:String(file.fields.mimeType||'application/octet-stream'),sizeBytes:Number(file.fields.sizeBytes||0),productId}};
 }

@@ -1,0 +1,27 @@
+OFFSCRPT V88.0.7 VALIDATION
+============================
+
+Purpose
+- Fix R2 presigned GET download SignatureDoesNotMatch failures caused by incorrect AWS SigV4 query sorting/serialization.
+
+Checks
+- V88.0.7 R2 signing contract: PASS
+- TypeScript source parse (src/api/server): PASS — 140 files, 0 parse diagnostics
+- Deployment config: PASS
+- Commerce regression: PASS
+- V87 storefront: PASS
+- V88 digital products: PASS
+- Path conflict checks: PASS
+- Firebase: PASS
+- Firestore rules: PASS
+- Schema: PASS
+- Runtime-pattern checks: PASS
+
+Specific fix
+- Replaced localeCompare query ordering with AWS/RFC3986 byte/ASCII ordering of encoded query keys and values.
+- Presigned query serialization is now constructed manually from the exact canonical query string.
+- response-content-disposition is passed as a raw header value and encoded once during signing.
+
+Limitations
+- No live Cloudflare R2 request was executed from this build environment.
+- The existing Vercel/Firebase/R2 credentials are not embedded or logged by the build.
