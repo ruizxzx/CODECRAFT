@@ -1,0 +1,17 @@
+OFFSCRPT V86.0.1 VALIDATION
+===========================
+
+TEST | STATUS | REASON
+
+Firestore Commit document-name normalization | PASSED | All Commerce fsCommit write names are normalized from REST URLs to Firestore resource names beginning with projects/ before POST /documents:commit.
+New product uses create write | PASSED | createProduct now creates the new commerceProducts document with Firestore create semantics.
+New price uses create write | PASSED | Initial and additional commercePrices documents use Firestore create semantics.
+Existing product update uses update write | PASSED | setProductStatus and createPrice retain update semantics only for existing product documents.
+Canonical firestore.rules | PASSED | Exactly one packaged firestore.rules exists at repository root; src/firestore.rules is absent.
+Previous V86 static validation | PASSED | V86.0.0 validation findings remain preserved; no intentional regression changes outside the Commerce REST commit fix.
+CommonJS browser scan | PASSED | No require(), module.exports, or exports. found in active src/ browser source.
+Dependency-backed npm ci | BLOCKED | Dependency installation was not available in the sandbox; no false production-build claim is made.
+TypeScript semantic typecheck | BLOCKED | Dependencies unavailable in sandbox.
+Vite production build | BLOCKED | Dependencies unavailable in sandbox.
+Live Firebase product creation | BLOCKED | Requires the deployed Vercel API with production environment variables and live Firebase access.
+Live rules/index deployment | BLOCKED | Repository source cannot prove Firebase project deployment state.
