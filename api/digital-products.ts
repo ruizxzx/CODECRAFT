@@ -1,0 +1,246 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import crypto from 'node:crypto';
+import {
+  serviceToken, verifyFirebaseToken, fsGet, fsCommit, fsQuery,
+  r2Config, r2PresignedUrl, productLimits, isBlockedFile, safeName, fileExtension, storageKey, fields, nowIso
+} from './lib/digital-products-server.js';
+
+const PRODUCT_TYPES = new Set(['pdf','ebook','template','spreadsheet','presentation','document','zip','research_pack','dataset','prompt_pack','design_assets','audio','video','guide','checklist','worksheet','resource_pack','other']);
+const STATUSES = new Set(['draft','pending_review','published','rejected','archived','suspended']);
+const VISIBILITIES = new Set(['public','unlisted','private']);
+const LICENSES = new Set(['personal','commercial','extended_commercial','educational','team']);
+const FILE_ROLES = new Set(['preview','cover','product_file','documentation']);
+
+function auth(req:VercelRequest){ return String(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim(); }
+function okJson(res:VercelResponse,data:any){ return res.status(200).json(data); }
+function fail(res:VercelResponse,status:number,error:string,code='BAD_REQUEST',retryable=false){ return res.status(status).json({error,code,retryable}); }
+function idKey(uid:string,key:string){ return crypto.createHash('sha256').update(`${uid}:${key}`).digest('hex').slice(0,48); }
+
+async function getUser(adminToken:string,uid:string){
+  return fsGet(adminToken,`users/${uid}`);
+}
+async function requireVendor(adminToken:string,uid:string){
+  const user=await getUser(adminToken,uid);
+  if(!user) throw new Error('Creator profile not found.');
+  const f:any=user.fields||{};
+  const eligible = f.platformRole==='master_admin' || f.isAuthor===true || f.creatorStatus===true || f.vendorStatus==='active';
+  if(!eligible) throw new Error('Vendor access is not configured for this account.');
+  if(f.vendorStatus==='suspended' || f.vendorStatus==='rejected') throw new Error('Vendor account is not allowed to publish products.');
+  return {user, vendorStatus:f.vendorStatus==='active'?'active':'active'};
+}
+function parseBody(req:VercelRequest){ return typeof req.body==='string'?JSON.parse(req.body):(req.body||{}); }
+
+async function createProduct(adminToken:string,uid:string,b:any){
+  const {user}=await requireVendor(adminToken,uid);
+  const title=String(b.title||'').trim();
+  const description=String(b.description||'').trim();
+  const currency=String(b.currency||'INR').toUpperCase();
+  const subtype=String(b.subtype||'other');
+  const visibility=String(b.visibility||'private');
+  const category=String(b.category||'').trim().slice(0,80);
+  const subcategory=String(b.subcategory||'').trim().slice(0,80);
+  const tags=Array.isArray(b.tags)?[...new Set(b.tags.map((x:any)=>String(x).trim().toLowerCase()).filter(Boolean))].slice(0,20):[];
+  const amount=Number(b.amount);
+  if(title.length<2||title.length>160) throw new Error('Title must contain 2–160 characters.');
+  if(description.length<10||description.length>5000) throw new Error('Description must contain 10–5000 characters.');
+  if(!PRODUCT_TYPES.has(subtype)) throw new Error('Invalid digital product type.');
+  if(!VISIBILITIES.has(visibility)) throw new Error('Invalid product visibility.');
+  if(!category) throw new Error('Select a product category.');
+  if(!/^[A-Z]{3}$/.test(currency)) throw new Error('Invalid currency.');
+  if(!Number.isSafeInteger(amount)||amount<=0||amount>10_000_000_000) throw new Error('Enter a valid price in minor currency units.');
+  const productId=crypto.randomUUID(), versionId=crypto.randomUUID(), priceId=crypto.randomUUID(), now=nowIso();
+  const product={
+    creatorId:uid, creatorUsername:String(user.fields.username||''), creatorDisplayName:String(user.fields.displayName||user.fields.name||''),
+    title, subtitle:String(b.subtitle||'').trim().slice(0,220), description, type:'digital_product', subtype,
+    status:'draft', visibility, category, subcategory, tags,
+    thumbnail:String(b.thumbnail||'').trim(), gallery:Array.isArray(b.gallery)?b.gallery.filter((x:any)=>typeof x==='string').slice(0,12):[],
+    preview:b.preview||null, version:1, currentVersionId:versionId, currentVersionNumber:1,
+    license:LICENSES.has(String(b.license))?String(b.license):'personal',
+    usageRestrictions:String(b.usageRestrictions||'').trim().slice(0,2000),
+    requirements:String(b.requirements||'').trim().slice(0,2000),
+    whatIsIncluded:String(b.whatIsIncluded||'').trim().slice(0,3000),
+    fileCount:0, totalSizeBytes:0, reviewStatus:'not_required',
+    createdAt:now, updatedAt:now
+  };
+  const price={productId,amount,currency,billingType:'one_time',active:true,createdAt:now,updatedAt:now};
+  const versionDoc={productId,creatorId:uid,versionNumber:1,versionLabel:'1.0',changelog:'',status:'draft',fileIds:[],fileCount:0,totalSizeBytes:0,createdAt:now,updatedAt:now};
+  const audit={actorId:uid,actorType:'vendor',targetType:'product',targetId:productId,event:'productCreated',timestamp:now,metadata:{type:'digital_product'}};
+  await fsCommit(adminToken,[
+    {create:{name:`commerceProducts/${productId}`,fields:fields({...product,priceIds:[priceId]})}},
+    {create:{name:`commercePrices/${priceId}`,fields:fields(price)}},
+    {create:{name:`digitalProductVersions/${versionId}`,fields:fields(versionDoc)}},
+    {create:{name:`commerceAuditLogs/${crypto.randomUUID()}`,fields:fields(audit)}}
+  ]);
+  return {product:{id:productId,...product,priceIds:[priceId]},price:{id:priceId,...price},version:{id:versionId,...versionDoc}};
+}
+
+async function updateProduct(adminToken:string,uid:string,b:any){
+  const productId=String(b.productId||'').trim(); if(!productId) throw new Error('productId is required.');
+  const product=await fsGet(adminToken,`commerceProducts/${productId}`);
+  if(!product) throw new Error('Product not found.');
+  if(product.fields.creatorId!==uid) throw new Error('You do not own this product.');
+  const allowed:any={};
+  const stringFields=['title','subtitle','description','category','subcategory','thumbnail','requirements','whatIsIncluded','usageRestrictions'];
+  for(const k of stringFields) if(b[k]!==undefined) allowed[k]=String(b[k]).trim().slice(0,k==='description'?5000:k==='title'?160:3000);
+  if(b.tags!==undefined) allowed.tags=Array.isArray(b.tags)?[...new Set(b.tags.map((x:any)=>String(x).trim().toLowerCase()).filter(Boolean))].slice(0,20):[];
+  if(b.visibility!==undefined){const v=String(b.visibility);if(!VISIBILITIES.has(v))throw new Error('Invalid visibility.');allowed.visibility=v;}
+  if(b.license!==undefined){const v=String(b.license);if(!LICENSES.has(v))throw new Error('Invalid license.');allowed.license=v;}
+  if(b.subtype!==undefined){const v=String(b.subtype);if(!PRODUCT_TYPES.has(v))throw new Error('Invalid digital product type.');allowed.subtype=v;}
+  if(b.gallery!==undefined) allowed.gallery=Array.isArray(b.gallery)?b.gallery.filter((x:any)=>typeof x==='string').slice(0,12):[];
+  if(Object.keys(allowed).length===0) throw new Error('No editable product fields were provided.');
+  allowed.updatedAt=nowIso();
+  const expectedUpdatedAt=String(b.expectedUpdatedAt||'');
+  if(expectedUpdatedAt && String(product.fields.updatedAt||'')!==expectedUpdatedAt) throw new Error('This product was updated elsewhere. Reload before saving.');
+  await fsCommit(adminToken,[{update:{name:`commerceProducts/${productId}`,fields:fields(allowed)}}]);
+  return {product:{id:productId,...product.fields,...allowed}};
+}
+
+async function createVersion(adminToken:string,uid:string,b:any){
+  const productId=String(b.productId||''); const product=await fsGet(adminToken,`commerceProducts/${productId}`);
+  if(!product) throw new Error('Product not found.'); if(product.fields.creatorId!==uid) throw new Error('You do not own this product.');
+  const current=Number(product.fields.currentVersionNumber||product.fields.version||1); const versionNumber=current+1;
+  const versionId=crypto.randomUUID(),now=nowIso();
+  const version={productId,creatorId:uid,versionNumber,versionLabel:String(b.versionLabel||`${Math.floor(versionNumber)}.0`).slice(0,40),changelog:String(b.changelog||'').trim().slice(0,5000),status:'draft',fileIds:[],fileCount:0,totalSizeBytes:0,createdAt:now,updatedAt:now};
+  const audit={actorId:uid,actorType:'vendor',targetType:'product_version',targetId:versionId,event:'versionCreated',timestamp:now,metadata:{productId,versionNumber}};
+  await fsCommit(adminToken,[
+    {create:{name:`digitalProductVersions/${versionId}`,fields:fields(version)}},
+    {create:{name:`commerceAuditLogs/${crypto.randomUUID()}`,fields:fields(audit)}}
+  ]);
+  return {version:{id:versionId,...version}};
+}
+
+async function requestUpload(adminToken:string,uid:string,b:any){
+  const productId=String(b.productId||''), versionId=String(b.versionId||'');
+  const product=await fsGet(adminToken,`commerceProducts/${productId}`), version=await fsGet(adminToken,`digitalProductVersions/${versionId}`);
+  if(!product||!version) throw new Error('Product or version not found.');
+  if(product.fields.creatorId!==uid||version.fields.creatorId!==uid||version.fields.productId!==productId) throw new Error('You do not own this upload target.');
+  if(['archived','suspended'].includes(String(product.fields.status))) throw new Error('This product cannot receive uploads in its current state.');
+  const fileName=safeName(String(b.fileName||'file'));
+  const mime=String(b.contentType||'application/octet-stream').toLowerCase();
+  const size=Number(b.size);
+  const role=String(b.role||'product_file');
+  const limits=productLimits();
+  if(!FILE_ROLES.has(role)) throw new Error('Invalid file role.');
+  if(!Number.isSafeInteger(size)||size<=0) throw new Error('Invalid file size.');
+  if(size>limits.maxFileBytes) throw new Error(`File is too large. Maximum allowed is ${Math.round(limits.maxFileBytes/1024/1024)} MB.`);
+  if(isBlockedFile(fileName,mime)) throw new Error('This file type is not allowed for digital products.');
+  const existingCount=Number(version.fields.fileCount||0);
+  if(existingCount>=limits.maxFilesPerVersion) throw new Error(`This version already contains the maximum of ${limits.maxFilesPerVersion} files.`);
+  const existingBytes=Number(version.fields.totalSizeBytes||0);
+  if(existingBytes+size>limits.maxTotalBytesPerVersion) throw new Error('This version exceeds its total file-size limit.');
+  const fileId=crypto.randomUUID();
+  const objectKey=storageKey(uid,productId,versionId,fileId,fileName);
+  const uploadUrl=r2PresignedUrl({method:'PUT',bucket:r2Config().bucket,key:objectKey,expiresIn:900});
+  return {file:{id:fileId,productId,versionId,creatorId:uid,originalFilename:fileName,safeFilename:fileName,mimeType:mime,sizeBytes:size,role,status:'pending',objectKey},uploadUrl,expiresIn:900,limits};
+}
+
+async function completeUpload(adminToken:string,uid:string,b:any){
+  const productId=String(b.productId||''), versionId=String(b.versionId||''), fileId=String(b.fileId||''), objectKey=String(b.objectKey||'');
+  const product=await fsGet(adminToken,`commerceProducts/${productId}`), version=await fsGet(adminToken,`digitalProductVersions/${versionId}`);
+  if(!product||!version) throw new Error('Product or version not found.');
+  if(product.fields.creatorId!==uid||version.fields.creatorId!==uid||version.fields.productId!==productId) throw new Error('Upload ownership check failed.');
+  if(!/^digital-products\/[A-Za-z0-9_-]{1,180}\/[A-Za-z0-9-]{1,180}\/[A-Za-z0-9-]{1,180}\/[A-Za-z0-9-]{1,180}-/.test(objectKey)) throw new Error('Invalid storage reference.');
+  const cfg=r2Config();
+  const headUrl=r2PresignedUrl({method:'HEAD',bucket:cfg.bucket,key:objectKey,expiresIn:300});
+  const head=await fetch(headUrl,{method:'HEAD'});
+  if(!head.ok) throw new Error('Uploaded file could not be verified in storage.');
+  const size=Number(head.headers.get('content-length')||b.size||0);
+  const mime=String(b.contentType||head.headers.get('content-type')||'application/octet-stream').toLowerCase();
+  if(!Number.isSafeInteger(size)||size<=0) throw new Error('Uploaded file size could not be verified.');
+  if(isBlockedFile(String(b.fileName||''),mime)) throw new Error('This file type is not allowed.');
+  const file={
+    productId,versionId,creatorId:uid,fileId,objectKey,
+    originalFilename:safeName(String(b.fileName||'file')),safeFilename:safeName(String(b.fileName||'file')),
+    mimeType:mime,sizeBytes:size,checksum:String(b.checksum||head.headers.get('etag')||'').slice(0,512),
+    checksumSource:b.checksum?'client':'r2_etag',role:FILE_ROLES.has(String(b.role))?String(b.role):'product_file',
+    status:'ready',createdAt:nowIso(),updatedAt:nowIso()
+  };
+  const existing=await fsGet(adminToken,`digitalProductFiles/${fileId}`);
+  if(existing) return {file:{id:fileId,...existing.fields}};
+  const newCount=Number(version.fields.fileCount||0)+1, newBytes=Number(version.fields.totalSizeBytes||0)+size;
+  await fsCommit(adminToken,[
+    {create:{name:`digitalProductFiles/${fileId}`,fields:fields(file)}},
+    {transform:{document:`digitalProductVersions/${versionId}`,fieldTransforms:[{fieldPath:'fileIds',appendMissingElements:{values:[{stringValue:fileId}]}},{fieldPath:'fileCount',increment:{integerValue:'1'}},{fieldPath:'totalSizeBytes',increment:{integerValue:String(size)}}]}},
+    {update:{name:`commerceProducts/${productId}`,fields:fields({fileCount:Number(product.fields.fileCount||0)+1,totalSizeBytes:Number(product.fields.totalSizeBytes||0)+size,updatedAt:nowIso()})}},
+    {create:{name:`commerceAuditLogs/${crypto.randomUUID()}`,fields:fields({actorId:uid,actorType:'vendor',targetType:'file',targetId:fileId,event:'fileUploaded',timestamp:nowIso(),metadata:{productId,versionId,sizeBytes:size}})}}
+  ]);
+  return {file:{id:fileId,...file},versionFileCount:newCount,versionTotalSizeBytes:newBytes};
+}
+
+async function listMine(adminToken:string,uid:string){
+  const products=await fsQuery(adminToken,'commerceProducts',[{field:{fieldPath:'creatorId'},op:'EQUAL',value:{stringValue:uid}}]);
+  const versions=await fsQuery(adminToken,'digitalProductVersions',[{field:{fieldPath:'creatorId'},op:'EQUAL',value:{stringValue:uid}}]);
+  const files=await fsQuery(adminToken,'digitalProductFiles',[{field:{fieldPath:'creatorId'},op:'EQUAL',value:{stringValue:uid}}]);
+  return {
+    products:products.map(x=>({id:x.name.split('/').pop(),...x.fields})),
+    versions:versions.map(x=>({id:x.name.split('/').pop(),...x.fields})),
+    files:files.map(x=>({id:x.name.split('/').pop(),...x.fields}))
+  };
+}
+
+async function publishProduct(adminToken:string,uid:string,b:any){
+  const productId=String(b.productId||''); const product=await fsGet(adminToken,`commerceProducts/${productId}`); if(!product) throw new Error('Product not found.');
+  if(product.fields.creatorId!==uid) throw new Error('You do not own this product.');
+  await requireVendor(adminToken,uid);
+  const versionId=String(product.fields.currentVersionId||''); const version=await fsGet(adminToken,`digitalProductVersions/${versionId}`);
+  if(!version) throw new Error('Current product version not found.');
+  if(!Array.isArray(product.fields.priceIds)||!product.fields.priceIds.length) throw new Error('Add a valid price before publishing.');
+  if(!Number(version.fields.fileCount||0)) throw new Error('Add at least one ready product file before publishing.');
+  if(!product.fields.title||!product.fields.description||!product.fields.category) throw new Error('Complete the required product information before publishing.');
+  const now=nowIso();
+  await fsCommit(adminToken,[
+    {update:{name:`digitalProductVersions/${versionId}`,fields:fields({status:'published',updatedAt:now})}},
+    {update:{name:`commerceProducts/${productId}`,fields:fields({status:'active',visibility:product.fields.visibility||'public',publishedAt:product.fields.publishedAt||now,updatedAt:now})}},
+    {create:{name:`commerceAuditLogs/${crypto.randomUUID()}`,fields:fields({actorId:uid,actorType:'vendor',targetType:'product',targetId:productId,event:'productPublished',timestamp:now,metadata:{versionId}})}}
+  ]);
+  return {product:{id:productId,...product.fields,status:'active',publishedAt:product.fields.publishedAt||now,updatedAt:now}};
+}
+
+async function publishVersion(adminToken:string,uid:string,b:any){
+  const productId=String(b.productId||''),versionId=String(b.versionId||'');
+  const product=await fsGet(adminToken,`commerceProducts/${productId}`), version=await fsGet(adminToken,`digitalProductVersions/${versionId}`);
+  if(!product||!version) throw new Error('Product or version not found.');
+  if(product.fields.creatorId!==uid||version.fields.creatorId!==uid||version.fields.productId!==productId) throw new Error('Ownership check failed.');
+  if(Number(version.fields.fileCount||0)<1) throw new Error('Version must contain at least one ready file.');
+  const now=nowIso(),previousId=String(product.fields.currentVersionId||'');
+  const writes:any[]=[
+    {update:{name:`digitalProductVersions/${versionId}`,fields:fields({status:'published',updatedAt:now})}},
+    {update:{name:`commerceProducts/${productId}`,fields:fields({currentVersionId:versionId,currentVersionNumber:version.fields.versionNumber||1,version:version.fields.versionNumber||1,updatedAt:now})}}
+  ];
+  if(previousId && previousId!==versionId) writes.push({update:{name:`digitalProductVersions/${previousId}`,fields:fields({status:'archived',updatedAt:now})}});
+  writes.push({create:{name:`commerceAuditLogs/${crypto.randomUUID()}`,fields:fields({actorId:uid,actorType:'vendor',targetType:'product_version',targetId:versionId,event:'versionPublished',timestamp:now,metadata:{productId}})}});
+  await fsCommit(adminToken,writes);
+  return {version:{id:versionId,...version.fields,status:'published'},product:{id:productId,...product.fields,currentVersionId:versionId,currentVersionNumber:version.fields.versionNumber||1,version:version.fields.versionNumber||1,updatedAt:now}};
+}
+
+async function archiveProduct(adminToken:string,uid:string,b:any){
+  const productId=String(b.productId||''), product=await fsGet(adminToken,`commerceProducts/${productId}`); if(!product)throw new Error('Product not found.'); if(product.fields.creatorId!==uid)throw new Error('You do not own this product.');
+  const now=nowIso();
+  await fsCommit(adminToken,[{update:{name:`commerceProducts/${productId}`,fields:fields({status:'archived',archivedAt:now,updatedAt:now})}},{create:{name:`commerceAuditLogs/${crypto.randomUUID()}`,fields:fields({actorId:uid,actorType:'vendor',targetType:'product',targetId:productId,event:'productArchived',timestamp:now,metadata:{}})}}]);
+  return {product:{id:productId,...product.fields,status:'archived',archivedAt:now,updatedAt:now}};
+}
+
+export default async function handler(req:VercelRequest,res:VercelResponse){
+  if(req.method!=='POST') return fail(res,405,'Method not allowed.','METHOD_NOT_ALLOWED');
+  try{
+    const token=auth(req); const authUser=await verifyFirebaseToken(token); const adminToken=await serviceToken(); const body=parseBody(req); const action=String(body.action||req.query?.action||'').trim();
+    let result:any;
+    switch(action){
+      case 'createProduct': result=await createProduct(adminToken,authUser.uid,body); break;
+      case 'updateProduct': result=await updateProduct(adminToken,authUser.uid,body); break;
+      case 'createVersion': result=await createVersion(adminToken,authUser.uid,body); break;
+      case 'requestUpload': result=await requestUpload(adminToken,authUser.uid,body); break;
+      case 'completeUpload': result=await completeUpload(adminToken,authUser.uid,body); break;
+      case 'listMine': result=await listMine(adminToken,authUser.uid); break;
+      case 'publishProduct': result=await publishProduct(adminToken,authUser.uid,body); break;
+      case 'publishVersion': result=await publishVersion(adminToken,authUser.uid,body); break;
+      case 'archiveProduct': result=await archiveProduct(adminToken,authUser.uid,body); break;
+      default: return fail(res,400,'Unknown digital product action.','UNKNOWN_ACTION');
+    }
+    return okJson(res,result);
+  }catch(error:any){
+    const message=String(error?.message||'Digital product request failed.');
+    const status=/Authentication|token/i.test(message)?401:/permission|not own|Vendor access|not allowed/i.test(message)?403:/not found/i.test(message)?404:400;
+    return fail(res,status,message,status===400?'DIGITAL_PRODUCT_ERROR':status===403?'FORBIDDEN':status===404?'NOT_FOUND':'UNAUTHORIZED');
+  }
+}

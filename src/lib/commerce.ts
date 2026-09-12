@@ -9,7 +9,7 @@ export type CommerceEntitlementStatus = 'pending'|'active'|'expired'|'cancelled'
 
 export interface CommerceProduct {
   id: string; creatorId: string; creatorUsername?: string; title: string; description: string;
-  type: CommerceProductType; status: CommerceProductStatus; visibility: 'private'|'public'; featured?: boolean;
+  type: CommerceProductType; status: CommerceProductStatus; visibility: 'private'|'public'|'unlisted'; featured?: boolean;
   currency: string; priceIds: string[]; version: number; createdAt?: string; updatedAt?: string; publishedAt?: string; archivedAt?: string;
 }
 
@@ -69,7 +69,7 @@ export async function createCommercePrice(input: {productId:string;amount:number
 export async function setCommerceProductStatus(productId:string,status:'draft'|'active'|'archived'|'disabled'):Promise<{product:CommerceProduct}> {
   return callApi('setProductStatus',{productId,status});
 }
-export async function setCommerceProductVisibility(productId:string,visibility:'public'|'private'):Promise<{product:CommerceProduct}> {
+export async function setCommerceProductVisibility(productId:string,visibility:'public'|'private'|'unlisted'):Promise<{product:CommerceProduct}> {
   return callApi('setProductVisibility',{productId,visibility});
 }
 

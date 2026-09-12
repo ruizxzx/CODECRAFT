@@ -1,0 +1,61 @@
+OFFSCRPT V88.0.0 — BUILD VALIDATION
+
+BASELINE
+- V87 Creator Storefront archive supplied by user.
+- V88 request/spec supplied in Pasted text attachment.
+
+IMPLEMENTED
+- Digital product metadata on canonical commerceProducts.
+- Canonical commercePrices reused.
+- Vendor ownership via Firebase UID.
+- Draft/edit/publish/archive lifecycle.
+- Public/unlisted/private visibility.
+- Product categories/tags/subtypes/license metadata.
+- Version records.
+- Per-file metadata.
+- Private R2 product storage upload foundation.
+- Upload verification with signed HEAD.
+- File type/extension/size validation.
+- File checksum metadata.
+- Publish validation requiring price + ready file.
+- V87 storefront compatibility.
+- V86 commerce compatibility.
+- Audit events.
+- Single canonical firestore.rules.
+
+STATIC / SOURCE CHECKS
+- TypeScript/TSX parse: PASSED — 127 files, 0 parse diagnostics.
+- API TypeScript parse: PASSED — 11 files, 0 parse diagnostics.
+- Import check: PASSED — 127 source files.
+- Firebase check: PASSED.
+- Firestore rules check: PASSED.
+- Schema check: PASSED.
+- Runtime pattern check: PASSED.
+- Commerce regression check: PASSED.
+- V87 storefront regression check: PASSED.
+- Deployment config check: PASSED.
+- V88 digital product check: PASSED.
+- JSON validation (package/package-lock/indexes/vercel): PASSED.
+- Canonical firestore.rules count: PASSED — exactly one.
+- Secret/private-key source scan: PASSED — no private key material found.
+- Browser CommonJS scan: PASSED by source scan; no active require()/module.exports usage found.
+
+BUILD LIMITATION
+- Full npm dependency-backed production build: BLOCKED.
+  Reason: npm ci was attempted but the execution environment interrupted the install; the workspace did not have a complete usable dependency tree. The subsequent `vite build` could not execute because the local Vite executable was incomplete/missing.
+- Full semantic tsc typecheck: BLOCKED by incomplete dependency installation/types.
+- Live Firebase / R2 integration test: BLOCKED — no live service credentials/emulator execution performed in this build environment.
+- Live deployment verification: BLOCKED — requires the user's Vercel/Firebase/R2 production environment.
+
+IMPORTANT DEPLOYMENT REQUIREMENT
+V88 digital product uploads require a PRIVATE R2 bucket configured as:
+- R2_PRODUCT_BUCKET_NAME
+- R2_ACCOUNT_ID
+- R2_ACCESS_KEY_ID
+- R2_SECRET_ACCESS_KEY
+- R2_S3_ENDPOINT (optional when derivable)
+
+Do not use a public R2 bucket for purchased product files.
+
+STATUS POLICY
+No blocked test has been represented as passed.

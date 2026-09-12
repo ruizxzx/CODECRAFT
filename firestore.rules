@@ -1559,5 +1559,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // V88 Digital Product Engine metadata. All mutations and protected
+    // reads are server-authoritative through /api/digital-products.
+    match /digitalProductVersions/{versionId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
+    match /digitalProductFiles/{fileId} {
+      allow read: if false;
+      allow write: if false;
+    }
+
   }
 }
