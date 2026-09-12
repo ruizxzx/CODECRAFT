@@ -11,7 +11,8 @@ export type ActivityEventType =
   | 'discussion_open' | 'discussion_create' | 'discussion_reply' | 'discussion_quote' | 'discussion_remix' | 'discussion_reaction'
   | 'question_open' | 'question_create' | 'answer_create' | 'answer_accept' | 'answer_reaction'
   | 'search' | 'search_result_click' | 'recommendation_impression' | 'recommendation_click'
-  | 'community_view' | 'community_join' | 'community_leave' | 'community_post';
+  | 'community_view' | 'community_join' | 'community_leave' | 'community_post'
+  | 'marketplace_view' | 'marketplace_search' | 'marketplace_filter' | 'product_impression' | 'product_open' | 'product_gallery_open' | 'product_gallery_next' | 'product_save' | 'product_unsave' | 'creator_store_open' | 'category_open' | 'related_product_open';
 
 export interface ActivityEventInput {
   type: ActivityEventType;

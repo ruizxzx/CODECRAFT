@@ -13,6 +13,9 @@ export interface CommerceProduct {
   type: CommerceProductType; subtype?: string; status: CommerceProductStatus; visibility: 'private'|'public'|'unlisted'; featured?: boolean;
   currency: string; priceIds: string[]; version: number;
   thumbnail?: string; gallery?: string[];
+  category?: string; subcategory?: string; tags?: string[];
+  license?: string; usageRestrictions?: string; requirements?: string; whatIsIncluded?: string;
+  viewsCount?: number; saveCount?: number; purchaseCount?: number;
   createdAt?: string; updatedAt?: string; publishedAt?: string; archivedAt?: string;
 }
 
@@ -128,10 +131,8 @@ export async function hasCommerceAccess(userId:string, resourceType:string, reso
 export async function getCommerceProduct(productId:string): Promise<CommerceProduct | null> {
   const id=String(productId||'').trim();
   if(!id) return null;
-  const snap=await getDoc(doc(db,'commerceProducts',id));
-  if(!snap.exists()) return null;
-  const p={id:snap.id,...snap.data()} as CommerceProduct;
-  return p.status==='active' && p.visibility==='public' ? p : null;
+  const result=await callPublicApi<{products:CommerceProduct[]}>('marketplaceByIds',{ids:id});
+  return result.products?.[0] || null;
 }
 
 export async function listPublicCreatorCommerceProducts(creatorId:string): Promise<CommerceProduct[]> {

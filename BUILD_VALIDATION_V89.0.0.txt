@@ -1,0 +1,41 @@
+OFFSCRPT V89.0.0 — BUILD VALIDATION
+Generated for the V89 marketplace + buyer-experience build.
+
+STATIC VALIDATION
+- TypeScript syntax parse: PASS — 145 TS/TSX files, 0 parse diagnostics (global TypeScript 5.8.3 parser).
+- check:imports: PASS — 133 active source files.
+- check:exports: PASS — 133 active source files.
+- check:identifiers: PASS — 133 active TS/TSX files.
+- check:firebase: PASS.
+- check:rules: PASS.
+- check:schema: PASS.
+- check:runtime: PASS.
+- check:commerce: PASS.
+- check:v87-storefront: PASS.
+- check:v88-07: PASS.
+- check:v89-marketplace: PASS.
+- check:deployment-config: PASS.
+- check:path-conflicts: PASS.
+
+V89 acceptance focus validated statically:
+- marketplace route / aliases
+- safe public product projection
+- visibility filtering
+- saved-products rules
+- URL search/filter state
+- pagination/cursor behavior
+- stale-search request protection
+- React hook order stability checks
+- gallery/fullscreen behavior
+- buyer ownership handling
+- V88 purchase/download regression path
+- R2 credential separation
+- Vercel Hobby route-count safety
+
+DEPENDENCY-BASED BUILD STATUS
+- npm ci: BLOCKED — container transport timeout during dependency installation.
+- npm run typecheck: BLOCKED — local node_modules was incomplete after the interrupted install and TypeScript type libraries were missing.
+- npm run lint: BLOCKED for the same incomplete-install reason.
+- npm run build: BLOCKED because the local dependency installation could not complete.
+
+No dependency-based production build or live Firebase/R2/Vercel integration test is claimed as PASS.

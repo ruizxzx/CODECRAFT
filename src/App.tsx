@@ -31,7 +31,10 @@ import { backfillPublicProfilesForAllUsers } from './lib/community';
 import { SavedView } from './components/SavedView';
 import { NotificationsView } from './components/NotificationsView';
 import { AccountDashboardView } from './components/AccountDashboardView';
+import { MarketplaceErrorBoundary } from './components/MarketplaceErrorBoundary';
 import { PurchasesView } from './components/PurchasesView';
+import { MarketplaceView } from './components/MarketplaceView';
+import { SavedProductsView } from './components/SavedProductsView';
 import { ActivityCenterView } from './components/ActivityCenterView';
 import { CreatorDashboardView } from './components/CreatorDashboardView';
 import { PreferencesView } from './components/PreferencesView';
@@ -508,6 +511,12 @@ export default function App() {
       } else if (hash === 'history') {
         setCurrentPage('history');
         setActiveArticleSlug(null);
+      } else if (hash === 'shop' || hash === 'marketplace' || hash.startsWith('shop?') || hash.startsWith('shop/category/') || hash.startsWith('marketplace?')) {
+        setCurrentPage('shop');
+        setActiveArticleSlug(null);
+      } else if (hash === 'saved-products' || hash === 'wishlist') {
+        setCurrentPage('saved_products');
+        setActiveArticleSlug(null);
       } else if (hash === 'purchases' || hash === 'my-purchases') {
         setCurrentPage('purchases');
         setActiveArticleSlug(null);
@@ -615,6 +624,10 @@ export default function App() {
       setActiveArticleSlug(param);
       setCurrentPage('creator');
       window.location.hash = `creator/${param}`;
+    } else if (page === 'shop') {
+      setActiveArticleSlug(null); setCurrentPage('shop'); window.location.hash='shop';
+    } else if (page === 'saved_products') {
+      setActiveArticleSlug(null); setCurrentPage('saved_products'); window.location.hash='saved-products';
     } else if (page === 'purchases') {
       setActiveArticleSlug(null); setCurrentPage('purchases'); window.location.hash='purchases';
     } else if (page === 'knowledge') {
@@ -882,6 +895,10 @@ export default function App() {
               <AccountDashboardView articles={articles} userProfile={userProfile} onNavigate={navigateTo} />
             )}
 
+            {currentPage === 'shop' && <MarketplaceErrorBoundary title="Marketplace components failed to render."><MarketplaceView onNavigate={navigateTo} /></MarketplaceErrorBoundary>}
+
+            {currentPage === 'saved_products' && <MarketplaceErrorBoundary title="Saved products could not be rendered."><SavedProductsView onNavigate={navigateTo} userProfile={userProfile} /></MarketplaceErrorBoundary>}
+
             {currentPage === 'purchases' && (
               <PurchasesView onNavigate={navigateTo} />
             )}
@@ -987,7 +1004,9 @@ export default function App() {
             )}
 
             {currentPage === 'product' && activeArticleSlug && (
-              <CommerceProductView productId={activeArticleSlug} userProfile={userProfile} onNavigate={navigateTo} />
+              <MarketplaceErrorBoundary title="Product page components failed to render.">
+                <CommerceProductView productId={activeArticleSlug} userProfile={userProfile} onNavigate={navigateTo} />
+              </MarketplaceErrorBoundary>
             )}
 
             {currentPage === 'topic' && activeArticleSlug && (

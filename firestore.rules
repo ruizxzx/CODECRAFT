@@ -200,7 +200,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow create: if isSignedIn() && request.auth.uid == userId
         && incoming().userId == userId
-        && incoming().type in ['content_view','content_open','content_start','content_progress','content_complete','content_exit','like','unlike','save','unsave','share','copy','follow','unfollow','discussion_open','discussion_create','discussion_reply','discussion_quote','discussion_remix','discussion_reaction','question_open','question_create','answer_create','answer_accept','answer_reaction','search','search_result_click','recommendation_impression','recommendation_click','community_view','community_join','community_leave','community_post']
+        && incoming().type in ['content_view','content_open','content_start','content_progress','content_complete','content_exit','like','unlike','save','unsave','share','copy','follow','unfollow','discussion_open','discussion_create','discussion_reply','discussion_quote','discussion_remix','discussion_reaction','question_open','question_create','answer_create','answer_accept','answer_reaction','search','search_result_click','recommendation_impression','recommendation_click','community_view','community_join','community_leave','community_post','marketplace_view','marketplace_search','marketplace_filter','product_impression','product_open','product_gallery_open','product_gallery_next','product_save','product_unsave','creator_store_open','category_open','related_product_open']
         && incoming().get('targetId','') is string && incoming().get('targetId','').size() <= 256
         && incoming().get('targetType','') is string && incoming().get('targetType','').size() <= 64
         && incoming().get('source','') is string && incoming().get('source','').size() <= 80
@@ -852,6 +852,21 @@ service cloud.firestore {
         && request.resource.data.message.size() <= 200
         && request.resource.data.read is bool
         && request.resource.data.createdAt is timestamp;
+    }
+
+    match /users/{userId}/savedProducts/{productId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow create: if userMayWrite(request.auth.uid) && request.auth.uid == userId
+        && incoming().uid == request.auth.uid
+        && incoming().productId == productId
+        && incoming().productId is string && incoming().productId.size() <= 128
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if userMayWrite(request.auth.uid) && request.auth.uid == userId
+        && incoming().uid == existing().uid && incoming().productId == existing().productId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['updatedAt'])
+        && incoming().updatedAt == request.time;
+      allow delete: if isSignedIn() && request.auth.uid == userId;
     }
 
     match /users/{userId}/drafts/{draftId} {

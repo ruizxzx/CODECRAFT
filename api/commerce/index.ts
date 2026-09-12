@@ -154,14 +154,126 @@ async function refundTest(token:string,uid:string,b:any){
   if(!testMode())throw new Error('Refund test mode is disabled. Configure a payment provider before production refunds.'); const orderId=String(b.orderId||''); const order=await fsGet(token,`commerceOrders/${orderId}`); if(!order||order.fields.customerId!==uid)throw new Error('Order not found.'); if(order.fields.status!=='paid'&&order.fields.status!=='partially_refunded')throw new Error('Only paid orders can be refunded.'); const key=String(b.idempotencyKey||'').trim(); if(key.length<8||key.length>200)throw new Error('Valid idempotencyKey is required.'); const eventId=idempotencyId(uid,`refund:${key}`),existingEvent=await fsGet(token,`commerceIdempotency/${eventId}`); if(existingEvent){return {refundId:String(existingEvent.fields.refundId||''),status:'completed',orderStatus:'refunded',entitlementStatus:'refunded'};} const eid=Array.isArray(order.fields.entitlementIds)?String(order.fields.entitlementIds[0]||''):''; const refundId=crypto.randomUUID(),ledgerId=crypto.randomUUID(); const ent=eid?await fsGet(token,`entitlements/${eid}`):null; const writes:any[]=[{create:{name:`${firestoreBase()}/commerceRefunds/${refundId}`,fields:fields({orderId,customerId:uid,amount:Number(order.fields.total||0),currency:order.fields.currency,status:'completed',reason:String(b.reason||'Customer requested refund').slice(0,500),createdAt:nowIso(),completedAt:nowIso()})}},{update:{name:`${firestoreBase()}/commerceOrders/${orderId}`,fields:fields({status:'refunded',refundedAt:nowIso(),updatedAt:nowIso()})}},{update:{name:`${firestoreBase()}/commercePayments/${String(order.fields.paymentId||'')}`,fields:fields({status:'refunded',refundedAt:nowIso(),updatedAt:nowIso()})}},{create:{name:`${firestoreBase()}/creatorRevenue/${ledgerId}`,fields:fields({creatorId:String(order.fields.creatorId||''),orderId,transactionId:refundId,gross:0,discounts:0,tax:0,paymentFees:0,platformFee:0,refundAmount:Number(order.fields.total||0),netCreatorAmount:-Number(order.fields.total||0),type:'refund',status:'posted',currency:String(order.fields.currency||'INR'),createdAt:nowIso()})}},{create:{name:`${firestoreBase()}/commerceAuditLogs/${crypto.randomUUID()}`,fields:fields({actorId:uid,actorType:'customer',targetType:'order',targetId:orderId,event:'refundCompleted',timestamp:nowIso(),metadata:{refundId}})}},{create:{name:`${firestoreBase()}/commerceIdempotency/${eventId}`,fields:fields({userId:uid,orderId,refundId,createdAt:nowIso()})}},{create:{name:`${firestoreBase()}/users/${uid}/notifications/commerce_${crypto.randomUUID()}`,fields:fields({type:'commerce_refund',actorId:uid,actorUsername:'',actorName:'OFFSCRPT Commerce',actorAvatar:'',message:'Your test refund was completed.',targetType:'commerce_order',targetId:orderId,read:false,createdAt:nowIso()})}}]; if(ent){writes.push({update:{name:`${firestoreBase()}/entitlements/${eid}`,fields:fields({status:'refunded',revokedAt:nowIso()})}});} await fsCommit(token,writes); return {refundId,status:'completed',orderStatus:'refunded',entitlementStatus:ent?'refunded':undefined};
 }
 
+
+function fsFilter(fieldPath:string, op:string, v:any){
+  return {field:{fieldPath},op,value:v};
+}
+
+function decodeCursor(raw:string|undefined): {id:string;sortKey:string}|null {
+  if(!raw) return null;
+  try { const parsed=JSON.parse(Buffer.from(raw,'base64url').toString('utf8')); if(!parsed || typeof parsed.id!=='string') return null; return {id:parsed.id,sortKey:String(parsed.sortKey??'')}; } catch { return null; }
+}
+function encodeCursor(id:string,sortKey:string){ return Buffer.from(JSON.stringify({id,sortKey}),'utf8').toString('base64url'); }
+
+async function fsRunQueryAdvanced(token:string, from:string, filters:any[] = [], options:{limit?:number;orderBy?:Array<{fieldPath:string;direction:'ASCENDING'|'DESCENDING'}>}={}){
+  const filterParts=filters.map((x:any)=>({fieldFilter:{field:x.field,op:x.op,value:x.value}}));
+  const where=filterParts.length===1?filterParts[0]:filterParts.length>1?{compositeFilter:{op:'AND',filters:filterParts}}:undefined;
+  const structured:any={from:[{collectionId:from}]};
+  if(where) structured.where=where;
+  if(options.orderBy?.length) structured.orderBy=options.orderBy.map(x=>({field:{fieldPath:x.fieldPath},direction:x.direction}));
+  structured.limit=Math.max(1,Math.min(300,Number(options.limit||50)));
+  const r=await fetch(`${firestoreBase()}:runQuery`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({structuredQuery:structured})});
+  if(!r.ok){const text=await r.text();throw new Error(`Firestore query failed: ${r.status} ${text.slice(0,500)}`);}
+  const rows:any[]=await r.json();
+  return rows.filter(x=>x.document).map(x=>({name:x.document.name,fields:decodeFields(x.document.fields)}));
+}
+
+function publicProductProjection(p:any){
+  return {
+    id:String(p.id||''),creatorId:String(p.creatorId||''),creatorUsername:String(p.creatorUsername||''),creatorDisplayName:String(p.creatorDisplayName||''),
+    title:String(p.title||''),subtitle:String(p.subtitle||''),description:String(p.description||''),type:String(p.type||'digital_product'),subtype:String(p.subtype||''),
+    status:'active',visibility:'public',featured:Boolean(p.featured),currency:String(p.currency||'INR'),priceIds:Array.isArray(p.priceIds)?p.priceIds.map(String):[],
+    version:Number(p.version||1),thumbnail:String(p.thumbnail||''),gallery:Array.isArray(p.gallery)?p.gallery.map(String).slice(0,12):[],
+    category:String(p.category||''),subcategory:String(p.subcategory||''),tags:Array.isArray(p.tags)?p.tags.map(String).slice(0,30):[],
+    license:String(p.license||''),usageRestrictions:String(p.usageRestrictions||''),requirements:String(p.requirements||''),whatIsIncluded:String(p.whatIsIncluded||''),
+    createdAt:p.createdAt,updatedAt:p.updatedAt,publishedAt:p.publishedAt,
+    viewsCount:Number(p.viewsCount||0),saveCount:Number(p.saveCount||0),purchaseCount:Number(p.purchaseCount||0)
+  };
+}
+
+function marketplaceRelevance(p:any,query:string){
+  const q=String(query||'').toLowerCase().trim(); if(!q) return 0;
+  const terms=q.split(/\s+/).filter(Boolean); const fields=[['title',String(p.title||'')],['subtitle',String(p.subtitle||'')],['category',String(p.category||'')],['subcategory',String(p.subcategory||'')],['tags',(Array.isArray(p.tags)?p.tags:[]).join(' ')],['creator',`${p.creatorUsername||''} ${p.creatorDisplayName||''}`],['description',String(p.description||'')]];
+  let score=0; for(const term of terms){ for(const [name,value] of fields){const hay=value.toLowerCase(); if(!hay.includes(term)) continue; score += name==='title'?12:name==='subtitle'?8:name==='category'||name==='subcategory'?7:name==='tags'?6:name==='creator'?5:2; if(hay===term) score+=4; }}
+  if(String(p.title||'').toLowerCase()===q) score+=20; return score;
+}
+function marketplaceTrendScore(p:any){
+  const views=Number(p.viewsCount||0), saves=Number(p.saveCount||0), purchases=Number(p.purchaseCount||0);
+  const published=Date.parse(String(p.publishedAt||p.updatedAt||'')); const ageDays=published>0?Math.max(0,(Date.now()-published)/86400000):365;
+  const recency=Math.max(0,14-ageDays);
+  return views*0.01+saves*2+purchases*6+recency;
+}
+
+async function loadPublicMarketplaceProducts(token:string, filters:any = {}){
+  const category=String(filters.category||'').trim(); const subcategory=String(filters.subcategory||'').trim(); const type=String(filters.type||'').trim(); const creatorId=String(filters.creatorId||'').trim();
+  const queryFilters=[fsFilter('status','EQUAL',{stringValue:'active'}),fsFilter('visibility','EQUAL',{stringValue:'public'})];
+  if(creatorId) queryFilters.push(fsFilter('creatorId','EQUAL',{stringValue:creatorId}));
+  const rows=await fsRunQueryAdvanced(token,'commerceProducts',queryFilters,{orderBy:[{fieldPath:'publishedAt',direction:'DESCENDING'}],limit:250});
+  let products=rows.map(x=>publicProductProjection({id:x.name.split('/').pop(),...x.fields}));
+  if(category) products=products.filter(p=>String(p.category||'').toLowerCase()===category.toLowerCase());
+  if(subcategory) products=products.filter(p=>String(p.subcategory||'').toLowerCase()===subcategory.toLowerCase());
+  if(type) products=products.filter(p=>String(p.type||'').toLowerCase()===type.toLowerCase());
+  return products;
+}
+
+async function loadPublicPricesForProducts(token:string, products:any[]){
+  const ids=Array.from(new Set(products.map(p=>String(p.id||'')).filter(Boolean))); const map:any={};
+  for(let i=0;i<ids.length;i+=30){
+    const chunk=ids.slice(i,i+30); if(!chunk.length) continue;
+    try{
+      const rows=await fsRunQueryAdvanced(token,'commercePrices',[fsFilter('productId','IN',{arrayValue:{values:chunk.map(id=>({stringValue:id}))}})],{limit:250});
+      rows.forEach(x=>{const price={id:x.name.split('/').pop(),...x.fields}; if(price.active===true){const pid=String(price.productId||''); const amt=Number(price.amount||0); if(pid && (!map[pid]||amt<Number(map[pid].amount||0))) map[pid]={id:String(price.id||''),productId:pid,amount:amt,currency:String(price.currency||'INR'),billingType:price.billingType==='recurring'?'recurring':'one_time',active:true,validFrom:price.validFrom,validUntil:price.validUntil,createdAt:price.createdAt,updatedAt:price.updatedAt}; }});
+    }catch(error){ console.warn('Marketplace price batch failed:',error); }
+  }
+  return map;
+}
+
+async function marketplaceList(token:string, params:any){
+  const q=String(params.q||'').trim().slice(0,100); const sort=String(params.sort||'newest'); const limitCount=Math.max(6,Math.min(24,Number(params.limit||24)));
+  let products=await loadPublicMarketplaceProducts(token,params);
+  const prices=await loadPublicPricesForProducts(token,products);
+  if(q){const queryText=q.toLowerCase(); products=products.map(p=>({...p,__score:marketplaceRelevance(p,queryText)})).filter(p=>p.__score>0);}
+  const priceAmount=(p:any)=>Number(prices[p.id]?.amount||0);
+  products.sort((a:any,b:any)=>{
+    if(sort==='relevance') return Number(b.__score||0)-Number(a.__score||0) || String(b.publishedAt||b.updatedAt||'').localeCompare(String(a.publishedAt||a.updatedAt||'')) || String(a.id).localeCompare(String(b.id));
+    if(sort==='popular') return marketplaceTrendScore(b)-marketplaceTrendScore(a) || String(b.publishedAt||b.updatedAt||'').localeCompare(String(a.publishedAt||a.updatedAt||'')) || String(a.id).localeCompare(String(b.id));
+    if(sort==='price_asc') return priceAmount(a)-priceAmount(b) || String(a.id).localeCompare(String(b.id));
+    if(sort==='price_desc') return priceAmount(b)-priceAmount(a) || String(a.id).localeCompare(String(b.id));
+    return String(b.publishedAt||b.updatedAt||'').localeCompare(String(a.publishedAt||a.updatedAt||'')) || String(a.id).localeCompare(String(b.id));
+  });
+  products=products.map(({__score,...p}:any)=>p);
+  const cursor=decodeCursor(typeof params.cursor==='string'?params.cursor:undefined);
+  let startIndex=0;
+  if(cursor){const idx=products.findIndex((p:any)=>String(p.id)===cursor.id); startIndex=idx>=0?idx+1:0;}
+  const page=products.slice(startIndex,startIndex+limitCount); const next= startIndex+limitCount<products.length && page.length ? encodeCursor(String(page[page.length-1].id), String(sort==='price_asc'||sort==='price_desc'?priceAmount(page[page.length-1]):sort==='popular'?marketplaceTrendScore(page[page.length-1]):page[page.length-1].publishedAt||page[page.length-1].updatedAt||'')) : undefined;
+  return {generatedAt:nowIso(),products:page,prices,hasMore:Boolean(next),nextCursor:next,total:products.length};
+}
+
+async function marketplaceHome(token:string){
+  const products=await loadPublicMarketplaceProducts(token,{}); const prices=await loadPublicPricesForProducts(token,products);
+  const featured=products.filter(p=>p.featured).slice(0,8);
+  const newest=[...products].sort((a,b)=>String(b.publishedAt||b.updatedAt||'').localeCompare(String(a.publishedAt||a.updatedAt||''))).slice(0,8);
+  const trending=[...products].sort((a,b)=>marketplaceTrendScore(b)-marketplaceTrendScore(a)||String(b.publishedAt||'').localeCompare(String(a.publishedAt||''))).slice(0,8);
+  const creatorsMap=new Map<string,any>(); for(const p of products){if(!p.creatorId)continue; const row=creatorsMap.get(p.creatorId)||{id:p.creatorId,username:p.creatorUsername,displayName:p.creatorDisplayName,productCount:0,cover:p.thumbnail||p.gallery?.[0]||''}; row.productCount++; if(!row.cover)row.cover=p.thumbnail||p.gallery?.[0]||''; creatorsMap.set(p.creatorId,row);}
+  const creators=[...creatorsMap.values()].sort((a,b)=>b.productCount-a.productCount||String(a.username||'').localeCompare(String(b.username||''))).slice(0,50);
+  return {generatedAt:nowIso(),featured,trending,newest,creators,prices};
+}
+
+async function marketplaceByIds(token:string, rawIds:string){
+  const ids=Array.from(new Set(String(rawIds||'').split(',').map(s=>s.trim()).filter(Boolean))).slice(0,100);
+  const all:any[]=[];
+  for(let i=0;i<ids.length;i+=30){
+    const chunk=ids.slice(i,i+30); if(!chunk.length)continue;
+    try{const rows=await fsRunQueryAdvanced(token,'commerceProducts',[fsFilter('status','EQUAL',{stringValue:'active'}),fsFilter('visibility','EQUAL',{stringValue:'public'}),fsFilter('__name__','IN',{arrayValue:{values:chunk.map(id=>({referenceValue:`projects/${projectId()}/databases/(default)/documents/commerceProducts/${id}`}))}})],{limit:30}); all.push(...rows.map(x=>publicProductProjection({id:x.name.split('/').pop(),...x.fields})));}
+    catch{for(const id of chunk){const row=await fsGet(token,`commerceProducts/${id}`); if(row?.fields?.status==='active'&&row?.fields?.visibility==='public')all.push(publicProductProjection({id,...row.fields}));}}
+  }
+  const priceMap=await loadPublicPricesForProducts(token,all); return {generatedAt:nowIso(),products:all,prices:priceMap};
+}
+
 async function listPublicProducts(token:string,creatorId?:string){
   const id=String(creatorId||'').trim();
-  const filters=id?[{field:{fieldPath:'creatorId'},op:'EQUAL',value:{stringValue:id}}]:[];
-  const rows=await fsRunQuery(token,'commerceProducts',filters);
-  const products=rows.map(x=>({id:x.name.split('/').pop(),...x.fields})).filter((p:any)=>p.status==='active'&&p.visibility==='public').map((p:any)=>({
-     id:String(p.id||''),creatorId:String(p.creatorId||''),creatorUsername:String(p.creatorUsername||''),creatorDisplayName:String(p.creatorDisplayName||''),title:String(p.title||''),subtitle:String(p.subtitle||''),description:String(p.description||''),type:p.type,subtype:String(p.subtype||''),status:'active',visibility:'public',featured:Boolean(p.featured),currency:String(p.currency||'INR'),priceIds:Array.isArray(p.priceIds)?p.priceIds.map(String):[],version:Number(p.version||1),thumbnail:String(p.thumbnail||''),gallery:Array.isArray(p.gallery)?p.gallery.map(String).slice(0,12):[],createdAt:p.createdAt,updatedAt:p.updatedAt,publishedAt:p.publishedAt
-  }));
-  products.sort((a:any,b:any)=>Number(Boolean(b.featured))-Number(Boolean(a.featured))||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+  const products=await loadPublicMarketplaceProducts(token,{creatorId:id});
+  products.sort((a:any,b:any)=>Number(Boolean(b.featured))-Number(Boolean(a.featured))||String(b.updatedAt||b.publishedAt||'').localeCompare(String(a.updatedAt||a.publishedAt||'')));
   return {generatedAt:nowIso(),products:products.slice(0,100)};
 }
 
@@ -185,7 +297,7 @@ async function commerceDiagnostics(token:string,uid:string,email?:string,emailVe
 
 async function setProductVisibility(token:string,uid:string,b:any){
   const productId=String(b.productId||''); const visibility=String(b.visibility||'');
-  if(!['public','private'].includes(visibility)) throw new Error('Invalid product visibility.');
+  if(!['public','private','unlisted'].includes(visibility)) throw new Error('Invalid product visibility.');
   const product=await fsGet(token,`commerceProducts/${productId}`); if(!product) throw new Error('Product not found.');
   if(product.fields.creatorId!==uid) throw new Error('You do not own this product.');
   const stamp=nowIso();
@@ -195,6 +307,18 @@ async function setProductVisibility(token:string,uid:string,b:any){
 
 export default async function handler(req:VercelRequest,res:VercelResponse){
   const action=String(req.query.action||'').trim();
+  if(req.method==='GET' && action==='marketplace'){
+    try{ const token=await serviceToken(); const out=await marketplaceList(token,req.query||{}); return res.status(200).json(out); }
+    catch(e:any){ return res.status(500).json({error:e?.message||'Unable to load marketplace.'}); }
+  }
+  if(req.method==='GET' && action==='marketplaceHome'){
+    try{ const token=await serviceToken(); const out=await marketplaceHome(token); return res.status(200).json(out); }
+    catch(e:any){ return res.status(500).json({error:e?.message||'Unable to load marketplace home.'}); }
+  }
+  if(req.method==='GET' && action==='marketplaceByIds'){
+    try{ const token=await serviceToken(); const ids=typeof req.query.ids==='string'?req.query.ids:''; const out=await marketplaceByIds(token,ids); return res.status(200).json(out); }
+    catch(e:any){ return res.status(500).json({error:e?.message||'Unable to load saved products.'}); }
+  }
   if(req.method==='GET' && action==='listPublicPrices'){
     try{ const token=await serviceToken(); const productId=typeof req.query.productId==='string'?req.query.productId:''; const out=await listPublicPrices(token,productId); return res.status(200).json(out); }
     catch(e:any){ return res.status(500).json({error:e?.message||'Unable to load public prices.'}); }

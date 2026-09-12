@@ -31,7 +31,8 @@ import {
   History as HistoryIcon,
   Activity,
   BarChart3,
-  Package
+  Package,
+  ShoppingBag
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -143,6 +144,7 @@ export const Header: React.FC<HeaderProps> = ({
     dashboard: User,
     preferences: Settings,
     purchases: Package,
+    shop: ShoppingBag,
   };
 
   // Keep the primary header intentionally fixed and compact. Existing CMS navigation
@@ -157,6 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
     { page: 'blog', label: 'SCRPTS', icon: BookOpen },
     { page: 'social', label: 'Community', icon: Users },
     { page: 'explore', label: 'Explore', icon: Compass },
+    { page: 'shop', label: 'Shop', icon: ShoppingBag },
   ];
 
   const mainNavLinks: NavLinkItem[] = primaryDefinition.map((item) => ({
@@ -568,7 +571,9 @@ export const Header: React.FC<HeaderProps> = ({
                     <button onClick={() => handleNavClick('dashboard')} className="w-full py-3 px-4 bg-black text-[var(--color-primary)] border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between neo-shadow-sm">
                       <span>MY OFFSCRPT</span><ArrowRight className="w-4 h-4" />
                     </button>
-                    <button onClick={() => handleNavClick('purchases')} className="w-full py-3 px-4 bg-[var(--color-primary)] text-black border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between neo-shadow-sm">
+                    <button onClick={() => handleNavClick('shop')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'shop' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><ShoppingBag className="w-4 h-4"/> SHOP</span><ArrowRight className="w-4 h-4"/></button>
+              <button onClick={() => handleNavClick('saved_products')} className={`w-full text-left py-3 px-4 font-display font-black text-sm uppercase border-2 border-black flex items-center justify-between ${currentPage === 'saved_products' ? 'bg-[var(--color-primary)]' : 'bg-white hover:bg-neutral-100'}`}><span className="flex items-center gap-2"><Bookmark className="w-4 h-4"/> SAVED PRODUCTS</span><ArrowRight className="w-4 h-4"/></button>
+              <button onClick={() => handleNavClick('purchases')} className="w-full py-3 px-4 bg-[var(--color-primary)] text-black border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between neo-shadow-sm">
                       <span>MY PURCHASES</span><Package className="w-4 h-4" />
                     </button>
                     <button onClick={() => handleNavClick('preferences')} className="w-full py-3 px-4 bg-white border-2 border-black font-display font-black text-sm uppercase flex items-center justify-between hover:bg-neutral-100">

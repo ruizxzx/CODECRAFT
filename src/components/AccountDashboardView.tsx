@@ -81,6 +81,11 @@ export const AccountDashboardView: React.FC<Props> = ({ onNavigate, articles, us
       </div>
     </header>
 
+    <section aria-label="Buyer library" className="grid sm:grid-cols-2 gap-4 mb-8">
+      <button onClick={() => onNavigate('purchases')} className="border-4 border-black bg-[var(--color-primary)] p-5 text-left neo-shadow hover:-translate-y-1 transition-transform"><Package className="w-7 h-7"/><div className="font-mono text-[9px] font-black uppercase mt-3">BUYER LIBRARY</div><div className="font-display font-black text-3xl uppercase">MY PURCHASES</div><p className="font-mono text-[9px] mt-2">Open purchased products and secure downloads.</p></button>
+      <button onClick={() => onNavigate('saved_products')} className="border-4 border-black bg-white p-5 text-left neo-shadow hover:-translate-y-1 transition-transform"><Bookmark className="w-7 h-7"/><div className="font-mono text-[9px] font-black uppercase mt-3">BUYER LIBRARY</div><div className="font-display font-black text-3xl uppercase">SAVED PRODUCTS</div><p className="font-mono text-[9px] mt-2">Keep products bookmarked for later.</p></button>
+    </section>
+
     {loading ? <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin"/></div> : <>
       {continueArticle && <button onClick={()=>onNavigate('article', continueArticle)} className="w-full mb-8 border-4 border-black bg-black text-white p-5 text-left neo-shadow-lg hover:bg-[var(--color-primary)] hover:text-black"><div className="font-mono text-[10px] uppercase text-[var(--color-primary)]">CONTINUE READING</div><div className="font-display font-black text-2xl uppercase mt-1">{continueTitle || continueArticle}</div><div className="font-mono text-[10px] mt-2">RESUME FROM YOUR LAST CLOUD CHECKPOINT →</div></button>}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">

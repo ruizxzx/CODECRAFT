@@ -267,7 +267,7 @@ export const DigitalProductEnginePanel:React.FC<Props>=({userProfile})=>{
 
   return <section className="space-y-5">
     <div className="border-4 border-black bg-black text-white p-5 sm:p-7 neo-shadow-lg">
-      <div className="font-mono text-[10px] font-black text-[var(--color-primary)] flex items-center gap-2"><PackagePlus className="w-4 h-4"/> DIGITAL PRODUCT ENGINE · V88</div>
+      <div className="font-mono text-[10px] font-black text-[var(--color-primary)] flex items-center gap-2"><PackagePlus className="w-4 h-4"/> DIGITAL PRODUCT ENGINE</div>
       <h2 className="font-display font-black text-3xl sm:text-4xl uppercase mt-2">Sell Digital Products</h2>
       <p className="text-sm text-neutral-300 mt-3 max-w-4xl">Create, version and publish digital products using the existing OFFSCRPT Commerce foundation. Files are uploaded to private R2 product storage and are not exposed as permanent public download URLs.</p>
       <div className="flex flex-wrap gap-2 mt-5 font-mono text-[9px] font-black uppercase">
