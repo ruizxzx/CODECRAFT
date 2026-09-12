@@ -1,4 +1,4 @@
-import { chunkText, embedTexts, upsertVectors, deleteVectors, getKnowledgeProviderConfig } from '../lib/knowledge-engine.js';
+import { chunkText, embedTexts, upsertVectors, deleteVectors, getKnowledgeProviderConfig } from '../../server/knowledge-engine.js';
 
 function authorizedWorker(req: any) {
   const expected = String(process.env.OFFSCRPT_KNOWLEDGE_WORKER_SECRET || '').trim();

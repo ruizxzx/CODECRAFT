@@ -1,4 +1,4 @@
-import { providerHealth } from '../lib/knowledge-engine.js';
+import { providerHealth } from '../../server/knowledge-engine.js';
 
 const FIREBASE_API_KEY = process.env.FIREBASE_WEB_API_KEY || process.env.VITE_FIREBASE_API_KEY || '';
 const FIREBASE_LOOKUP_URL = `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_API_KEY)}`;

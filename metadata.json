@@ -1,15 +1,13 @@
 {
   "name": "OFFSCRPT",
-  "version": "0.85.1",
-  "description": "OFFSCRPT V85.0.1 Discovery Core bug fixes and hardening: inline filters, handle-aware author search, result-click telemetry, session-cached question indexing, consistent facet filtering, and resilient search loading.",
-  "release": "OFFSCRPT V85.0.1",
+  "version": "0.88.1",
+  "description": "OFFSCRPT V88.0.1 Digital Product Engine deployment hardening for Vercel Hobby, including private product storage and shared server-module routing outside /api.",
+  "release": "OFFSCRPT V88.0.1",
   "majorCapabilities": [
-    "V84 Production Knowledge Engine",
-    "Universal Search 2.0 Foundation",
-    "Discovery Query Filters",
-    "Freshness + Engagement Ranking",
-    "Recommendation Diversification",
-    "Personalized Discovery Foundation",
-    "Explore + Search Compatibility"
+    "V87 Creator Storefront",
+    "V88 Digital Product Engine",
+    "Private R2 Digital Product Storage",
+    "Versioned Digital Products",
+    "Vercel Hobby Function-Count Hardening"
   ]
 }

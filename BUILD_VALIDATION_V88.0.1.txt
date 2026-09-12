@@ -1,0 +1,27 @@
+OFFSCRPT V88.0.1 — BUILD VALIDATION
+
+PATCH SCOPE
+- Vercel Hobby Serverless Function-count hardening.
+- TypeScript fixes from the first V88 deployment logs.
+
+VERCEL-SPECIFIC FIXES
+- Shared server helper files moved from `/api` to `/server`.
+- `/api` route-file count reduced to route handlers only.
+- Removed `@vercel/node` imports in affected handlers.
+
+ERRORS FROM V88.0.0 BUILD LOGS ADDRESSED
+- TS2339 in `api/lib/offscript-retrieval.ts` fixed by widening the decoded document record type.
+- TS2307 for `@vercel/node` fixed by local Vercel request/response types.
+- TS2304 `expiresIn` in `digital-products-server.ts` fixed to `input.expiresIn`.
+
+STATIC VALIDATION
+- API/server TypeScript semantic check: PASSED using TypeScript 5.8.x and Node type definitions.
+- Deployment config check: PASSED.
+- Commerce regression check: PASSED.
+- V87 storefront regression check: PASSED.
+- V88 digital product check: PASSED.
+- Import/Firebase/rules/schema/runtime checks: PASSED.
+
+ENVIRONMENT LIMITATION
+- A complete local `npm ci`/Vite production build could not be completed in the execution environment because the dependency install was interrupted.
+- Therefore no claim of live-production verification is made here.

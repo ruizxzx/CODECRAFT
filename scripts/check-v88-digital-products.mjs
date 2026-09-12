@@ -3,7 +3,7 @@ const required=[
   'src/lib/digitalProducts.ts',
   'src/components/DigitalProductEnginePanel.tsx',
   'api/digital-products.ts',
-  'api/lib/digital-products-server.ts',
+  'server/digital-products-server.ts',
   'firestore.rules',
   'V88.0.0_DIGITAL_PRODUCT_ENGINE.md',
 ];

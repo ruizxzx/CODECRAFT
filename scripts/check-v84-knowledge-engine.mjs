@@ -4,7 +4,7 @@ const root = process.cwd();
 const must = [
   ['src/lib/semanticRetrieval.ts', ['EmbeddingProvider','VectorIndexProvider','chunkContentV84','mergeHybridCandidates']],
   ['src/lib/knowledgeEngine.ts', ['KnowledgeIndexManifest','buildKnowledgeIndexManifest']],
-  ['api/lib/knowledge-engine.js', ['getKnowledgeProviderConfig','embedTexts','queryVector','upsertVectors','deleteVectors']],
+  ['server/knowledge-engine.js', ['getKnowledgeProviderConfig','embedTexts','queryVector','upsertVectors','deleteVectors']],
   ['api/knowledge/health.ts', ['providerHealth','MASTER_ADMIN_REQUIRED']],
   ['api/knowledge/index.ts', ['authorizedWorker','upsertVectors','embedTexts','deleteVectors']],
 ];

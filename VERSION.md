@@ -1,2 +1,3 @@
-V88.0.0
+V88.0.1
+Vercel Hobby deployment fix
 Digital Product Engine

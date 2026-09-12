@@ -3,7 +3,7 @@ const must = [
   ['src/components/KnowledgeView.tsx','Knowledge workspace'],
   ['src/lib/knowledgeEngine.ts','knowledge engine'],
   ['api/ai/offscript-retrieve.ts','secure retrieval endpoint'],
-  ['api/lib/offscript-retrieval.ts','server retrieval'],
+  ['server/offscript-retrieval.ts','server retrieval'],
 ];
 const errors=[];
 for (const [file,label] of must) if(!fs.existsSync(file)) errors.push(`${label}: missing ${file}`);

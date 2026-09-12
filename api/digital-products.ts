@@ -1,9 +1,9 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelRequest, VercelResponse } from '../server/vercel-types.js';
 import crypto from 'node:crypto';
 import {
   serviceToken, verifyFirebaseToken, fsGet, fsCommit, fsQuery,
   r2Config, r2PresignedUrl, productLimits, isBlockedFile, safeName, fileExtension, storageKey, fields, nowIso
-} from './lib/digital-products-server.js';
+} from '../server/digital-products-server.js';
 
 const PRODUCT_TYPES = new Set(['pdf','ebook','template','spreadsheet','presentation','document','zip','research_pack','dataset','prompt_pack','design_assets','audio','video','guide','checklist','worksheet','resource_pack','other']);
 const STATUSES = new Set(['draft','pending_review','published','rejected','archived','suspended']);
