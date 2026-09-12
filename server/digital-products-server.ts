@@ -161,20 +161,20 @@ function awsEncode(value:string) { return encodeURIComponent(value).replace(/[!'
 function amzDate(date:Date) { return date.toISOString().replace(/[-:]|\.\d{3}/g,''); }
 function shortDate(date:Date) { return amzDate(date).slice(0,8); }
 
-export function r2Config() {
-  const accountId = process.env.R2_ACCOUNT_ID || process.env.CLOUDFLARE_ACCOUNT_ID || '';
+export function r2ProductConfig() {
+  const accountId = process.env.R2_PRODUCT_ACCOUNT_ID || '';
   const bucket = process.env.R2_PRODUCT_BUCKET_NAME || '';
-  const accessKey = process.env.R2_ACCESS_KEY_ID || '';
-  const secretKey = process.env.R2_SECRET_ACCESS_KEY || '';
-  const endpoint = process.env.R2_S3_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
+  const accessKey = process.env.R2_PRODUCT_ACCESS_KEY_ID || '';
+  const secretKey = process.env.R2_PRODUCT_SECRET_ACCESS_KEY || '';
+  const endpoint = process.env.R2_PRODUCT_S3_ENDPOINT || (accountId ? `https://${accountId}.r2.cloudflarestorage.com` : '');
   if (!accountId || !bucket || !accessKey || !secretKey || !endpoint) {
-    throw new Error('Digital product storage is not configured. Set R2_PRODUCT_BUCKET_NAME, R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY.');
+    throw new Error('Digital product storage is not configured. Set R2_PRODUCT_BUCKET_NAME, R2_PRODUCT_ACCOUNT_ID, R2_PRODUCT_ACCESS_KEY_ID, R2_PRODUCT_SECRET_ACCESS_KEY and R2_PRODUCT_S3_ENDPOINT.');
   }
   return {accountId,bucket,accessKey,secretKey,endpoint};
 }
 
 export function r2PresignedUrl(input:{method:'PUT'|'HEAD'|'GET';bucket:string;key:string;expiresIn:number}) {
-  const cfg = r2Config();
+  const cfg = r2ProductConfig();
   const now = new Date();
   const date = amzDate(now);
   const day = shortDate(now);

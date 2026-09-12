@@ -8,6 +8,7 @@ import {
   type DigitalProduct, type DigitalProductFile, type DigitalProductSubtype, type DigitalProductVersion, type DigitalProductVisibility
 } from '../lib/digitalProducts';
 import { notifyToast } from '../lib/toast';
+import { uploadMedia } from '../lib/media';
 
 interface Props { userProfile: CommunityUser | null; }
 
@@ -174,6 +175,63 @@ export const DigitalProductEnginePanel:React.FC<Props>=({userProfile})=>{
     finally{setBusy(false);}
   };
 
+  const uploadGallery=async(e:React.ChangeEvent<HTMLInputElement>)=>{
+    const productId=selectedId;
+    const chosen=Array.from(e.target.files||[]).filter(file=>file.type.startsWith('image/'));
+    e.target.value='';
+    if(!productId||!chosen.length)return;
+    const remaining=12-(selected?.gallery?.length||0);
+    if(chosen.length>remaining){
+      notifyToast(`A product can have up to 12 gallery images. Choose ${Math.max(remaining,0)} or fewer.`, 'error');
+      return;
+    }
+    setBusy(true);
+    try{
+      const uploaded:string[]=[];
+      for(const file of chosen){
+        const progressKey=`gallery:${file.name}:${file.size}`;
+        setProgress(p=>({...p,[progressKey]:5}));
+        const result=await uploadMedia(file,'product-gallery',n=>setProgress(p=>({...p,[progressKey]:n})));
+        uploaded.push(result.publicUrl);
+      }
+      const nextGallery=[...(selected?.gallery||[]),...uploaded].slice(0,12);
+      const result=await updateDigitalProduct({
+        productId,
+        gallery:nextGallery,
+        thumbnail:selected?.thumbnail||nextGallery[0]||''
+      });
+      setProducts(prev=>prev.map(p=>p.id===productId?result.product:p));
+      setProgress(p=>{const next={...p}; uploaded.forEach((_,i)=>{const file=chosen[i]; delete next[`gallery:${file.name}:${file.size}`];}); return next;});
+      notifyToast(`${uploaded.length} product image${uploaded.length===1?'':'s'} uploaded.`, 'success');
+    }catch(e:any){
+      notifyToast(e?.message||'Could not upload product images.','error');
+    }finally{setBusy(false);}
+  };
+
+  const removeGalleryImage=async(url:string)=>{
+    if(!selected)return;
+    setBusy(true);
+    try{
+      const nextGallery=(selected.gallery||[]).filter(x=>x!==url);
+      const nextThumb=selected.thumbnail===url ? (nextGallery[0]||'') : (selected.thumbnail||'');
+      const result=await updateDigitalProduct({productId:selected.id,gallery:nextGallery,thumbnail:nextThumb});
+      setProducts(prev=>prev.map(p=>p.id===selected.id?result.product:p));
+      notifyToast('Product image removed.','success');
+    }catch(e:any){notifyToast(e?.message||'Could not remove image.','error');}
+    finally{setBusy(false);}
+  };
+
+  const setGalleryCover=async(url:string)=>{
+    if(!selected)return;
+    setBusy(true);
+    try{
+      const result=await updateDigitalProduct({productId:selected.id,thumbnail:url});
+      setProducts(prev=>prev.map(p=>p.id===selected.id?result.product:p));
+      notifyToast('Product cover updated.','success');
+    }catch(e:any){notifyToast(e?.message||'Could not update product cover.','error');}
+    finally{setBusy(false);}
+  };
+
   const publish=async()=>{
     if(!selected)return;
     setBusy(true);
@@ -242,6 +300,44 @@ export const DigitalProductEnginePanel:React.FC<Props>=({userProfile})=>{
             <div className="mt-4"><FormFields form={form} setForm={setForm} creation={false}/></div>
           </div>
 
+          <div className="border-2 border-black bg-white p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-display font-black uppercase text-xl">Product media</div>
+                <div className="font-mono text-[8px] uppercase">Public preview images · up to 12 · shown on product pages, profiles and storefront cards</div>
+              </div>
+              <label className="border-2 border-black bg-[var(--color-primary)] px-3 py-2 font-mono text-[9px] font-black uppercase cursor-pointer">
+                <Image className="inline w-3 h-3"/> ADD IMAGES
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" multiple className="hidden" onChange={uploadGallery} disabled={busy}/>
+              </label>
+            </div>
+            {(selected?.gallery||[]).length===0 ? (
+              <div className="mt-4 border-2 border-dashed border-black p-6 text-center">
+                <Image className="w-7 h-7 mx-auto"/>
+                <div className="font-mono text-[9px] mt-2 uppercase">Add product photos to make the store listing visual.</div>
+                <div className="font-mono text-[8px] text-neutral-500 mt-1 uppercase">Preview images use OFFSCRPT's existing public media pipeline. Protected files remain separate and private.</div>
+              </div>
+            ) : (
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+                {(selected.gallery||[]).map((url,index)=>(
+                  <div key={`${url}-${index}`} className="border-2 border-black bg-white overflow-hidden">
+                    <div className="aspect-square bg-neutral-100">
+                      <img src={url} alt="" className="w-full h-full object-cover"/>
+                    </div>
+                    <div className="p-2 space-y-1">
+                      <button type="button" disabled={busy} onClick={()=>void setGalleryCover(url)} className={`w-full border border-black px-2 py-1 font-mono text-[7px] font-black uppercase ${selected.thumbnail===url?'bg-[var(--color-primary)]':'bg-white'}`}>
+                        {selected.thumbnail===url?'COVER':'SET COVER'}
+                      </button>
+                      <button type="button" disabled={busy} onClick={()=>void removeGalleryImage(url)} className="w-full border border-black px-2 py-1 bg-white font-mono text-[7px] font-black uppercase">
+                        REMOVE
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="grid lg:grid-cols-[1fr_1.3fr] gap-4">
             <div className="border-2 border-black bg-white p-5 space-y-3">
               <div className="flex items-center justify-between"><div><div className="font-display font-black uppercase text-xl">Versions</div><div className="font-mono text-[8px]">Historical files are never overwritten.</div></div><Plus className="w-5 h-5"/></div>
@@ -251,7 +347,7 @@ export const DigitalProductEnginePanel:React.FC<Props>=({userProfile})=>{
             </div>
 
             <div className="border-2 border-black bg-white p-5 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="font-display font-black uppercase text-xl">Files</div><div className="font-mono text-[8px]">V{selectedVersion?.versionLabel||'?'} · {selectedFiles.length} FILES</div></div><label className="border-2 border-black bg-[var(--color-primary)] px-3 py-2 font-mono text-[9px] font-black uppercase cursor-pointer"><UploadCloud className="inline w-3 h-3"/> ADD FILES<input type="file" multiple className="hidden" onChange={upload} disabled={busy}/></label></div>
+              <div className="flex flex-wrap items-center justify-between gap-2"><div><div className="font-display font-black uppercase text-xl">Protected product files</div><div className="font-mono text-[8px]">V{selectedVersion?.versionLabel||'?'} · {selectedFiles.length} FILES</div></div><label className="border-2 border-black bg-[var(--color-primary)] px-3 py-2 font-mono text-[9px] font-black uppercase cursor-pointer"><UploadCloud className="inline w-3 h-3"/> ADD PRODUCT FILES<input type="file" multiple className="hidden" onChange={upload} disabled={busy}/></label></div>
               {!selectedVersion ? (
                 <div className="border-2 border-dashed border-black p-5 font-mono text-xs">SELECT A VERSION.</div>
               ) : selectedFiles.length === 0 ? (

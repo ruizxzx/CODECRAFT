@@ -19,5 +19,7 @@ if(!client.includes('/api/digital-products')||client.includes('VITE_R2')||client
 }
 const api=fs.readFileSync('api/digital-products.ts','utf8');
 for(const s of ['createProduct','updateProduct','requestUpload','completeUpload','createVersion','publishProduct','publishVersion','archiveProduct']) if(!api.includes(`case '${s}'`)){console.error(`V88 CHECK FAILED: missing action ${s}`);process.exit(1);}
-if(!api.includes('R2_PRODUCT_BUCKET_NAME') || !api.includes('currentDocument')) { /* helper holds precondition; this guards intended architecture */ }
+const server=fs.readFileSync('server/digital-products-server.ts','utf8');
+for(const key of ['R2_PRODUCT_BUCKET_NAME','R2_PRODUCT_ACCOUNT_ID','R2_PRODUCT_ACCESS_KEY_ID','R2_PRODUCT_SECRET_ACCESS_KEY','R2_PRODUCT_S3_ENDPOINT']) { if(!server.includes(key)){console.error(`V88 CHECK FAILED: missing ${key} in product storage config`);process.exit(1);} }
+for(const publicKey of ['R2_ACCESS_KEY_ID','R2_SECRET_ACCESS_KEY']) { if(api.includes(publicKey) || server.includes(`process.env.${publicKey}`)) { console.error(`V88 CHECK FAILED: digital product API must not use public media credential ${publicKey}`); process.exit(1); } }
 console.log('V88 DIGITAL PRODUCT CHECK OK — product engine, version/file APIs, security rules, and server-only storage contract detected.');

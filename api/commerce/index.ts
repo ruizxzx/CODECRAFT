@@ -159,7 +159,7 @@ async function listPublicProducts(token:string,creatorId?:string){
   const filters=id?[{field:{fieldPath:'creatorId'},op:'EQUAL',value:{stringValue:id}}]:[];
   const rows=await fsRunQuery(token,'commerceProducts',filters);
   const products=rows.map(x=>({id:x.name.split('/').pop(),...x.fields})).filter((p:any)=>p.status==='active'&&p.visibility==='public').map((p:any)=>({
-    id:String(p.id||''),creatorId:String(p.creatorId||''),creatorUsername:String(p.creatorUsername||''),title:String(p.title||''),description:String(p.description||''),type:p.type,status:'active',visibility:'public',featured:Boolean(p.featured),currency:String(p.currency||'INR'),priceIds:Array.isArray(p.priceIds)?p.priceIds.map(String):[],version:Number(p.version||1),createdAt:p.createdAt,updatedAt:p.updatedAt,publishedAt:p.publishedAt
+     id:String(p.id||''),creatorId:String(p.creatorId||''),creatorUsername:String(p.creatorUsername||''),creatorDisplayName:String(p.creatorDisplayName||''),title:String(p.title||''),subtitle:String(p.subtitle||''),description:String(p.description||''),type:p.type,subtype:String(p.subtype||''),status:'active',visibility:'public',featured:Boolean(p.featured),currency:String(p.currency||'INR'),priceIds:Array.isArray(p.priceIds)?p.priceIds.map(String):[],version:Number(p.version||1),thumbnail:String(p.thumbnail||''),gallery:Array.isArray(p.gallery)?p.gallery.map(String).slice(0,12):[],createdAt:p.createdAt,updatedAt:p.updatedAt,publishedAt:p.publishedAt
   }));
   products.sort((a:any,b:any)=>Number(Boolean(b.featured))-Number(Boolean(a.featured))||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
   return {generatedAt:nowIso(),products:products.slice(0,100)};

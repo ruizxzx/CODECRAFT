@@ -62,3 +62,12 @@ The upload API verifies Firebase ID tokens with Firebase Authentication's `accou
 ## V75.7 site-wide media center
 
 Master Control now includes a MEDIA tab with site-wide multi-file upload. Master-only folders include `site`, `articles`, and `carousel`; user-scoped upload folders include `profile`, `posts`, `videos`, and `attachments`. The `site` destination is written to `site/assets/...` in the R2 bucket.
+
+
+## V88 digital product media and protected files
+
+V88 separates public product preview images from protected downloadable files.
+
+- Product preview/gallery images use the existing public `R2_BUCKET_NAME` + `R2_PUBLIC_BASE_URL` media pipeline under `users/<uid>/product-gallery/...`.
+- Protected product files (ZIP, PDF, datasets, etc.) use the dedicated private `R2_PRODUCT_BUCKET_NAME` bucket with the same R2 credentials.
+- Do not expose protected product files through `R2_PUBLIC_BASE_URL`.

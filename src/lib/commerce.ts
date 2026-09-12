@@ -8,9 +8,12 @@ export type CommerceOrderStatus = 'created'|'pending_payment'|'paid'|'partially_
 export type CommerceEntitlementStatus = 'pending'|'active'|'expired'|'cancelled'|'refunded'|'revoked';
 
 export interface CommerceProduct {
-  id: string; creatorId: string; creatorUsername?: string; title: string; description: string;
-  type: CommerceProductType; status: CommerceProductStatus; visibility: 'private'|'public'|'unlisted'; featured?: boolean;
-  currency: string; priceIds: string[]; version: number; createdAt?: string; updatedAt?: string; publishedAt?: string; archivedAt?: string;
+  id: string; creatorId: string; creatorUsername?: string; creatorDisplayName?: string;
+  title: string; subtitle?: string; description: string;
+  type: CommerceProductType; subtype?: string; status: CommerceProductStatus; visibility: 'private'|'public'|'unlisted'; featured?: boolean;
+  currency: string; priceIds: string[]; version: number;
+  thumbnail?: string; gallery?: string[];
+  createdAt?: string; updatedAt?: string; publishedAt?: string; archivedAt?: string;
 }
 
 export interface CommercePublicPrice {

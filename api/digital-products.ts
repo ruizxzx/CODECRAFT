@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '../server/vercel-types.js';
 import crypto from 'node:crypto';
 import {
   serviceToken, verifyFirebaseToken, fsGet, fsCommit, fsQuery,
-  r2Config, r2PresignedUrl, productLimits, isBlockedFile, safeName, fileExtension, storageKey, fields, nowIso
+  r2ProductConfig, r2PresignedUrl, productLimits, isBlockedFile, safeName, fileExtension, storageKey, fields, nowIso
 } from '../server/digital-products-server.js';
 
 const PRODUCT_TYPES = new Set(['pdf','ebook','template','spreadsheet','presentation','document','zip','research_pack','dataset','prompt_pack','design_assets','audio','video','guide','checklist','worksheet','resource_pack','other']);
@@ -130,7 +130,7 @@ async function requestUpload(adminToken:string,uid:string,b:any){
   if(existingBytes+size>limits.maxTotalBytesPerVersion) throw new Error('This version exceeds its total file-size limit.');
   const fileId=crypto.randomUUID();
   const objectKey=storageKey(uid,productId,versionId,fileId,fileName);
-  const uploadUrl=r2PresignedUrl({method:'PUT',bucket:r2Config().bucket,key:objectKey,expiresIn:900});
+  const uploadUrl=r2PresignedUrl({method:'PUT',bucket:r2ProductConfig().bucket,key:objectKey,expiresIn:900});
   return {file:{id:fileId,productId,versionId,creatorId:uid,originalFilename:fileName,safeFilename:fileName,mimeType:mime,sizeBytes:size,role,status:'pending',objectKey},uploadUrl,expiresIn:900,limits};
 }
 
@@ -140,7 +140,7 @@ async function completeUpload(adminToken:string,uid:string,b:any){
   if(!product||!version) throw new Error('Product or version not found.');
   if(product.fields.creatorId!==uid||version.fields.creatorId!==uid||version.fields.productId!==productId) throw new Error('Upload ownership check failed.');
   if(!/^digital-products\/[A-Za-z0-9_-]{1,180}\/[A-Za-z0-9-]{1,180}\/[A-Za-z0-9-]{1,180}\/[A-Za-z0-9-]{1,180}-/.test(objectKey)) throw new Error('Invalid storage reference.');
-  const cfg=r2Config();
+  const cfg=r2ProductConfig();
   const headUrl=r2PresignedUrl({method:'HEAD',bucket:cfg.bucket,key:objectKey,expiresIn:300});
   const head=await fetch(headUrl,{method:'HEAD'});
   if(!head.ok) throw new Error('Uploaded file could not be verified in storage.');

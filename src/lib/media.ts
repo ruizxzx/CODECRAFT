@@ -22,7 +22,7 @@ const allowedTypes = new Set([
   'application/pdf',
 ]);
 
-export async function uploadMedia(file: File, folder: 'profile' | 'articles' | 'posts' | 'videos' | 'attachments' | 'answers' | 'discussion-replies' | 'carousel' | 'users' | 'site', onProgress?: (progress: number) => void, options?: { targetUid?: string }): Promise<MediaUploadResult> {
+export async function uploadMedia(file: File, folder: 'profile' | 'articles' | 'posts' | 'videos' | 'attachments' | 'answers' | 'discussion-replies' | 'carousel' | 'product-gallery' | 'users' | 'site', onProgress?: (progress: number) => void, options?: { targetUid?: string }): Promise<MediaUploadResult> {
   const user = auth.currentUser;
   if (!user) throw new Error('Sign in before uploading media.');
   if (!allowedTypes.has(file.type)) throw new Error('Unsupported media format.');
