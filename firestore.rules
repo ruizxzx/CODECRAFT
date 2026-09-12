@@ -490,8 +490,8 @@ service cloud.firestore {
       }
       match /resources/{resourceId} {
         allow read: if communityCanRead(communityId);
-        allow create: if isSignedIn() && communityManager(communityId) && incoming().creatorId == request.auth.uid && validText(incoming().title,120) && validText(incoming().description,500) && incoming().url is string && incoming().url.matches('^https?://[^\s]+$');
-        allow update: if isSignedIn() && communityManager(communityId) && incoming().creatorId == existing().creatorId && incoming().diff(existing()).affectedKeys().hasOnly(['title','description','url','category','updatedAt']) && validText(incoming().title,120) && validText(incoming().description,500) && incoming().url is string && incoming().url.matches('^https?://[^\s]+$');
+        allow create: if isSignedIn() && communityManager(communityId) && incoming().creatorId == request.auth.uid && validText(incoming().title,120) && validText(incoming().description,500) && incoming().url is string && incoming().url.matches('^https?://[^ ]+$');
+        allow update: if isSignedIn() && communityManager(communityId) && incoming().creatorId == existing().creatorId && incoming().diff(existing()).affectedKeys().hasOnly(['title','description','url','category','updatedAt']) && validText(incoming().title,120) && validText(incoming().description,500) && incoming().url is string && incoming().url.matches('^https?://[^ ]+$');
         allow delete: if isSignedIn() && communityManager(communityId);
       }
 
