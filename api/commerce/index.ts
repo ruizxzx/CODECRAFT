@@ -105,7 +105,7 @@ async function createProduct(token:string,uid:string,b:any){
   const title=String(b.title||'').trim().slice(0,160), description=String(b.description||'').trim().slice(0,5000), type=String(b.type||'digital_product'), visibility=String(b.visibility||'private'), currency=String(b.currency||'INR').toUpperCase();
   if(!title||!['content','digital_product','course','subscription','community','service','bundle','tip'].includes(type))throw new Error('Invalid product.');
   if(!['private','public'].includes(visibility)||!/^[A-Z]{3}$/.test(currency))throw new Error('Invalid product visibility or currency.');
-  const productId=crypto.randomUUID(); const priceInput=b.price; const writes=[{create:{name:`${firestoreBase()}/commerceProducts/${productId}`,fields:fields({creatorId:uid,creatorUsername:String(user.fields.username||''),title,description,type,status:'draft',visibility,currency,priceIds:[],version:1,createdAt:nowIso(),updatedAt:nowIso()})}}];
+  const productId=crypto.randomUUID(); const priceInput=b.price; const writes=[{create:{name:`${firestoreBase()}/commerceProducts/${productId}`,fields:fields({creatorId:uid,creatorUsername:String(user.fields.username||''),title,description,type,status:'draft',visibility,featured:false,currency,priceIds:[],version:1,createdAt:nowIso(),updatedAt:nowIso()})}}];
   let price:any=undefined;
   if(priceInput){ if(!amountOk(priceInput.amount)||String(priceInput.currency||currency).toUpperCase()!==currency)throw new Error('Invalid initial price.'); const priceId=crypto.randomUUID(); price={id:priceId,productId,amount:Number(priceInput.amount),currency,billingType:priceInput.billingType==='recurring'?'recurring':'one_time',interval:priceInput.interval,intervalCount:priceInput.intervalCount||1,trialDays:Math.max(0,Math.min(365,Number(priceInput.trialDays||0))),active:true,createdAt:nowIso(),updatedAt:nowIso()}; writes[0].create.fields.priceIds=value([priceId]); writes.push({create:{name:`${firestoreBase()}/commercePrices/${priceId}`,fields:fields(price)}}); }
   await fsCommit(token,writes); return {product:{id:productId,creatorId:uid,creatorUsername:String(user.fields.username||''),title,description,type,status:'draft',visibility,currency,priceIds:price?.id?[price.id]:[],version:1,createdAt:nowIso(),updatedAt:nowIso()},price};
@@ -154,6 +154,28 @@ async function refundTest(token:string,uid:string,b:any){
   if(!testMode())throw new Error('Refund test mode is disabled. Configure a payment provider before production refunds.'); const orderId=String(b.orderId||''); const order=await fsGet(token,`commerceOrders/${orderId}`); if(!order||order.fields.customerId!==uid)throw new Error('Order not found.'); if(order.fields.status!=='paid'&&order.fields.status!=='partially_refunded')throw new Error('Only paid orders can be refunded.'); const key=String(b.idempotencyKey||'').trim(); if(key.length<8||key.length>200)throw new Error('Valid idempotencyKey is required.'); const eventId=idempotencyId(uid,`refund:${key}`),existingEvent=await fsGet(token,`commerceIdempotency/${eventId}`); if(existingEvent){return {refundId:String(existingEvent.fields.refundId||''),status:'completed',orderStatus:'refunded',entitlementStatus:'refunded'};} const eid=Array.isArray(order.fields.entitlementIds)?String(order.fields.entitlementIds[0]||''):''; const refundId=crypto.randomUUID(),ledgerId=crypto.randomUUID(); const ent=eid?await fsGet(token,`entitlements/${eid}`):null; const writes:any[]=[{create:{name:`${firestoreBase()}/commerceRefunds/${refundId}`,fields:fields({orderId,customerId:uid,amount:Number(order.fields.total||0),currency:order.fields.currency,status:'completed',reason:String(b.reason||'Customer requested refund').slice(0,500),createdAt:nowIso(),completedAt:nowIso()})}},{update:{name:`${firestoreBase()}/commerceOrders/${orderId}`,fields:fields({status:'refunded',refundedAt:nowIso(),updatedAt:nowIso()})}},{update:{name:`${firestoreBase()}/commercePayments/${String(order.fields.paymentId||'')}`,fields:fields({status:'refunded',refundedAt:nowIso(),updatedAt:nowIso()})}},{create:{name:`${firestoreBase()}/creatorRevenue/${ledgerId}`,fields:fields({creatorId:String(order.fields.creatorId||''),orderId,transactionId:refundId,gross:0,discounts:0,tax:0,paymentFees:0,platformFee:0,refundAmount:Number(order.fields.total||0),netCreatorAmount:-Number(order.fields.total||0),type:'refund',status:'posted',currency:String(order.fields.currency||'INR'),createdAt:nowIso()})}},{create:{name:`${firestoreBase()}/commerceAuditLogs/${crypto.randomUUID()}`,fields:fields({actorId:uid,actorType:'customer',targetType:'order',targetId:orderId,event:'refundCompleted',timestamp:nowIso(),metadata:{refundId}})}},{create:{name:`${firestoreBase()}/commerceIdempotency/${eventId}`,fields:fields({userId:uid,orderId,refundId,createdAt:nowIso()})}},{create:{name:`${firestoreBase()}/users/${uid}/notifications/commerce_${crypto.randomUUID()}`,fields:fields({type:'commerce_refund',actorId:uid,actorUsername:'',actorName:'OFFSCRPT Commerce',actorAvatar:'',message:'Your test refund was completed.',targetType:'commerce_order',targetId:orderId,read:false,createdAt:nowIso()})}}]; if(ent){writes.push({update:{name:`${firestoreBase()}/entitlements/${eid}`,fields:fields({status:'refunded',revokedAt:nowIso()})}});} await fsCommit(token,writes); return {refundId,status:'completed',orderStatus:'refunded',entitlementStatus:ent?'refunded':undefined};
 }
 
+async function listPublicProducts(token:string,creatorId?:string){
+  const id=String(creatorId||'').trim();
+  const filters=id?[{field:{fieldPath:'creatorId'},op:'EQUAL',value:{stringValue:id}}]:[];
+  const rows=await fsRunQuery(token,'commerceProducts',filters);
+  const products=rows.map(x=>({id:x.name.split('/').pop(),...x.fields})).filter((p:any)=>p.status==='active'&&p.visibility==='public').map((p:any)=>({
+    id:String(p.id||''),creatorId:String(p.creatorId||''),creatorUsername:String(p.creatorUsername||''),title:String(p.title||''),description:String(p.description||''),type:p.type,status:'active',visibility:'public',featured:Boolean(p.featured),currency:String(p.currency||'INR'),priceIds:Array.isArray(p.priceIds)?p.priceIds.map(String):[],version:Number(p.version||1),createdAt:p.createdAt,updatedAt:p.updatedAt,publishedAt:p.publishedAt
+  }));
+  products.sort((a:any,b:any)=>Number(Boolean(b.featured))-Number(Boolean(a.featured))||String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+  return {generatedAt:nowIso(),products:products.slice(0,100)};
+}
+
+async function listPublicPrices(token:string,productId:string){
+  const id=String(productId||'').trim(); if(!id) return {generatedAt:nowIso(),prices:[]};
+  const product=await fsGet(token,`commerceProducts/${id}`);
+  if(!product || product.fields.status!=='active' || product.fields.visibility!=='public') return {generatedAt:nowIso(),prices:[]};
+  const rows=await fsRunQuery(token,'commercePrices',[{field:{fieldPath:'productId'},op:'EQUAL',value:{stringValue:id}}]);
+  const prices=rows.map(x=>({id:x.name.split('/').pop(),...x.fields})).filter((p:any)=>p.active===true).map((p:any)=>({
+    id:String(p.id||''),productId:id,amount:Number(p.amount||0),currency:String(p.currency||product.fields.currency||'INR'),billingType:p.billingType==='recurring'?'recurring':'one_time',interval:p.interval,intervalCount:p.intervalCount?Number(p.intervalCount):undefined,trialDays:p.trialDays?Number(p.trialDays):undefined,active:true,validFrom:p.validFrom,validUntil:p.validUntil,createdAt:p.createdAt,updatedAt:p.updatedAt
+  })).sort((a:any,b:any)=>a.amount-b.amount);
+  return {generatedAt:nowIso(),prices:prices.slice(0,50)};
+}
+
 async function commerceDiagnostics(token:string,uid:string,email?:string,emailVerified?:boolean){
   if(!(await verifyCommerceAdmin(token,uid,email,emailVerified))) { const error:any=new Error('Administrator access required.'); error.statusCode=403; throw error; }
   const names=['commerceProducts','commercePrices','commerceOrders','commercePayments','commerceRefunds','entitlements','creatorRevenue','creatorPayouts','commerceAuditLogs','commerceWebhookEvents'];
@@ -161,7 +183,26 @@ async function commerceDiagnostics(token:string,uid:string,email?:string,emailVe
   return {generatedAt:nowIso(),counts:Object.fromEntries(entries.map(([name,count])=>[name,count??0])),errors:Object.fromEntries(entries.filter(([,count,error])=>count===null).map(([name,,error])=>[name,error]))};
 }
 
+async function setProductVisibility(token:string,uid:string,b:any){
+  const productId=String(b.productId||''); const visibility=String(b.visibility||'');
+  if(!['public','private'].includes(visibility)) throw new Error('Invalid product visibility.');
+  const product=await fsGet(token,`commerceProducts/${productId}`); if(!product) throw new Error('Product not found.');
+  if(product.fields.creatorId!==uid) throw new Error('You do not own this product.');
+  const stamp=nowIso();
+  await fsPatch(token,`commerceProducts/${productId}`,{visibility,updatedAt:stamp});
+  return {product:{id:productId,...product.fields,visibility,updatedAt:stamp}};
+}
+
 export default async function handler(req:VercelRequest,res:VercelResponse){
+  const action=String(req.query.action||'').trim();
+  if(req.method==='GET' && action==='listPublicPrices'){
+    try{ const token=await serviceToken(); const productId=typeof req.query.productId==='string'?req.query.productId:''; const out=await listPublicPrices(token,productId); return res.status(200).json(out); }
+    catch(e:any){ return res.status(500).json({error:e?.message||'Unable to load public prices.'}); }
+  }
+  if(req.method==='GET' && action==='listPublicProducts'){
+    try{ const token=await serviceToken(); const creatorId=typeof req.query.creatorId==='string'?req.query.creatorId:undefined; const out=await listPublicProducts(token,creatorId); return res.status(200).json(out); }
+    catch(e:any){ return res.status(500).json({error:e?.message||'Unable to load public products.'}); }
+  }
   if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
-  try{const identity=await verifyFirebaseToken(authHeader(req)), uid=identity.uid, token=await serviceToken(), action=String(req.query.action||'').trim(); const body:any=req.body||{}; let out:any; if(action==='createProduct')out=await createProduct(token,uid,body); else if(action==='createPrice')out=await createPrice(token,uid,body); else if(action==='setProductStatus')out=await setProductStatus(token,uid,body); else if(action==='createCheckout')out=await createCheckout(token,uid,body); else if(action==='confirmTestPayment')out=await confirmTestPayment(token,uid,body); else if(action==='refundTestPayment')out=await refundTest(token,uid,body); else if(action==='checkAccess')out=await checkAccess(token,uid,body); else if(action==='diagnostics')out=await commerceDiagnostics(token,uid,identity.email,identity.emailVerified); else return res.status(400).json({error:'Unknown commerce action.'}); return res.status(200).json(out);}catch(e:any){const status=Number(e?.statusCode); return res.status(status>=400&&status<=599?status:400).json({error:e?.message||'Commerce request failed.'});}
+  try{const identity=await verifyFirebaseToken(authHeader(req)), uid=identity.uid, token=await serviceToken(); const body:any=req.body||{}; let out:any; if(action==='createProduct')out=await createProduct(token,uid,body); else if(action==='createPrice')out=await createPrice(token,uid,body); else if(action==='setProductStatus')out=await setProductStatus(token,uid,body); else if(action==='setProductVisibility')out=await setProductVisibility(token,uid,body); else if(action==='createCheckout')out=await createCheckout(token,uid,body); else if(action==='confirmTestPayment')out=await confirmTestPayment(token,uid,body); else if(action==='refundTestPayment')out=await refundTest(token,uid,body); else if(action==='checkAccess')out=await checkAccess(token,uid,body); else if(action==='diagnostics')out=await commerceDiagnostics(token,uid,identity.email,identity.emailVerified); else return res.status(400).json({error:'Unknown commerce action.'}); return res.status(200).json(out);}catch(e:any){const status=Number(e?.statusCode); return res.status(status>=400&&status<=599?status:400).json({error:e?.message||'Commerce request failed.'});}
 }

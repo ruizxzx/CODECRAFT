@@ -1,0 +1,43 @@
+OFFSCRPT V87.0.0 — CREATOR STOREFRONT VALIDATION
+
+STATUS  TEST
+PASSED  V87 storefront source checks (7 requirements)
+PASSED  TypeScript/TSX syntax transpile: 133 source files, 0 diagnostics
+PASSED  Import check: 125 active source files
+PASSED  Firebase initialization/configuration check
+PASSED  Firestore rules structural check
+PASSED  Firestore schema check
+PASSED  Runtime-pattern check: no empty catch / prohibited runtime patterns detected
+PASSED  Commerce foundation check
+PASSED  Deployment configuration check
+PASSED  Recommendations regression check
+PASSED  Handle propagation regression check
+PASSED  Identity sync regression check
+PASSED  Public profile regression check
+PASSED  Comments regression check
+PASSED  Site sync regression check
+PASSED  V80 intelligence regression check
+PASSED  V81 knowledge regression check
+PASSED  V81 navigation/branding regression check
+PASSED  Exactly one canonical firestore.rules in packaged source tree
+PASSED  Browser CommonJS scan: no require()/module.exports/exports. in active src TS/TSX
+PASSED  Version consistency: V87.0.0 / package 0.87.0
+
+V87 FUNCTIONAL SCOPE
+PASSED  Creator profile gains Store tab using canonical commerceProducts data
+PASSED  Public storefront product list is server-filtered to active/public products
+PASSED  Public price list is server-filtered to active prices for public products
+PASSED  Product route supports #product/{productId} and /product/{productId}
+PASSED  Creator Studio supports public/private product visibility
+PASSED  Creator Studio exposes public product preview for public products
+PASSED  Product page reuses V86 server-authoritative test checkout/entitlement flow
+PASSED  Existing entitlement lookup is resource-scoped by resourceType + resourceId
+
+BLOCKED  npm ci / dependency-backed verification could not complete in the build environment (network/install timeout).
+BLOCKED  Full tsc semantic typecheck could not complete because the available node_modules tree is incomplete after the blocked dependency install.
+BLOCKED  Vite production build could not run because vite was not available in the incomplete dependency tree.
+BLOCKED  Live Firebase/Vercel cross-account/browser testing was not available in this environment.
+BLOCKED  Live Firebase rule/index deployment state cannot be verified from the source package alone.
+
+KNOWN LIMITATION
+V87 storefront listing uses a server-side public Commerce API to avoid leaking private creator products and to avoid requiring a new composite Firestore index for public storefront browsing. The production deployment must retain the V86 server credentials already configured for /api/commerce.

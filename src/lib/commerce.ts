@@ -1,5 +1,5 @@
 import { auth, db } from './firebase';
-import { collection, doc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, query, where } from 'firebase/firestore';
 
 export type CommerceProductType = 'content'|'digital_product'|'course'|'subscription'|'community'|'service'|'bundle'|'tip';
 export type CommerceProductStatus = 'draft'|'active'|'archived'|'disabled';
@@ -9,8 +9,14 @@ export type CommerceEntitlementStatus = 'pending'|'active'|'expired'|'cancelled'
 
 export interface CommerceProduct {
   id: string; creatorId: string; creatorUsername?: string; title: string; description: string;
-  type: CommerceProductType; status: CommerceProductStatus; visibility: 'private'|'public';
+  type: CommerceProductType; status: CommerceProductStatus; visibility: 'private'|'public'; featured?: boolean;
   currency: string; priceIds: string[]; version: number; createdAt?: string; updatedAt?: string; publishedAt?: string; archivedAt?: string;
+}
+
+export interface CommercePublicPrice {
+  id: string; productId: string; amount: number; currency: string; billingType: CommerceBillingType;
+  interval?: 'month'|'year'; intervalCount?: number; trialDays?: number; active: boolean; validFrom?: string; validUntil?: string;
+  createdAt?: string; updatedAt?: string;
 }
 export interface CommercePrice {
   id: string; productId: string; amount: number; currency: string; billingType: CommerceBillingType;
@@ -45,6 +51,15 @@ async function callApi<T>(action: string, body: Record<string, unknown> = {}): P
   return payload as T;
 }
 
+
+async function callPublicApi<T>(action:string, params:Record<string,string>={}):Promise<T>{
+  const search=new URLSearchParams({action,...params});
+  const response=await fetch(`${apiBase}?${search.toString()}`,{method:'GET',headers:{accept:'application/json'}});
+  const payload=await response.json().catch(()=>({}));
+  if(!response.ok) throw new Error(String(payload?.error||`Commerce request failed (${response.status}).`));
+  return payload as T;
+}
+
 export async function createCommerceProduct(input: Pick<CommerceProduct,'title'|'description'|'type'|'visibility'|'currency'> & { price?: {amount:number;currency:string;billingType:CommerceBillingType;interval?:'month'|'year';intervalCount?:number;trialDays?:number} }): Promise<{product:CommerceProduct;price?:CommercePrice}> {
   return callApi('createProduct', input);
 }
@@ -53,6 +68,9 @@ export async function createCommercePrice(input: {productId:string;amount:number
 }
 export async function setCommerceProductStatus(productId:string,status:'draft'|'active'|'archived'|'disabled'):Promise<{product:CommerceProduct}> {
   return callApi('setProductStatus',{productId,status});
+}
+export async function setCommerceProductVisibility(productId:string,visibility:'public'|'private'):Promise<{product:CommerceProduct}> {
+  return callApi('setProductVisibility',{productId,visibility});
 }
 
 export async function createCommerceCheckout(productId:string, priceId:string, idempotencyKey?:string): Promise<{order:CommerceOrder;payment:{id:string;status:string;testMode:boolean};entitlement?:CommerceEntitlement}> {
@@ -90,8 +108,37 @@ export async function listUserEntitlements(userId:string):Promise<CommerceEntitl
   return snap.docs.map(d => ({id:d.id,...d.data()} as CommerceEntitlement)).sort((a,b)=>String(b.grantedAt||'').localeCompare(String(a.grantedAt||'')));
 }
 export async function hasCommerceAccess(userId:string, resourceType:string, resourceId:string):Promise<boolean> {
-  if (!userId || auth.currentUser?.uid !== userId) return false;
-  const snap = await getDocs(query(collection(db,'entitlements'), where('userId','==',userId), limit(100)));
+  if (!userId || auth.currentUser?.uid !== userId || !resourceType || !resourceId) return false;
+  const snap = await getDocs(query(collection(db,'entitlements'), where('userId','==',userId), limit(200)));
   const now=Date.now();
-  return snap.docs.some(d => { const x:any=d.data(); if(x.status!=='active') return false; const startsRaw=x.startsAt?.toDate?.()?.getTime?.(); const starts=Number.isFinite(startsRaw)?startsRaw:(x.startsAt?Date.parse(x.startsAt):0); const expiresRaw=x.expiresAt?.toDate?.()?.getTime?.(); const expires=Number.isFinite(expiresRaw)?expiresRaw:(x.expiresAt?Date.parse(x.expiresAt):NaN); return (!starts || starts<=now) && (!Number.isFinite(expires) || expires>now); });
+  return snap.docs.some(d => {
+    const x:any=d.data();
+    if(x.status!=='active' || String(x.resourceType||'')!==resourceType || String(x.resourceId||'')!==resourceId) return false;
+    const startsRaw=x.startsAt?.toDate?.()?.getTime?.();
+    const starts=Number.isFinite(startsRaw)?startsRaw:(x.startsAt?Date.parse(String(x.startsAt)):0);
+    const expiresRaw=x.expiresAt?.toDate?.()?.getTime?.();
+    const expires=Number.isFinite(expiresRaw)?expiresRaw:(x.expiresAt?Date.parse(String(x.expiresAt)):NaN);
+    return (!starts || starts<=now) && (!Number.isFinite(expires) || expires>now);
+  });
+}
+
+export async function getCommerceProduct(productId:string): Promise<CommerceProduct | null> {
+  const id=String(productId||'').trim();
+  if(!id) return null;
+  const snap=await getDoc(doc(db,'commerceProducts',id));
+  if(!snap.exists()) return null;
+  const p={id:snap.id,...snap.data()} as CommerceProduct;
+  return p.status==='active' && p.visibility==='public' ? p : null;
+}
+
+export async function listPublicCreatorCommerceProducts(creatorId:string): Promise<CommerceProduct[]> {
+  if(!creatorId) return [];
+  const result=await callPublicApi<{products:CommerceProduct[]}>('listPublicProducts',{creatorId});
+  return Array.isArray(result.products)?result.products:[];
+}
+
+export async function listCommercePrices(productId:string): Promise<CommercePublicPrice[]> {
+  if(!productId) return [];
+  const result=await callPublicApi<{prices:CommercePublicPrice[]}>('listPublicPrices',{productId});
+  return Array.isArray(result.prices)?result.prices:[];
 }

@@ -37,6 +37,7 @@ import { PreferencesView } from './components/PreferencesView';
 import { ExploreView } from './components/ExploreView';
 import { SeriesView } from './components/SeriesView';
 import { CreatorView } from './components/CreatorView';
+import { CommerceProductView } from './components/CommerceProductView';
 import { TopicView } from './components/TopicView';
 import { SocialHubView } from './components/SocialHubView';
 import { CreatorDiscoveryView } from './components/CreatorDiscoveryView';
@@ -465,12 +466,14 @@ export default function App() {
       const discussionMatch = pathname.match(/^\/discussion\/([^/]+)$/);
       const questionMatch = pathname.match(/^\/question\/([^/]+)$/);
       const topicMatch = pathname.match(/^\/topic\/([^/]+)$/);
+      const productMatch = pathname.match(/^\/product\/([^/]+)$/);
       if(pathMatch){setActiveArticleSlug(decodeURIComponent(pathMatch[1]));setCurrentPage('article');return;}
       if(seriesMatch){setActiveArticleSlug(decodeURIComponent(seriesMatch[1]));setCurrentPage('series');return;}
       if(profileMatch){setActiveArticleSlug(decodeURIComponent(profileMatch[1]));setCurrentPage('community_profile');return;}
       if(postMatch){setActiveArticleSlug(decodeURIComponent(postMatch[1]));setCurrentPage('community_post');return;}
       if(discussionMatch){setActiveArticleSlug(decodeURIComponent(discussionMatch[1]));setCurrentPage('community_post');return;}
       if(questionMatch){setActiveArticleSlug(decodeURIComponent(questionMatch[1]));setCurrentPage('question');return;}
+      if(productMatch){setActiveArticleSlug(decodeURIComponent(productMatch[1]));setCurrentPage('product');return;}
       if(topicMatch){setActiveArticleSlug(decodeURIComponent(topicMatch[1]));setCurrentPage('topic');return;}
       const hash = window.location.hash.replace('#', '');
       if (!hash || hash === 'home') {
@@ -522,6 +525,9 @@ export default function App() {
       } else if (hash === 'series' || hash.startsWith('series/')) {
         setCurrentPage('series');
         setActiveArticleSlug(hash.startsWith('series/') ? hash.replace('series/', '') : null);
+      } else if (hash.startsWith('product/')) {
+        setCurrentPage('product');
+        setActiveArticleSlug(hash.replace('product/', ''));
       } else if (hash.startsWith('creator/')) {
         setCurrentPage('creator');
         setActiveArticleSlug(hash.replace('creator/', ''));
@@ -597,6 +603,10 @@ export default function App() {
       setActiveArticleSlug(param || null);
       setCurrentPage('series');
       window.location.hash = param ? `series/${param}` : 'series';
+    } else if (page === 'product' && param) {
+      setActiveArticleSlug(param);
+      setCurrentPage('product');
+      window.location.hash = `product/${param}`;
     } else if (page === 'creator' && param) {
       setActiveArticleSlug(param);
       setCurrentPage('creator');
@@ -964,6 +974,10 @@ export default function App() {
 
             {currentPage === 'creator' && activeArticleSlug && (
               <CreatorView username={activeArticleSlug} articles={articles} currentUserUid={userAuth?.uid} currentUsername={userProfile?.username} onNavigate={navigateTo} />
+            )}
+
+            {currentPage === 'product' && activeArticleSlug && (
+              <CommerceProductView productId={activeArticleSlug} userProfile={userProfile} onNavigate={navigateTo} />
             )}
 
             {currentPage === 'topic' && activeArticleSlug && (
